@@ -2,9 +2,10 @@ import './style.css';
 import * as L from './lib.js';
 
 const $ = (s, r = document) => r.querySelector(s);
+const DEFAULTS = { pitch: 0, keepTalk: 0, keepGap: 0.3, offset: 0, maxTempo: 2.0, dubGain: 1.8 };
 const state = {
   step: 1, file: null, videoDur: 0, lang: 'zh', segs: [], sourceLines: [],
-  burmese: [], personaId: 'BB', pitch: 0, keepTalk: 0.05, keepGap: 1, offset: 0, maxTempo: 1.7, dubGain: 1.6, result: null, busy: false
+  burmese: [], personaId: 'BB', ...DEFAULTS, result: null, busy: false
 };
 const STEPS = ['Upload', 'Source Text', 'Burmese', 'Result'];
 const view = $('#view');
@@ -142,7 +143,8 @@ function step3() {
     <div class="row" style="margin-top:20px"><b>အသံရွေးချယ်ပါ</b><span class="muted small">${L.PERSONAS.length} Voice Personas</span></div>
     <div class="voices">${voices}</div>
     <div class="panel">
-      <div class="row"><b>ဝါး/ကြည် (Pitch Offset)</b><span id="pv">${state.pitch >= 0 ? '+' : ''}${state.pitch}Hz</span></div>
+      <button id="unlock" class="btn block" style="margin-top:0"></button>
+      <div class="row" style="margin-top:14px"><b>ဝါး/ကြည် (Pitch Offset)</b><span id="pv">${state.pitch >= 0 ? '+' : ''}${state.pitch}Hz</span></div>
       <input id="pitch" type="range" min="-30" max="30" value="${state.pitch}" />
       <div class="row muted small"><span>-30Hz (ဝါး)</span><span>+30Hz (ကြည်)</span></div>
       <div class="row" style="margin-top:14px"><b>🎬 စကားမပြောတဲ့နေရာ မူရင်းအသံ</b><span id="gv">${Math.round(state.keepGap * 100)}%</span></div>
@@ -174,6 +176,20 @@ function step3() {
   $('#offs').oninput = e => { state.offset = +e.target.value / 10; $('#ov').textContent = state.offset.toFixed(1) + 's'; };
   $('#mtempo').oninput = e => { state.maxTempo = +e.target.value / 10; $('#mv').textContent = state.maxTempo.toFixed(1) + '×'; };
   $('#dgain').oninput = e => { state.dubGain = +e.target.value / 100; $('#dv').textContent = e.target.value + '%'; };
+
+  // sliders are locked by default so scrolling with a finger can't move them
+  const sliders = [...view.querySelectorAll('.panel input[type=range]')];
+  let unlocked = false;
+  const applyLock = () => {
+    sliders.forEach(s => { s.disabled = !unlocked; });
+    $('#unlock').textContent = unlocked ? '🔓 ပြင်လို့ရပါပြီ — ပြီးရင် လော့ခ်ချရန် နှိပ်ပါ' : '🔒 ချိန်ညှိထားပြီး — ပြင်ချင်ရင် နှိပ်ပါ';
+  };
+  $('#unlock').onclick = () => { unlocked = !unlocked; applyLock(); };
+  applyLock();
+  const rs = document.createElement('button');
+  rs.className = 'btn block'; rs.textContent = '↺ ပုံမှန်တန်ဖိုးသို့ ပြန်ထားမည်';
+  $('#unlock').after(rs);
+  rs.onclick = () => { state.burmese = read(); Object.assign(state, DEFAULTS); step3(); toast('ပုံမှန်တန်ဖိုး ပြန်ထားပြီးပါပြီ'); };
   view.querySelectorAll('.voice').forEach(el => el.onclick = e => {
     if (e.target.dataset.prev) return;
     state.personaId = el.dataset.id;
