@@ -211,6 +211,10 @@ export function buildPrompt(segs) {
     return `ID: ${i} | Duration: ${Math.max(slot, s.end - s.start).toFixed(1)}s | Text: "${s.text}"`;
   }).join('\n');
   return `You are a professional video dubbing translator. You MUST translate the following subtitles into natural spoken Burmese (Myanmar script ONLY, NO English, NO phonetic guides).
+STYLE: Write in casual COLLOQUIAL spoken Burmese (အပြောစကား), the way a friend retells a movie story out loud. NEVER use formal literary/written Burmese (စာရေးစကား). Do not use written endings or particles such as သည်၊ ၏၊ ၌၊ မည်၊ ၍၊ သို့၊ နှင့်၊ ထို၊ ၎င်း. Use spoken forms instead: တယ်၊ ပါတယ်၊ မယ်၊ ရဲ့၊ မှာ၊ ကို၊ နဲ့၊ အဲဒီ၊ သူ၊ ပြီးတော့. Keep sentences short and lively, like speech, not like a newspaper or a textbook.
+Examples (written -> spoken):
+သူသည် အိမ်သို့ ပြန်သွားသည်။ -> သူ အိမ်ကို ပြန်သွားတယ်။
+ထိုအခါ သူမသည် ငိုကြွေးခဲ့၏။ -> အဲဒီအခါ သူမ ငိုချလိုက်တယ်။
 Translate each line so that it sounds natural in a movie recap narration. Do not translate word-for-word.
 Timing is critical: Burmese narration is spoken at about 4-5 syllables per second, so each line MUST be short enough to be spoken within its Duration (for example 2.0s allows roughly 8-10 syllables). Condense the meaning and drop minor details instead of translating everything. Being on time matters more than completeness.
 Source lines may be cut in the middle of a sentence. Still translate each line on its own so it sounds natural by itself, and keep the same order and the same number of lines.
@@ -235,7 +239,7 @@ export function buildShortenPrompt(segs, burmese, longLines) {
     return `ID: ${i} | Duration: ${Math.max(slot, s.end - s.start).toFixed(1)}s${flag} | Source: "${s.text}" | Burmese: "${burmese[i] || ''}"`;
   }).join('\n');
   return `You are a professional dubbing script editor. Below are Burmese narration lines for a movie recap, each with its source text and the time (Duration) available to speak it.
-Lines marked LONG cannot be spoken within their Duration. Rewrite ONLY those lines so they are shorter by the percentage given: condense the meaning, drop minor details, and keep natural spoken Burmese (Myanmar script ONLY, NO English). Keep every other line exactly unchanged.
+Lines marked LONG cannot be spoken within their Duration. Rewrite ONLY those lines so they are shorter by the percentage given: condense the meaning, drop minor details, and keep casual colloquial spoken Burmese (အပြောစကား, never formal written Burmese; Myanmar script ONLY, NO English). Keep every other line exactly unchanged.
 Return the FULL result STRICTLY as a JSON object with a single key "translations" containing an array of exactly ${segs.length} strings in order.
 Inputs:
 ${lines}`;
