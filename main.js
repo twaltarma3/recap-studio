@@ -23,11 +23,14 @@ function setProg(frac, text) {
 const showErr = (e) => { const d = document.createElement('div'); d.className = 'err'; d.textContent = e.message || String(e); view.appendChild(d); };
 const download = (blob, name) => { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); };
 
+const canGo = n => !state.busy && n !== state.step &&
+  (n === 1 || (n === 2 && state.segs.length > 0) || (n === 3 && state.burmese.length > 0) || (n === 4 && !!state.result));
 function renderStepper() {
   $('#stepper').innerHTML = STEPS.map((s, i) => {
     const n = i + 1, cls = n === state.step ? 'on' : n < state.step ? 'done' : '';
-    return `<span class="${cls}"><b>${n}</b>${s}</span>`;
+    return `<span class="${cls} ${canGo(n) ? 'link' : ''}" data-n="${n}"><b>${n}</b>${s}</span>`;
   }).join('');
+  $('#stepper').querySelectorAll('.link').forEach(el => { el.onclick = () => go(+el.dataset.n); });
 }
 function go(step) { state.step = step; render(); window.scrollTo(0, 0); }
 function render() { renderStepper(); [null, step1, step2, step3, step4][state.step](); }
@@ -58,7 +61,7 @@ function step1() {
 }
 
 async function transcribeFlow() {
-  state.step = 2; renderStepper();
+  state.step = 2; state.busy = true; renderStepper();
   view.innerHTML = `<h2>စာသား ထုတ်နေသည်…</h2><p class="muted">Video ကို ဖွင့်မထားဘဲ ခဏစောင့်ပါ။</p>${bar()}`;
   try {
     setProg(0.02, 'Engine ပြင်ဆင်နေသည်');
@@ -69,10 +72,11 @@ async function transcribeFlow() {
     const names = { uploading: 'AssemblyAI သို့ တင်နေသည်', queued: 'တန်းစီစောင့်နေသည်', processing: 'စာသားပြောင်းနေသည်' };
     let tick = 0.3;
     state.segs = await L.transcribe(wav, state.lang, st => { tick = Math.min(tick + 0.04, 0.95); setProg(tick, names[st] || st); });
-    state.burmese = [];
+    state.burmese = []; state.busy = false;
     go(2);
   } catch (e) {
     view.innerHTML = `<h2>အမှားရှိနေပါသည်</h2>`; showErr(e);
+    state.busy = false; renderStepper();
     view.insertAdjacentHTML('beforeend', `<button class="btn primary" id="back">Upload သို့ ပြန်သွားမည်</button>`);
     $('#back').onclick = () => go(1);
   }
@@ -94,6 +98,11 @@ function step2() {
       </label>
       <button id="next" class="btn primary">Step 2: ဘာသာပြန်အတည်ပြုမည် (Next)</button>
     </div>`;
+  if (state.burmese.length) $('#json').value = JSON.stringify({ translations: state.burmese }, null, 1);
+  $('#src').oninput = () => {
+    const l = $('#src').value.split('\n').map(x => x.trim());
+    if (l.length === state.segs.length) l.forEach((t, i) => { state.segs[i].text = t; });
+  };
   const syncSrc = () => {
     const lines = $('#src').value.split('\n').map(x => x.trim());
     if (lines.length !== state.segs.length) { toast(`စာကြောင်း ${lines.length} / ${state.segs.length} မကိုက်ပါ`); return false; }
@@ -178,6 +187,7 @@ function step3() {
 /* ---------------- Step 4 ---------------- */
 async function step4() {
   if (state.result) return showResult();
+  state.busy = true; renderStepper();
   view.innerHTML = `<h2>Step 4: Video ပေါင်းနေသည်…</h2>
     <p class="muted">ဒီ tab ကို ဖွင့်ထားပါ၊ screen မပိတ်ပါနှင့်။</p>${bar()}`;
   let wake; try { wake = await navigator.wakeLock?.request('screen'); } catch {}
@@ -201,7 +211,7 @@ async function step4() {
       step4();
     };
     $('#back').onclick = () => go(3);
-  } finally { wake?.release?.(); }
+  } finally { wake?.release?.(); state.busy = false; renderStepper(); }
 }
 
 function showResult() {

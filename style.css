@@ -46,3 +46,5 @@ dialog::backdrop{background:rgba(10,10,30,.45)}
 #toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#16162a;color:#fff;padding:10px 16px;border-radius:999px;font-size:14px;opacity:0;pointer-events:none;transition:opacity .2s;z-index:20}
 #toast.show{opacity:1}
 a.link{color:var(--acc);font-weight:600;text-decoration:none}
+
+.stepper span.link{cursor:pointer;color:var(--acc);text-decoration:underline;text-underline-offset:3px}
