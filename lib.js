@@ -52,16 +52,24 @@ export function videoDuration(file) {
 
 const extOf = f => (f.name.split('.').pop() || 'mp4').toLowerCase().replace(/[^a-z0-9]/g, '') || 'mp4';
 
+let keptInput = null;
+export async function forgetInput() {
+  if (ff && keptInput) { try { await ff.deleteFile(keptInput); } catch {} }
+  keptInput = null;
+}
+
 export async function extractAudio(file, onProg) {
   const f = await getFFmpeg();
   setFFProgress(onProg);
+  await forgetInput();
   const inName = 'in.' + extOf(file);
-  await f.writeFile(inName, await fetchFile(file));
+  try { await f.writeFile(inName, await fetchFile(file)); }
+  catch { throw new Error('Video ဖိုင်ကို ဖတ်မရပါ — ဖုန်း Downloads/Movies ထဲက ဖိုင်ကို ပြန်ရွေးပါ'); }
+  keptInput = inName;
   const code = await f.exec(['-i', inName, '-vn', '-ac', '1', '-ar', '16000', '-f', 'wav', 'a.wav']);
   if (code !== 0) throw new Error('Video ထဲက အသံကို ထုတ်မရပါ');
   const data = await f.readFile('a.wav');
   await f.deleteFile('a.wav');
-  await f.deleteFile(inName);
   return new Blob([data.slice().buffer], { type: 'audio/wav' });
 }
 
@@ -242,8 +250,15 @@ export async function renderDub({ file, videoDur, segs, burmese, persona, pitch,
   onProgress(0.85, 'Video နဲ့ ပေါင်းနေသည်');
 
   // 4) mux with video — 85..100%
-  const inName = 'v.' + (file.name.split('.').pop() || 'mp4').toLowerCase().replace(/[^a-z0-9]/g, '');
-  await f.writeFile(inName, await fetchFile(file));
+  let inName = keptInput, temp = false;
+  if (inName) {
+    try { const l = await f.listDir('/'); if (!l.some(x => x.name === inName)) inName = null; } catch { inName = null; }
+  }
+  if (!inName) {
+    inName = 'v.' + extOf(file); temp = true;
+    try { await f.writeFile(inName, await fetchFile(file)); }
+    catch { throw new Error('Video ဖိုင်ကို ပြန်ဖတ်မရပါ — "Video ပြန်ရွေးပြီး ပြန်စမည်" ကိုနှိပ်ပါ'); }
+  }
   await f.writeFile('mix.wav', wavBytes);
   setFFProgress(p => onProgress(0.85 + p * 0.15, 'Video ပေါင်းနေသည်'));
   const args = keepOrig > 0
@@ -254,7 +269,7 @@ export async function renderDub({ file, videoDur, segs, burmese, persona, pitch,
   const code = await f.exec([...args, '-c:v', 'copy', '-c:a', 'aac', '-b:a', '128k', '-shortest', '-movflags', '+faststart', 'out.mp4']);
   if (code !== 0) throw new Error('Video ပေါင်းစပ်မှု မအောင်မြင်ပါ (ffmpeg error)');
   const out = await f.readFile('out.mp4');
-  for (const x of [inName, 'mix.wav', 'out.mp4']) { try { await f.deleteFile(x); } catch {} }
+  for (const x of [temp ? inName : null, 'mix.wav', 'out.mp4']) { if (x) { try { await f.deleteFile(x); } catch {} } }
   setFFProgress(null);
   onProgress(1, 'ပြီးပါပြီ');
   return { video: new Blob([out.slice().buffer], { type: 'video/mp4' }), placed };

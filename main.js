@@ -49,7 +49,7 @@ function step1() {
       </select>
     </label>
     <button id="next" class="btn primary" ${state.file ? '' : 'disabled'}>Step 1: စာသားထုတ်မည် (Next)</button>`;
-  $('#f').onchange = e => { state.file = e.target.files[0] || null; state.segs = []; step1(); };
+  $('#f').onchange = e => { state.file = e.target.files[0] || null; state.segs = []; L.forgetInput(); step1(); };
   $('#lang').onchange = e => { state.lang = e.target.value; };
   $('#next').onclick = () => {
     if (!L.cfg.workerUrl || !L.cfg.aaiKey) { toast('Settings ထဲမှာ key အရင်ထည့်ပါ'); $('#settings').showModal(); return; }
@@ -191,8 +191,15 @@ async function step4() {
     showResult();
   } catch (e) {
     view.innerHTML = `<h2>အမှားရှိနေပါသည်</h2>`; showErr(e);
-    view.insertAdjacentHTML('beforeend', `<button class="btn primary" id="retry">ပြန်စမည်</button><button class="btn block" id="back">Step 3 သို့ ပြန်သွားမည်</button>`);
+    view.insertAdjacentHTML('beforeend', `<button class="btn primary" id="retry">ပြန်စမည်</button>
+      <label class="btn block" for="repick" style="display:block;text-align:center;cursor:pointer">🎞 Video ပြန်ရွေးပြီး ပြန်စမည်<input id="repick" type="file" accept="video/*" hidden /></label>
+      <button class="btn block" id="back">Step 3 သို့ ပြန်သွားမည်</button>`);
     $('#retry').onclick = () => step4();
+    $('#repick').onchange = async ev => {
+      const nf = ev.target.files[0]; if (!nf) return;
+      try { await L.forgetInput(); state.file = nf; state.videoDur = await L.videoDuration(nf); } catch (e2) { toast(e2.message); return; }
+      step4();
+    };
     $('#back').onclick = () => go(3);
   } finally { wake?.release?.(); }
 }
