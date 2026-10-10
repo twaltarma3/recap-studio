@@ -9,6 +9,7 @@ const state = {
 };
 const STEPS = ['Upload', 'Source Text', 'Burmese', 'Result'];
 const view = $('#view');
+let page = 'free'; // 'free' | 'premium' | 'keys'
 
 function toast(msg) {
   const t = $('#toast'); t.textContent = msg; t.classList.add('show');
@@ -34,7 +35,165 @@ function renderStepper() {
   $('#stepper').querySelectorAll('.link').forEach(el => { el.onclick = () => go(+el.dataset.n); });
 }
 function go(step) { state.step = step; render(); window.scrollTo(0, 0); }
-function render() { renderStepper(); [null, step1, step2, step3, step4][state.step](); }
+function render() {
+  const stp = $('#stepper');
+  if (page === 'free') {
+    stp.style.display = '';
+    renderStepper();
+    [null, step1, step2, step3, step4][state.step]();
+  } else {
+    stp.style.display = 'none';
+    (page === 'premium' ? pagePremium : pageKeys)();
+  }
+  syncMenu();
+}
+
+/* ---------------- menu (hamburger + drawer) ---------------- */
+function openDrawer() { $('#drawer').classList.add('open'); $('#scrim').classList.add('open'); }
+function closeDrawer() { $('#drawer').classList.remove('open'); $('#scrim').classList.remove('open'); }
+function syncMenu() { document.querySelectorAll('.ditem').forEach(b => b.classList.toggle('on', b.dataset.p === page)); }
+function openPage(p) {
+  closeDrawer();
+  if (state.busy) { toast('လုပ်ဆောင်နေစဉ် မပြောင်းနိုင်ပါ — ပြီးအောင်စောင့်ပါ'); return; }
+  page = p; render(); window.scrollTo(0, 0);
+}
+function buildMenu() {
+  const top = $('.top'), h1 = $('.top h1');
+  const brand = document.createElement('div'); brand.className = 'brand';
+  const burger = document.createElement('button');
+  burger.className = 'burger'; burger.setAttribute('aria-label', 'Menu');
+  burger.innerHTML = '<i></i><i></i><i></i>';
+  top.insertBefore(brand, h1); brand.append(burger, h1);
+  document.body.insertAdjacentHTML('beforeend', `
+    <div id="scrim"></div>
+    <nav id="drawer">
+      <div class="dhead"><b>Menu</b><button class="ghost" id="dclose">✕</button></div>
+      <button class="ditem" data-p="free"><span>1</span><b>Free Recap</b><small>Gemini နဲ့ ကိုယ်တိုင် ဘာသာပြန်</small></button>
+      <button class="ditem" data-p="premium"><span>2</span><b>Premium Recap</b><small>မကြာမီ</small></button>
+      <button class="ditem" data-p="keys"><span>3</span><b>API Key Settings</b><small>AssemblyAI Key · FFmpeg Engine</small></button>
+    </nav>`);
+  burger.onclick = openDrawer;
+  $('#scrim').onclick = closeDrawer;
+  $('#dclose').onclick = closeDrawer;
+  document.querySelectorAll('.ditem').forEach(b => { b.onclick = () => openPage(b.dataset.p); });
+  $('#openSettings').onclick = () => openPage('keys');
+}
+
+/* ---------------- Premium (placeholder) ---------------- */
+function pagePremium() {
+  view.innerHTML = `
+    <h2>Premium Recap</h2>
+    <p class="muted">ဒီအပိုင်းကို မကြာမီ ထည့်သွင်းပါမည်။</p>
+    <button class="btn primary" id="toFree">Free Recap သို့ သွားမည်</button>`;
+  $('#toFree').onclick = () => openPage('free');
+}
+
+/* ---------------- API Key Settings ---------------- */
+let ffBusy = false, ffCached = false;
+function pageKeys() {
+  view.innerHTML = `
+    <h2>API Keys Settings</h2>
+    <p class="muted small">Key တွေကို ဒီဖုန်း browser ထဲမှာပဲ သိမ်းပါတယ်။</p>
+
+    <div class="kbox">
+      <div class="krow">
+        <b>AssemblyAI API Key<br><span class="muted small" style="font-weight:400">(အသံဖိုင် စာသားပြောင်းရန်)</span></b>
+        <div class="badges"><span class="badge req">Required</span><span class="badge" id="aaiBadge"></span></div>
+      </div>
+      <p style="margin:8px 0 10px"><a class="link small" href="https://www.assemblyai.com/dashboard/signup" target="_blank" rel="noopener">Get Free Key ↗</a></p>
+      <div class="keyfield">
+        <input id="kAai" type="password" autocomplete="off" placeholder="AssemblyAI API Key" />
+        <button class="icon" id="kDel" title="ဖျက်မည်">🗑</button>
+        <button class="icon" id="kEye" title="ပြမည်">👁</button>
+      </div>
+      <label>Worker URL
+        <input id="kWorker" type="url" autocomplete="off" placeholder="https://xxxx.workers.dev" />
+      </label>
+      <div class="two">
+        <button class="btn" id="kTest">🔎 စစ်ဆေးမည်</button>
+        <button class="btn primary" id="kSave">သိမ်းမည်</button>
+      </div>
+    </div>
+
+    <div class="kbox">
+      <div class="krow">
+        <b>Device Video Engine<br><span class="muted small" style="font-weight:400">(FFmpeg WASM ~31MB)</span></b>
+        <span class="badge" id="ffBadge">…</span>
+      </div>
+      <p class="muted small" style="margin:8px 0 0">Video ပေါင်းဖို့ Engine ကို တစ်ကြိမ်ပဲ ဒေါင်းရပြီး ဖုန်းထဲမှာ သိမ်းထားပေးပါတယ်။</p>
+      <div id="ffProg" hidden>${'<div class="bar"><i id="ffFill"></i></div>'}</div>
+      <div class="two">
+        <button class="btn danger" id="ffClear">🗑 Cache ဖျက်မည်</button>
+        <button class="btn primary" id="ffInstall">⬇ Install</button>
+      </div>
+    </div>`;
+
+  $('#kAai').value = localStorage.getItem('aaiKey') || '';
+  $('#kWorker').value = localStorage.getItem('workerUrl') || '';
+
+  const upd = () => {
+    const k = localStorage.getItem('aaiKey') || '', w = localStorage.getItem('workerUrl') || '';
+    const dirty = $('#kAai').value.trim() !== k || $('#kWorker').value.trim() !== w;
+    const ok = !!(k && w), b = $('#aaiBadge');
+    b.textContent = dirty ? 'Unsaved' : ok ? 'Active' : 'Not set';
+    b.className = 'badge' + (!dirty && ok ? ' ok' : '');
+  };
+  $('#kAai').oninput = upd; $('#kWorker').oninput = upd;
+  $('#kEye').onclick = () => { const i = $('#kAai'); i.type = i.type === 'password' ? 'text' : 'password'; };
+  $('#kDel').onclick = () => { $('#kAai').value = ''; localStorage.removeItem('aaiKey'); upd(); toast('Key ဖျက်ပြီးပါပြီ'); };
+  $('#kSave').onclick = () => {
+    localStorage.setItem('aaiKey', $('#kAai').value.trim());
+    localStorage.setItem('workerUrl', $('#kWorker').value.trim());
+    upd(); toast('သိမ်းပြီးပါပြီ');
+  };
+  $('#kTest').onclick = async () => {
+    localStorage.setItem('aaiKey', $('#kAai').value.trim());
+    localStorage.setItem('workerUrl', $('#kWorker').value.trim());
+    upd();
+    if (!L.cfg.workerUrl || !L.cfg.aaiKey) { toast('Key နဲ့ Worker URL နှစ်ခုလုံး ထည့်ပါ'); return; }
+    try {
+      const r = await fetch(`${L.cfg.workerUrl}/aai/v2/transcript?limit=1`, { headers: { authorization: L.cfg.aaiKey } });
+      if (r.status === 401 || r.status === 403) throw new Error('Key မမှန်ပါ');
+      if (!r.ok) throw new Error('Server ပြန်ကြားချက်: ' + r.status);
+      toast('✅ Key မှန်ပါတယ်');
+    } catch (e) { toast(e.message === 'Failed to fetch' ? 'Worker ကို ချိတ်ဆက်မရပါ' : e.message); }
+  };
+  upd();
+
+  /* FFmpeg card */
+  const ffRefresh = async () => {
+    ffCached = await L.ffmpegCached();
+    const b = $('#ffBadge'), i = $('#ffInstall'); if (!b || !i) return;
+    b.textContent = ffCached ? 'Cached (Ready)' : 'Not installed';
+    b.className = 'badge' + (ffCached ? ' ok' : '');
+    i.textContent = ffCached ? '⬇ Re-test Download' : '⬇ Install';
+  };
+  $('#ffClear').onclick = async () => {
+    if (ffBusy) return;
+    await L.ffmpegClear(); toast('Cache ဖျက်ပြီးပါပြီ'); ffRefresh();
+  };
+  $('#ffInstall').onclick = async () => {
+    if (ffBusy) return;
+    ffBusy = true;
+    const prog = $('#ffProg'), fill = $('#ffFill'), badge = $('#ffBadge');
+    $('#ffInstall').disabled = true; $('#ffClear').disabled = true; prog.hidden = false;
+    try {
+      if (ffCached) await L.ffmpegClear();
+      await L.getFFmpeg(p => {
+        const f = $('#ffFill'), b = $('#ffBadge');
+        if (f) f.style.width = Math.round(p * 100) + '%';
+        if (b) { b.textContent = 'Downloading ' + Math.round(p * 100) + '%'; b.className = 'badge'; }
+      });
+      toast('✅ Engine အဆင်သင့်ပါပြီ');
+    } catch (e) { toast((e.message || 'ဒေါင်းလုဒ် မအောင်မြင်ပါ').slice(0, 80)); }
+    finally {
+      ffBusy = false;
+      if ($('#ffInstall')) { $('#ffInstall').disabled = false; $('#ffClear').disabled = false; $('#ffProg').hidden = true; }
+      ffRefresh();
+    }
+  };
+  ffRefresh();
+}
 
 /* ---------------- Step 1 ---------------- */
 function step1() {
@@ -56,7 +215,7 @@ function step1() {
   $('#f').onchange = e => { state.file = e.target.files[0] || null; state.segs = []; L.forgetInput(); step1(); };
   $('#lang').onchange = e => { state.lang = e.target.value; };
   $('#next').onclick = () => {
-    if (!L.cfg.workerUrl || !L.cfg.aaiKey) { toast('Settings ထဲမှာ key အရင်ထည့်ပါ'); $('#settings').showModal(); return; }
+    if (!L.cfg.workerUrl || !L.cfg.aaiKey) { toast('API Key အရင်ထည့်ပါ'); openPage('keys'); return; }
     state.segs.length ? go(2) : transcribeFlow();
   };
 }
@@ -284,18 +443,7 @@ function showResult() {
   $('#again').onclick = () => { Object.assign(state, { file: null, segs: [], burmese: [], result: null }); go(1); };
 }
 
-/* ---------------- settings ---------------- */
-const dlg = $('#settings');
-$('#openSettings').onclick = () => {
-  $('#workerUrl').value = localStorage.getItem('workerUrl') || '';
-  $('#aaiKey').value = localStorage.getItem('aaiKey') || '';
-  dlg.showModal();
-};
-$('#saveSettings').onclick = () => {
-  localStorage.setItem('workerUrl', $('#workerUrl').value.trim());
-  localStorage.setItem('aaiKey', $('#aaiKey').value.trim());
-  toast('သိမ်းပြီးပါပြီ');
-};
-
+/* ---------------- start ---------------- */
+buildMenu();
+if (!L.cfg.workerUrl || !L.cfg.aaiKey) page = 'keys';
 render();
-if (!L.cfg.workerUrl || !L.cfg.aaiKey) $('#openSettings').click();
