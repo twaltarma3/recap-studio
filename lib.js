@@ -168,7 +168,19 @@ export async function tts(text, persona, pitchOffset = 0, tries = 3) {
 }
 
 /* ---------- render ---------- */
-const SR = 24000, MAX_TEMPO = 1.6, GAP = 0.05;
+const SR = 24000, GAP = 0.05;
+
+// leading/trailing silence of a TTS clip, so speech starts exactly at the slot start
+function trimBounds(buf, thr = 0.012) {
+  const ch = buf.getChannelData(0), n = ch.length;
+  let a = 0, b = n - 1;
+  while (a < n && Math.abs(ch[a]) < thr) a++;
+  while (b > a && Math.abs(ch[b]) < thr) b--;
+  if (a >= b) return { lead: 0, len: buf.duration };
+  const lead = Math.max(0, a / buf.sampleRate - 0.02);
+  const end = Math.min(buf.duration, (b + 1) / buf.sampleRate + 0.05);
+  return { lead, len: end - lead };
+}
 
 function encodeWav(buf) {
   const ch = buf.getChannelData(0), n = ch.length;
@@ -190,7 +202,7 @@ const tempoChain = t => {
 };
 
 /* ---- ducking: original audio quiet while someone speaks, full volume otherwise ---- */
-function duckIntervals(segs, placed, pad = 0.12, mergeGap = 0.4) {
+function duckIntervals(segs, placed, pad = 0.3, mergeGap = 0.8) {
   const iv = [];
   segs.forEach((s, i) => {
     const p = placed[i]; if (!p) return;
@@ -204,14 +216,19 @@ function duckIntervals(segs, placed, pad = 0.12, mergeGap = 0.4) {
   }
   return out;
 }
-function gainExpr(iv, talk, gap, r = 0.25) {
+function gainExpr(iv, talk, gap, r = 0.2) {
   if (!iv.length) return gap.toFixed(3);
   const terms = iv.map(([a, b]) =>
     `max(0,min(1,min((t-(${(a - r).toFixed(3)}))/${r},((${(b + r).toFixed(3)})-t)/${r})))`).join('+');
   return `${gap.toFixed(3)}+(${(talk - gap).toFixed(3)})*min(1,${terms})`;
 }
 
-export async function renderDub({ file, videoDur, segs, burmese, persona, pitch, keepTalk = 0, keepGap = 0, onProgress }) {
+function dubStats(placed) {
+  const d = placed.filter(Boolean).map(p => p.drift);
+  return { lateCount: d.filter(x => x > 0.5).length, maxDrift: Math.max(0, ...d) };
+}
+
+export async function renderDub({ file, videoDur, segs, burmese, persona, pitch, keepTalk = 0, keepGap = 0, offset = 0, maxTempo = 1.7, dubGain = 1.6, onProgress }) {
   const n = segs.length;
   const f = await getFFmpeg();
   const ctx = new OfflineAudioContext(1, Math.ceil((videoDur + 30) * SR), SR);
@@ -240,23 +257,26 @@ export async function renderDub({ file, videoDur, segs, burmese, persona, pitch,
     onProgress(0.5 + (i / n) * 0.25, `အချိန်ကိုက်နေသည် ${i + 1}/${n}`);
     if (!raw[i]) continue;
     let buf = await ctx.decodeAudioData(raw[i].slice(0));
-    const start = Math.max(segs[i].start, cursor);
-    const nextStart = i + 1 < n ? segs[i + 1].start : videoDur;
+    let tb = trimBounds(buf);
+    const want = segs[i].start + offset;
+    const start = Math.max(want, cursor, 0);
+    const nextStart = i + 1 < n ? segs[i + 1].start + offset : videoDur;
     const slot = Math.max(nextStart - start - GAP, 0.3);
-    const tempo = Math.min(buf.duration / slot, MAX_TEMPO);
+    const tempo = Math.min(tb.len / slot, maxTempo);
     if (tempo > 1.03) {
       await f.writeFile('s.mp3', new Uint8Array(raw[i]));
       const code = await f.exec(['-i', 's.mp3', '-filter:a', tempoChain(tempo), '-ar', String(SR), '-ac', '1', 's.wav']);
       if (code === 0) {
         const wav = await f.readFile('s.wav');
         buf = await ctx.decodeAudioData(wav.slice().buffer);
+        tb = trimBounds(buf);
         await f.deleteFile('s.wav');
       }
       await f.deleteFile('s.mp3');
     }
-    clips.push({ buf, start });
-    placed[i] = { start, end: start + buf.duration };
-    cursor = start + buf.duration + GAP;
+    clips.push({ buf, start, lead: tb.lead, len: tb.len });
+    placed[i] = { start, end: start + tb.len, drift: start - want };
+    cursor = start + tb.len + GAP;
   }
 
   // 3) mix all clips into one track — 75..85%
@@ -265,7 +285,7 @@ export async function renderDub({ file, videoDur, segs, burmese, persona, pitch,
     const src = ctx.createBufferSource();
     src.buffer = c.buf;
     src.connect(ctx.destination);
-    src.start(c.start);
+    src.start(c.start, c.lead, c.len);
   }
   const mixed = await ctx.startRendering();
   const wavBytes = encodeWav(mixed);
@@ -288,7 +308,7 @@ export async function renderDub({ file, videoDur, segs, burmese, persona, pitch,
   const wantMix = keepTalk > 0 || keepGap > 0;
   if (wantMix) {
     const g = gainExpr(duckIntervals(segs, placed), keepTalk, keepGap);
-    const head = `[0:a]volume='${g}':eval=frame[o];[1:a]apad[d];[o][d]amix=inputs=2:duration=first:dropout_transition=0,volume=2`;
+    const head = `[0:a]volume='${g}':eval=frame[o];[1:a]volume=${dubGain.toFixed(2)},apad[d];[o][d]amix=inputs=2:duration=first:dropout_transition=0,volume=2`;
     for (const tail of [',alimiter=limit=0.95:level=0', '']) {
       attempts.push(['-i', inName, '-i', 'mix.wav', '-filter_complex', `${head}${tail}[a]`, '-map', '0:v:0', '-map', '[a]']);
     }
@@ -307,7 +327,7 @@ export async function renderDub({ file, videoDur, segs, burmese, persona, pitch,
   for (const x of [temp ? inName : null, 'mix.wav', 'out.mp4']) { if (x) { try { await f.deleteFile(x); } catch {} } }
   setFFProgress(null);
   onProgress(1, 'ပြီးပါပြီ');
-  return { video: new Blob([out.slice().buffer], { type: 'video/mp4' }), placed, fellBack };
+  return { video: new Blob([out.slice().buffer], { type: 'video/mp4' }), placed, fellBack, stats: dubStats(placed) };
 }
 
 /* ---------- SRT ---------- */

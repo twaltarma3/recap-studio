@@ -4,7 +4,7 @@ import * as L from './lib.js';
 const $ = (s, r = document) => r.querySelector(s);
 const state = {
   step: 1, file: null, videoDur: 0, lang: 'zh', segs: [], sourceLines: [],
-  burmese: [], personaId: 'BB', pitch: 0, keepTalk: 0.15, keepGap: 1, result: null, busy: false
+  burmese: [], personaId: 'BB', pitch: 0, keepTalk: 0.05, keepGap: 1, offset: 0, maxTempo: 1.7, dubGain: 1.6, result: null, busy: false
 };
 const STEPS = ['Upload', 'Source Text', 'Burmese', 'Result'];
 const view = $('#view');
@@ -150,6 +150,15 @@ function step3() {
       <div class="row" style="margin-top:14px"><b>🗣 စကားပြောနေစဉ် မူရင်းအသံ</b><span id="tv">${Math.round(state.keepTalk * 100)}%</span></div>
       <input id="talk" type="range" min="0" max="50" value="${state.keepTalk * 100}" />
       <p class="muted small">Action၊ ဂီတ၊ ဆူညံသံ အပိုင်းတွေကို မူရင်းအသံနဲ့ ပြန်ကြားရမယ်။ နှစ်ခုလုံး 0% ထားရင် မူရင်းအသံ လုံးဝမပါပါ။</p>
+      <details style="margin-top:12px"><summary><b>⚙ ပိုမိုချိန်ညှိရန်</b></summary>
+        <div class="row" style="margin-top:12px"><b>⏱ မြန်မာသံ အချိန်ရွှေ့</b><span id="ov">${state.offset.toFixed(1)}s</span></div>
+        <input id="offs" type="range" min="-10" max="10" value="${Math.round(state.offset * 10)}" />
+        <p class="muted small">အနှုတ် = စောစေ၊ အပေါင်း = နောက်ဆုတ်</p>
+        <div class="row"><b>🚀 အမြန်ဆုံး အသံမြန်နှုန်း</b><span id="mv">${state.maxTempo.toFixed(1)}×</span></div>
+        <input id="mtempo" type="range" min="12" max="20" value="${Math.round(state.maxTempo * 10)}" />
+        <div class="row" style="margin-top:12px"><b>🔊 မြန်မာသံ ပမာဏ</b><span id="dv">${Math.round(state.dubGain * 100)}%</span></div>
+        <input id="dgain" type="range" min="100" max="250" value="${Math.round(state.dubGain * 100)}" />
+      </details>
     </div>
     <button id="next" class="btn primary">Step 3: အသံထုတ်ပြီး Video ပေါင်းမည်</button>`;
 
@@ -162,6 +171,9 @@ function step3() {
   $('#pitch').oninput = e => { state.pitch = +e.target.value; $('#pv').textContent = (state.pitch >= 0 ? '+' : '') + state.pitch + 'Hz'; };
   $('#gap').oninput = e => { state.keepGap = +e.target.value / 100; $('#gv').textContent = e.target.value + '%'; };
   $('#talk').oninput = e => { state.keepTalk = +e.target.value / 100; $('#tv').textContent = e.target.value + '%'; };
+  $('#offs').oninput = e => { state.offset = +e.target.value / 10; $('#ov').textContent = state.offset.toFixed(1) + 's'; };
+  $('#mtempo').oninput = e => { state.maxTempo = +e.target.value / 10; $('#mv').textContent = state.maxTempo.toFixed(1) + '×'; };
+  $('#dgain').oninput = e => { state.dubGain = +e.target.value / 100; $('#dv').textContent = e.target.value + '%'; };
   view.querySelectorAll('.voice').forEach(el => el.onclick = e => {
     if (e.target.dataset.prev) return;
     state.personaId = el.dataset.id;
@@ -197,11 +209,12 @@ async function step4() {
   let wake; try { wake = await navigator.wakeLock?.request('screen'); } catch {}
   try {
     const persona = L.PERSONAS.find(p => p.id === state.personaId);
-    const { video, placed, fellBack } = await L.renderDub({
+    const { video, placed, fellBack, stats } = await L.renderDub({
       file: state.file, videoDur: state.videoDur, segs: state.segs, burmese: state.burmese,
-      persona, pitch: state.pitch, keepTalk: state.keepTalk, keepGap: state.keepGap, onProgress: setProg
+      persona, pitch: state.pitch, keepTalk: state.keepTalk, keepGap: state.keepGap,
+      offset: state.offset, maxTempo: state.maxTempo, dubGain: state.dubGain, onProgress: setProg
     });
-    state.result = { video, url: URL.createObjectURL(video), srt: L.buildSrt(state.burmese, placed) };
+    state.result = { video, url: URL.createObjectURL(video), srt: L.buildSrt(state.burmese, placed), stats };
     showResult();
     if (fellBack) toast('မူရင်းအသံ ရောစပ်မရလို့ မြန်မာအသံချည်းပဲ ထည့်ထားပါတယ်');
   } catch (e) {
@@ -223,6 +236,9 @@ function showResult() {
   view.innerHTML = `
     <h2>Step 4: ရလဒ်များ (Results)</h2>
     <video src="${state.result.url}" controls playsinline></video>
+    <p class="muted small">${state.result.stats && state.result.stats.lateCount
+      ? `⏱ နောက်ကျတဲ့ စာကြောင်း ${state.result.stats.lateCount} ကြောင်း (အများဆုံး ${state.result.stats.maxDrift.toFixed(1)} စက္ကန့်)။ ဘာသာပြန်စာကို တိုအောင်ပြင်ရင် ပိုကိုက်ပါမယ်။`
+      : '✅ မြန်မာသံ အချိန်ကိုက်ညီပါတယ်'}</p>
     <button id="dl" class="btn primary">⬇ Video Download (.mp4)</button>
     <button id="srt" class="btn block">Download Subtitles (.srt)</button>
     <div class="row" style="margin-top:14px">
