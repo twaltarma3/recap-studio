@@ -232,13 +232,24 @@ async function step4() {
   } finally { wake?.release?.(); state.busy = false; renderStepper(); }
 }
 
+function statBlock() {
+  const st = state.result.stats; if (!st) return '';
+  const long = st.longLines || [];
+  let h = st.lateCount
+    ? `<p class="muted small">⏱ နောက်ကျတဲ့ စာကြောင်း ${st.lateCount} ကြောင်း (အများဆုံး ${st.maxDrift.toFixed(1)} စက္ကန့်)</p>`
+    : '<p class="muted small">✅ မြန်မာသံ အချိန်ကိုက်ညီပါတယ်</p>';
+  if (long.length) h += `<div class="panel"><b>⚠ ရှည်လွန်းတဲ့ စာကြောင်း ${long.length} ကြောင်း</b>
+    <p class="muted small">ID: ${long.map(x => x.i).join(', ')}<br>အသံကို အမြန်ဆုံးချုံ့လည်း အချိန်မဆန့်ပါ။ ဒီစာကြောင်းတွေကို Gemini နဲ့ တိုအောင် ပြန်ခိုင်းပါ။</p>
+    <button id="shorten" class="btn block">📋 တိုအောင်ခိုင်းမည့် Prompt ကူးမည်</button>
+    <button id="toStep2" class="btn block">Step 2 သို့ သွားပြီး JSON ထည့်မည်</button></div>`;
+  return h;
+}
+
 function showResult() {
   view.innerHTML = `
     <h2>Step 4: ရလဒ်များ (Results)</h2>
     <video src="${state.result.url}" controls playsinline></video>
-    <p class="muted small">${state.result.stats && state.result.stats.lateCount
-      ? `⏱ နောက်ကျတဲ့ စာကြောင်း ${state.result.stats.lateCount} ကြောင်း (အများဆုံး ${state.result.stats.maxDrift.toFixed(1)} စက္ကန့်)။ ဘာသာပြန်စာကို တိုအောင်ပြင်ရင် ပိုကိုက်ပါမယ်။`
-      : '✅ မြန်မာသံ အချိန်ကိုက်ညီပါတယ်'}</p>
+    ${statBlock()}
     <button id="dl" class="btn primary">⬇ Video Download (.mp4)</button>
     <button id="srt" class="btn block">Download Subtitles (.srt)</button>
     <div class="row" style="margin-top:14px">
@@ -248,6 +259,11 @@ function showResult() {
   const base = state.file.name.replace(/\.[^.]+$/, '');
   $('#dl').onclick = () => download(state.result.video, base + '_recap.mp4');
   $('#srt').onclick = () => download(new Blob([state.result.srt], { type: 'text/plain' }), base + '_burmese.srt');
+  $('#shorten')?.addEventListener('click', async () => {
+    const t = L.buildShortenPrompt(state.segs, state.burmese, state.result.stats.longLines);
+    try { await navigator.clipboard.writeText(t); toast('Prompt ကူးပြီးပါပြီ — Gemini မှာ paste လုပ်ပါ'); } catch { toast('ကူးမရပါ'); }
+  });
+  $('#toStep2')?.addEventListener('click', () => go(2));
   $('#back').onclick = () => { state.result = null; go(3); };
   $('#again').onclick = () => { Object.assign(state, { file: null, segs: [], burmese: [], result: null }); go(1); };
 }

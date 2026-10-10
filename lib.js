@@ -125,7 +125,8 @@ export function buildPrompt(segs) {
   }).join('\n');
   return `You are a professional video dubbing translator. You MUST translate the following subtitles into natural spoken Burmese (Myanmar script ONLY, NO English, NO phonetic guides).
 Translate each line so that it sounds natural in a movie recap narration. Do not translate word-for-word.
-Keep each Burmese line short enough to be spoken within its Duration.
+Timing is critical: Burmese narration is spoken at about 4-5 syllables per second, so each line MUST be short enough to be spoken within its Duration (for example 2.0s allows roughly 8-10 syllables). Condense the meaning and drop minor details instead of translating everything. Being on time matters more than completeness.
+Source lines may be cut in the middle of a sentence. Still translate each line on its own so it sounds natural by itself, and keep the same order and the same number of lines.
 Return the result STRICTLY as a JSON object with a single key "translations" containing an array of strings in order, exactly one string per ID.
 Example:
 {
@@ -134,6 +135,21 @@ Example:
 "မြန်မာစာသား ၂"
 ]
 }
+Inputs:
+${lines}`;
+}
+
+export function buildShortenPrompt(segs, burmese, longLines) {
+  const lm = new Map(longLines.map(x => [x.i, x.ratio]));
+  const lines = segs.map((s, i) => {
+    const slot = (i + 1 < segs.length ? segs[i + 1].start : s.end) - s.start;
+    const r = lm.get(i);
+    const flag = r ? ` | LONG: rewrite to about ${Math.max(20, Math.floor(r * 85))}% of its current length` : '';
+    return `ID: ${i} | Duration: ${Math.max(slot, s.end - s.start).toFixed(1)}s${flag} | Source: "${s.text}" | Burmese: "${burmese[i] || ''}"`;
+  }).join('\n');
+  return `You are a professional dubbing script editor. Below are Burmese narration lines for a movie recap, each with its source text and the time (Duration) available to speak it.
+Lines marked LONG cannot be spoken within their Duration. Rewrite ONLY those lines so they are shorter by the percentage given: condense the meaning, drop minor details, and keep natural spoken Burmese (Myanmar script ONLY, NO English). Keep every other line exactly unchanged.
+Return the FULL result STRICTLY as a JSON object with a single key "translations" containing an array of exactly ${segs.length} strings in order.
 Inputs:
 ${lines}`;
 }
@@ -223,9 +239,11 @@ function gainExpr(iv, talk, gap, r = 0.2) {
   return `${gap.toFixed(3)}+(${(talk - gap).toFixed(3)})*min(1,${terms})`;
 }
 
-function dubStats(placed) {
+function dubStats(placed, maxTempo) {
   const d = placed.filter(Boolean).map(p => p.drift);
-  return { lateCount: d.filter(x => x > 0.5).length, maxDrift: Math.max(0, ...d) };
+  const longLines = [];
+  placed.forEach((p, i) => { if (p && p.natural > p.slot * maxTempo * 1.02) longLines.push({ i, ratio: (p.slot * maxTempo) / p.natural }); });
+  return { lateCount: d.filter(x => x > 0.5).length, maxDrift: Math.max(0, ...d), longLines };
 }
 
 export async function renderDub({ file, videoDur, segs, burmese, persona, pitch, keepTalk = 0, keepGap = 0, offset = 0, maxTempo = 1.7, dubGain = 1.6, onProgress }) {
@@ -258,6 +276,7 @@ export async function renderDub({ file, videoDur, segs, burmese, persona, pitch,
     if (!raw[i]) continue;
     let buf = await ctx.decodeAudioData(raw[i].slice(0));
     let tb = trimBounds(buf);
+    const natural = tb.len;
     const want = segs[i].start + offset;
     const start = Math.max(want, cursor, 0);
     const nextStart = i + 1 < n ? segs[i + 1].start + offset : videoDur;
@@ -275,7 +294,7 @@ export async function renderDub({ file, videoDur, segs, burmese, persona, pitch,
       await f.deleteFile('s.mp3');
     }
     clips.push({ buf, start, lead: tb.lead, len: tb.len });
-    placed[i] = { start, end: start + tb.len, drift: start - want };
+    placed[i] = { start, end: start + tb.len, drift: start - want, natural, slot };
     cursor = start + tb.len + GAP;
   }
 
@@ -327,7 +346,7 @@ export async function renderDub({ file, videoDur, segs, burmese, persona, pitch,
   for (const x of [temp ? inName : null, 'mix.wav', 'out.mp4']) { if (x) { try { await f.deleteFile(x); } catch {} } }
   setFFProgress(null);
   onProgress(1, 'ပြီးပါပြီ');
-  return { video: new Blob([out.slice().buffer], { type: 'video/mp4' }), placed, fellBack, stats: dubStats(placed) };
+  return { video: new Blob([out.slice().buffer], { type: 'video/mp4' }), placed, fellBack, stats: dubStats(placed, maxTempo) };
 }
 
 /* ---------- SRT ---------- */
