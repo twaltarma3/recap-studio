@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="my">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Recap Studio</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Noto+Sans+Myanmar:wght@400;600;700&display=swap" rel="stylesheet" />
+</head>
+<body>
+  <header class="top">
+    <h1>Manual Video Editor</h1>
+    <button id="openSettings" class="ghost">⚙ Settings</button>
+  </header>
+  <main>
+    <nav id="stepper" class="stepper"></nav>
+    <section id="view" class="card"></section>
+  </main>
+
+  <dialog id="settings">
+    <form method="dialog" class="dlg">
+      <h2>API Settings</h2>
+      <label>Worker URL
+        <input id="workerUrl" placeholder="https://recap-proxy.yourname.workers.dev" />
+      </label>
+      <label>AssemblyAI API Key
+        <input id="aaiKey" type="password" placeholder="AssemblyAI key" />
+      </label>
+      <p class="muted small">Keys are saved only in this browser (localStorage).</p>
+      <div class="row">
+        <button value="cancel" class="ghost">Close</button>
+        <button id="saveSettings" value="ok" class="btn primary">Save</button>
+      </div>
+    </form>
+  </dialog>
+  <div id="toast"></div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
