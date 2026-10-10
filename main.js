@@ -4,7 +4,7 @@ import * as L from './lib.js';
 const $ = (s, r = document) => r.querySelector(s);
 const state = {
   step: 1, file: null, videoDur: 0, lang: 'zh', segs: [], sourceLines: [],
-  burmese: [], personaId: 'BB', pitch: 0, keepOrig: 0, result: null, busy: false
+  burmese: [], personaId: 'BB', pitch: 0, keepTalk: 0.15, keepGap: 1, result: null, busy: false
 };
 const STEPS = ['Upload', 'Source Text', 'Burmese', 'Result'];
 const view = $('#view');
@@ -145,8 +145,11 @@ function step3() {
       <div class="row"><b>ဝါး/ကြည် (Pitch Offset)</b><span id="pv">${state.pitch >= 0 ? '+' : ''}${state.pitch}Hz</span></div>
       <input id="pitch" type="range" min="-30" max="30" value="${state.pitch}" />
       <div class="row muted small"><span>-30Hz (ဝါး)</span><span>+30Hz (ကြည်)</span></div>
-      <div class="row" style="margin-top:14px"><b>မူရင်းအသံ ချန်ထားမည်</b><span id="kv">${Math.round(state.keepOrig * 100)}%</span></div>
-      <input id="keep" type="range" min="0" max="50" value="${state.keepOrig * 100}" />
+      <div class="row" style="margin-top:14px"><b>🎬 စကားမပြောတဲ့နေရာ မူရင်းအသံ</b><span id="gv">${Math.round(state.keepGap * 100)}%</span></div>
+      <input id="gap" type="range" min="0" max="100" value="${state.keepGap * 100}" />
+      <div class="row" style="margin-top:14px"><b>🗣 စကားပြောနေစဉ် မူရင်းအသံ</b><span id="tv">${Math.round(state.keepTalk * 100)}%</span></div>
+      <input id="talk" type="range" min="0" max="50" value="${state.keepTalk * 100}" />
+      <p class="muted small">Action၊ ဂီတ၊ ဆူညံသံ အပိုင်းတွေကို မူရင်းအသံနဲ့ ပြန်ကြားရမယ်။ နှစ်ခုလုံး 0% ထားရင် မူရင်းအသံ လုံးဝမပါပါ။</p>
     </div>
     <button id="next" class="btn primary">Step 3: အသံထုတ်ပြီး Video ပေါင်းမည်</button>`;
 
@@ -157,7 +160,8 @@ function step3() {
   $('#mm').oninput = () => { state.burmese = read(); };
   $('#back').onclick = () => { state.burmese = read(); go(2); };
   $('#pitch').oninput = e => { state.pitch = +e.target.value; $('#pv').textContent = (state.pitch >= 0 ? '+' : '') + state.pitch + 'Hz'; };
-  $('#keep').oninput = e => { state.keepOrig = +e.target.value / 100; $('#kv').textContent = e.target.value + '%'; };
+  $('#gap').oninput = e => { state.keepGap = +e.target.value / 100; $('#gv').textContent = e.target.value + '%'; };
+  $('#talk').oninput = e => { state.keepTalk = +e.target.value / 100; $('#tv').textContent = e.target.value + '%'; };
   view.querySelectorAll('.voice').forEach(el => el.onclick = e => {
     if (e.target.dataset.prev) return;
     state.personaId = el.dataset.id;
@@ -193,12 +197,13 @@ async function step4() {
   let wake; try { wake = await navigator.wakeLock?.request('screen'); } catch {}
   try {
     const persona = L.PERSONAS.find(p => p.id === state.personaId);
-    const { video, placed } = await L.renderDub({
+    const { video, placed, fellBack } = await L.renderDub({
       file: state.file, videoDur: state.videoDur, segs: state.segs, burmese: state.burmese,
-      persona, pitch: state.pitch, keepOrig: state.keepOrig, onProgress: setProg
+      persona, pitch: state.pitch, keepTalk: state.keepTalk, keepGap: state.keepGap, onProgress: setProg
     });
     state.result = { video, url: URL.createObjectURL(video), srt: L.buildSrt(state.burmese, placed) };
     showResult();
+    if (fellBack) toast('မူရင်းအသံ ရောစပ်မရလို့ မြန်မာအသံချည်းပဲ ထည့်ထားပါတယ်');
   } catch (e) {
     view.innerHTML = `<h2>အမှားရှိနေပါသည်</h2>`; showErr(e);
     view.insertAdjacentHTML('beforeend', `<button class="btn primary" id="retry">ပြန်စမည်</button>

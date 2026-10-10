@@ -189,7 +189,29 @@ const tempoChain = t => {
   return parts.join(',');
 };
 
-export async function renderDub({ file, videoDur, segs, burmese, persona, pitch, keepOrig, onProgress }) {
+/* ---- ducking: original audio quiet while someone speaks, full volume otherwise ---- */
+function duckIntervals(segs, placed, pad = 0.12, mergeGap = 0.4) {
+  const iv = [];
+  segs.forEach((s, i) => {
+    const p = placed[i]; if (!p) return;
+    iv.push([Math.min(s.start, p.start) - pad, Math.max(s.end, p.end) + pad]);
+  });
+  iv.sort((x, y) => x[0] - y[0]);
+  const out = [];
+  for (const [a, b] of iv) {
+    const l = out[out.length - 1];
+    if (l && a <= l[1] + mergeGap) l[1] = Math.max(l[1], b); else out.push([Math.max(0, a), b]);
+  }
+  return out;
+}
+function gainExpr(iv, talk, gap, r = 0.25) {
+  if (!iv.length) return gap.toFixed(3);
+  const terms = iv.map(([a, b]) =>
+    `max(0,min(1,min((t-(${(a - r).toFixed(3)}))/${r},((${(b + r).toFixed(3)})-t)/${r})))`).join('+');
+  return `${gap.toFixed(3)}+(${(talk - gap).toFixed(3)})*min(1,${terms})`;
+}
+
+export async function renderDub({ file, videoDur, segs, burmese, persona, pitch, keepTalk = 0, keepGap = 0, onProgress }) {
   const n = segs.length;
   const f = await getFFmpeg();
   const ctx = new OfflineAudioContext(1, Math.ceil((videoDur + 30) * SR), SR);
@@ -261,18 +283,31 @@ export async function renderDub({ file, videoDur, segs, burmese, persona, pitch,
   }
   await f.writeFile('mix.wav', wavBytes);
   setFFProgress(p => onProgress(0.85 + p * 0.15, 'Video ပေါင်းနေသည်'));
-  const args = keepOrig > 0
-    ? ['-i', inName, '-i', 'mix.wav', '-filter_complex',
-       `[0:a]volume=${keepOrig}[o];[o][1:a]amix=inputs=2:duration=longest,volume=2[a]`,
-       '-map', '0:v:0', '-map', '[a]']
-    : ['-i', inName, '-i', 'mix.wav', '-map', '0:v:0', '-map', '1:a:0'];
-  const code = await f.exec([...args, '-c:v', 'copy', '-c:a', 'aac', '-b:a', '128k', '-shortest', '-movflags', '+faststart', 'out.mp4']);
+  const outArgs = ['-c:v', 'copy', '-c:a', 'aac', '-b:a', '128k', '-shortest', '-movflags', '+faststart', 'out.mp4'];
+  const attempts = [];
+  const wantMix = keepTalk > 0 || keepGap > 0;
+  if (wantMix) {
+    const g = gainExpr(duckIntervals(segs, placed), keepTalk, keepGap);
+    const head = `[0:a]volume='${g}':eval=frame[o];[1:a]apad[d];[o][d]amix=inputs=2:duration=first:dropout_transition=0,volume=2`;
+    for (const tail of [',alimiter=limit=0.95:level=0', '']) {
+      attempts.push(['-i', inName, '-i', 'mix.wav', '-filter_complex', `${head}${tail}[a]`, '-map', '0:v:0', '-map', '[a]']);
+    }
+  }
+  attempts.push(['-i', inName, '-i', 'mix.wav', '-map', '0:v:0', '-map', '1:a:0']);
+  let code = -1, used = -1;
+  for (let k = 0; k < attempts.length; k++) {
+    code = await f.exec([...attempts[k], ...outArgs]);
+    used = k;
+    if (code === 0) break;
+    try { await f.deleteFile('out.mp4'); } catch {}
+  }
   if (code !== 0) throw new Error('Video ပေါင်းစပ်မှု မအောင်မြင်ပါ (ffmpeg error)');
+  const fellBack = wantMix && used === attempts.length - 1;
   const out = await f.readFile('out.mp4');
   for (const x of [temp ? inName : null, 'mix.wav', 'out.mp4']) { if (x) { try { await f.deleteFile(x); } catch {} } }
   setFFProgress(null);
   onProgress(1, 'ပြီးပါပြီ');
-  return { video: new Blob([out.slice().buffer], { type: 'video/mp4' }), placed };
+  return { video: new Blob([out.slice().buffer], { type: 'video/mp4' }), placed, fellBack };
 }
 
 /* ---------- SRT ---------- */
