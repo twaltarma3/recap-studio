@@ -11,16 +11,8 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 /* ---------- voices (Edge TTS only has 2 Burmese voices; personas vary pitch/rate) ---------- */
 const THIHA = 'my-MM-ThihaNeural', NILAR = 'my-MM-NilarNeural';
 export const PERSONAS = [
-  { id: 'BB', name: 'ဘိုဘို', g: 'Male', voice: THIHA, pitch: 0, rate: 0 },
-  { id: 'NL', name: 'ညဏ်လင်း', g: 'Male', voice: THIHA, pitch: -6, rate: -4 },
-  { id: 'PW', name: 'ဖြိုးဝေ', g: 'Male', voice: THIHA, pitch: 6, rate: 6 },
-  { id: 'KM', name: 'ကောင်းမြတ်', g: 'Male', voice: THIHA, pitch: -12, rate: 0 },
-  { id: 'ZK', name: 'ဇေကို', g: 'Male', voice: THIHA, pitch: 12, rate: 4 },
-  { id: 'HS', name: 'နှင်းဆီ', g: 'Female', voice: NILAR, pitch: 0, rate: 0 },
-  { id: 'SL', name: 'စုလွင်', g: 'Female', voice: NILAR, pitch: 6, rate: 4 },
-  { id: 'YS', name: 'ယွန်းရွှေ', g: 'Female', voice: NILAR, pitch: -6, rate: -4 },
-  { id: 'EC', name: 'အိမ့်ချစ်', g: 'Female', voice: NILAR, pitch: 12, rate: 6 },
-  { id: 'TS', name: 'သက်စု', g: 'Female', voice: NILAR, pitch: -10, rate: 0 }
+  { id: 'TH', name: 'သီဟ', g: 'Male', voice: THIHA, pitch: 0, rate: 0 },
+  { id: 'NL', name: 'နီလာ', g: 'Female', voice: NILAR, pitch: 0, rate: 0 }
 ];
 
 /* ---------- ffmpeg (core files are kept in Cache Storage after the first download) ---------- */
@@ -245,6 +237,63 @@ Inputs:
 ${lines}`;
 }
 
+/* ---------- Recap Script mode (free-form script instead of line-by-line JSON) ---------- */
+export function buildRecapPrompt(segs) {
+  const source = segs.map(s => s.text).join('\n');
+  return `### ROLE & OBJECTIVE:
+You are a professional "Movie Recap Scriptwriter" for a popular Burmese Facebook/YouTube/TikTok channel. Your task is to rewrite a given detailed scene-by-scene action into a highly descriptive, engaging, and beautifully paced video script in Burmese that matches a longer video duration. 
+
+### TONE & STYLE:
+- Genre: Movie Recap / Storytelling.
+- Language: Burmese (Colloquial/Spoken style - အပြောစကား သက်သက်ဖြစ်ရမည်). Strictly Do NOT use formal/literary Burmese (စာရေးစကား လုံးဝမသုံးရ).
+- Vibe: Epic, deeply descriptive, slightly humorous, badass (အထာကျကျ), and engaging.
+- Pacing: Medium-Fast but HIGHLY DESCRIPTIVE. Do not skip details. 
+
+### WRITING RULES (STRICTLY FOLLOW):
+1. Elongation Technique for TTS Timing: 
+   - Expand on actions using vivid descriptions (e.g., describe the environment, the creepy sounds, the glowing lights).
+   - Use dynamic sound-effect words in Burmese (e.g., ဝုန်းဆိုပြီး၊ ဒိုင်းဆိုပြီး၊ ဖြောင်းဆိုပြီး၊ ရှူးဆိုပြီး).
+   - Describe character emotions and reactions vividly (e.g., ကြောက်လန့်တကြားနဲ့၊ မျက်လုံးပြူးသွားပြီး၊ အထာကျကျ ပြုံးလိုက်ရင်း).
+2. Dialogue Handling: Keep the provided badass dialogues intact but add conversational flavor before and after them to pad the timing naturally.
+3. Grammar & Flow (NO ELLIPSES): Use natural storytelling endings (..တယ်၊ ..မယ်၊ ..သွားတယ်၊ ..လေရဲ့၊ ..ရော၊ ..ပေါ့၊ ..ပါလေရော). Avoid listing or bullet points. STRICTLY DO NOT USE ellipses (\`...\`) for pauses; use a single space instead.
+4. Exact Sequential Order: Follow the exact sequence and flow of the provided input text. Do not rearrange the chronological order of the events or skip any parts. (စာစီပေးထားတဲ့ အစီအစဉ်အတိုင်း တိတိကျကျ ရေးသားရန်)
+5. Ban Sense (Platform Safety): Avoid direct words for gore, violence, or extreme brutality to prevent TikTok/YouTube bans. Use terms like "အပြတ်ရှင်းတယ်", "ကြွေမွသွားတယ်", "လွင့်စင်သွားတယ်".
+6. Standard Outro & No Moral Fluff: Do not add moral lessons. Smoothly end the story with an engaging cliffhanger (e.g., "နောက်ထပ် ဘာတွေဆက်ဖြစ်မလဲ [summarize the suspense]"). Finally, ALWAYS end the script with the exact phrase: "အကောင့်လေးကိုလဲ ဖေါလိုးလုပ်ပေးခဲ့ကြပါဗျာ။"
+7. Strict Output Format: Output ONLY the core script inside a single \`code block\`. STRICTLY DO NOT include any scene headers, scene numbers, or descriptions in brackets (e.g., [ဇာတ်ဝင်ခန်း - ၁]). DO NOT include any AI conversational filler before or after the code block.
+8. Video-Driven Accuracy (Strict Observation): You MUST first carefully watch and analyze the provided video. When rewriting and expanding the script, your descriptions must accurately reflect the EXACT movements, environments, and character expressions seen in the video. STRICTLY DO NOT invent, hallucinate, or add any actions, objects, or events that do not physically happen in the video footage. Your final output must meticulously combine the provided text with the exact visual actions from the video without fabricating extra details.
+
+### INPUT STORY / VIDEO DETAILS:
+${source}`;
+}
+
+// split a free-form Burmese script into sentences (for TTS lines)
+export function parseScript(raw) {
+  const s = String(raw || '').replace(/```[a-z]*/gi, '').trim();
+  if (!s) throw new Error('Script စာသား မတွေ့ပါ');
+  const parts = s.split(/(?<=။)|\n+/).map(x => x.trim()).filter(Boolean);
+  const out = [];
+  for (const p of parts) {
+    if (out.length && out[out.length - 1].length < 14) out[out.length - 1] += ' ' + p;
+    else out.push(p);
+  }
+  if (!out.length) throw new Error('Script စာသား မတွေ့ပါ');
+  return out;
+}
+
+// spread script sentences over the original speech timeline, proportional to length
+export function layoutScript(sentences, orig) {
+  const t0 = orig[0].start, t1 = orig[orig.length - 1].end;
+  const D = Math.max(t1 - t0, sentences.length * 1.5);
+  const w = sentences.map(x => Math.max(x.length, 4));
+  const W = w.reduce((a, b) => a + b, 0);
+  let acc = 0;
+  return sentences.map((text, i) => {
+    const start = t0 + (D * acc) / W; acc += w[i];
+    const end = t0 + (D * acc) / W;
+    return { start, end, text };
+  });
+}
+
 export function parseTranslations(raw) {
   let s = raw.trim().replace(/```json|```/gi, '');
   const a = s.indexOf('{'), b = s.lastIndexOf('}');
@@ -256,14 +305,14 @@ export function parseTranslations(raw) {
 }
 
 /* ---------- TTS ---------- */
-export async function tts(text, persona, pitchOffset = 0, tries = 3) {
+export async function tts(text, persona, pitchOffset = 0, rateOffset = 0, tries = 3) {
   let last;
   for (let k = 0; k < tries; k++) {
     try {
       const r = await fetch(cfg.workerUrl + '/tts', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ text, voice: persona.voice, pitch: persona.pitch + pitchOffset, rate: persona.rate })
+        body: JSON.stringify({ text, voice: persona.voice, pitch: persona.pitch + pitchOffset, rate: Math.max(-50, Math.min(100, persona.rate + rateOffset)) })
       });
       if (!r.ok) throw new Error(`TTS ${r.status}: ${await r.text()}`);
       const ab = await r.arrayBuffer();
@@ -337,7 +386,7 @@ function dubStats(placed, maxTempo) {
   return { lateCount: d.filter(x => x > 0.5).length, maxDrift: Math.max(0, ...d), longLines };
 }
 
-export async function renderDub({ file, videoDur, segs, burmese, persona, pitch, keepTalk = 0, keepGap = 0, offset = 0, maxTempo = 1.7, dubGain = 1.6, onProgress }) {
+export async function renderDub({ file, videoDur, segs, burmese, persona, pitch, rate = 0, keepTalk = 0, keepGap = 0, offset = 0, maxTempo = 1.7, dubGain = 1.6, onProgress }) {
   const n = segs.length;
   const f = await getFFmpeg();
   const ctx = new OfflineAudioContext(1, Math.ceil((videoDur + 30) * SR), SR);
@@ -350,7 +399,7 @@ export async function renderDub({ file, videoDur, segs, burmese, persona, pitch,
   const run = async () => {
     while (todo.length) {
       const i = todo.shift();
-      raw[i] = await tts(burmese[i], persona, pitch);
+      raw[i] = await tts(burmese[i], persona, pitch, rate);
       done++;
       onProgress((done / total) * 0.5, `အသံထုတ်နေသည် ${done}/${total}`);
     }

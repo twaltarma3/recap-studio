@@ -2,10 +2,10 @@ import './style.css';
 import * as L from './lib.js';
 
 const $ = (s, r = document) => r.querySelector(s);
-const DEFAULTS = { pitch: 0, keepTalk: 0, keepGap: 0.3, offset: 0, maxTempo: 2.0, dubGain: 1.8 };
+const DEFAULTS = { pitch: 10, rate: 20, keepTalk: 0, keepGap: 0.3, offset: 0, maxTempo: 2.0, dubGain: 1.8 };
 const state = {
   step: 1, file: null, videoDur: 0, lang: 'zh', segs: [], sourceLines: [],
-  burmese: [], personaId: 'BB', ...DEFAULTS, result: null, busy: false
+  burmese: [], personaId: 'TH', ...DEFAULTS, result: null, busy: false, origSegs: null
 };
 const STEPS = ['Upload', 'Source Text', 'Burmese', 'Result'];
 const view = $('#view');
@@ -212,7 +212,7 @@ function step1() {
       </select>
     </label>
     <button id="next" class="btn primary" ${state.file ? '' : 'disabled'}>Step 1: စာသားထုတ်မည် (Next)</button>`;
-  $('#f').onchange = e => { state.file = e.target.files[0] || null; state.segs = []; L.forgetInput(); step1(); };
+  $('#f').onchange = e => { state.file = e.target.files[0] || null; state.segs = []; state.origSegs = null; L.forgetInput(); step1(); };
   $('#lang').onchange = e => { state.lang = e.target.value; };
   $('#next').onclick = () => {
     if (!L.cfg.workerUrl || !L.cfg.aaiKey) { toast('API Key အရင်ထည့်ပါ'); openPage('keys'); return; }
@@ -231,6 +231,7 @@ async function transcribeFlow() {
     const wav = await L.extractAudio(state.file, p => setProg(0.05 + p * 0.2, 'အသံ ဆွဲထုတ်နေသည်'));
     const names = { uploading: 'AssemblyAI သို့ တင်နေသည်', queued: 'တန်းစီစောင့်နေသည်', processing: 'စာသားပြောင်းနေသည်' };
     let tick = 0.3;
+    state.origSegs = null;
     state.segs = await L.transcribe(wav, state.lang, st => { tick = Math.min(tick + 0.04, 0.95); setProg(tick, names[st] || st); });
     state.burmese = []; state.busy = false;
     go(2);
@@ -249,11 +250,13 @@ function step2() {
     <p class="muted">စာကြောင်းတစ်ကြောင်းလျှင် အချိန်တစ်ခု ကိုက်ထားသည်။ စာကြောင်းအရေအတွက် မပြောင်းပါနှင့်။ (${state.segs.length} lines)</p>
     <textarea id="src">${state.segs.map(s => s.text).join('\n').replace(/</g, '&lt;')}</textarea>
     <button id="copy" class="btn block">📋 Copy Full Prompt</button>
+    <button id="copyRecap" class="btn block">🎬 Recap Script Prompt ကူးမည် (စမ်းသပ်)</button>
+    ${state.origSegs ? '<button id="restoreSrc" class="btn block">↺ မူရင်း စာကြောင်းများ ပြန်ထားမည်</button>' : ''}
     <div class="panel">
       <b>🤖 Gemini App ဖြင့် ဘာသာပြန်ရန် (Free)</b>
       <p class="muted small">Prompt ကို Copy ကူးပြီး Gemini တွင် Paste လုပ်ပါ။ ရလာသော JSON ကို အောက်တွင် ထည့်ပါ။</p>
       <a class="link" href="https://gemini.google.com/app" target="_blank" rel="noopener">Gemini App ဖွင့်မည် ↗</a>
-      <label>Gemini မှ ရလာသော JSON
+      <label>Gemini မှ ရလာသော JSON (ဒါမှမဟုတ် Recap Script)
         <textarea id="json" class="short" placeholder='{"translations": ["မြန်မာစာ ၁", "မြန်မာစာ ၂", ...]}'></textarea>
       </label>
       <button id="next" class="btn primary">Step 2: ဘာသာပြန်အတည်ပြုမည် (Next)</button>
@@ -270,7 +273,19 @@ function step2() {
     return true;
   };
   $('#back').onclick = () => go(1);
+  $('#copyRecap').onclick = async () => {
+    if (state.origSegs) { toast('မူရင်း စာကြောင်းများ အရင်ပြန်ထားပါ'); return; }
+    if (!syncSrc()) return;
+    const text = L.buildRecapPrompt(state.segs);
+    try { await navigator.clipboard.writeText(text); toast('Recap Prompt ကူးပြီးပါပြီ — Gemini မှာ Video ပါတင်ပါ'); }
+    catch { $('#json').value = text; toast('ကူးမရပါ — အောက်ကနေ ရွေးကူးပါ'); }
+  };
+  $('#restoreSrc')?.addEventListener('click', () => {
+    state.segs = state.origSegs; state.origSegs = null; state.burmese = [];
+    toast('မူရင်း စာကြောင်းများ ပြန်ထားပြီးပါပြီ'); step2();
+  });
   $('#copy').onclick = async () => {
+    if (state.origSegs) { toast('မူရင်း စာကြောင်းများ အရင်ပြန်ထားပါ'); return; }
     if (!syncSrc()) return;
     const text = L.buildPrompt(state.segs);
     try { await navigator.clipboard.writeText(text); toast('Prompt ကူးပြီးပါပြီ'); }
@@ -278,6 +293,16 @@ function step2() {
   };
   $('#next').onclick = () => {
     try {
+      if (!/"translations"/.test($('#json').value)) {
+        // Recap Script mode: free-form script -> sentences spread over the original timeline
+        const sents = L.parseScript($('#json').value);
+        if (!state.origSegs) state.origSegs = state.segs.map(s => ({ ...s }));
+        state.segs = L.layoutScript(sents, state.origSegs);
+        state.burmese = sents.slice();
+        toast(`Script ${sents.length} ကြောင်း ခွဲပြီးပါပြီ`);
+        go(3);
+        return;
+      }
       const t = L.parseTranslations($('#json').value);
       if (t.length !== state.segs.length) toast(`အရေအတွက် မကိုက်ပါ (${t.length}/${state.segs.length}) — Step 3 မှာ ပြင်ပါ`);
       state.burmese = state.segs.map((_, i) => t[i] || '');
@@ -306,6 +331,9 @@ function step3() {
       <div class="row" style="margin-top:14px"><b>ဝါး/ကြည် (Pitch Offset)</b><span id="pv">${state.pitch >= 0 ? '+' : ''}${state.pitch}Hz</span></div>
       <input id="pitch" type="range" min="-30" max="30" value="${state.pitch}" />
       <div class="row muted small"><span>-30Hz (ဝါး)</span><span>+30Hz (ကြည်)</span></div>
+      <div class="row" style="margin-top:14px"><b>🎚 အသံမြန်နှုန်း (Speed)</b><span id="rv">${state.rate >= 0 ? '+' : ''}${state.rate}%</span></div>
+      <input id="rate" type="range" min="-30" max="50" value="${state.rate}" />
+      <div class="row muted small"><span>-30% (နှေး)</span><span>+50% (မြန်)</span></div>
       <div class="row" style="margin-top:14px"><b>🎬 စကားမပြောတဲ့နေရာ မူရင်းအသံ</b><span id="gv">${Math.round(state.keepGap * 100)}%</span></div>
       <input id="gap" type="range" min="0" max="100" value="${state.keepGap * 100}" />
       <div class="row" style="margin-top:14px"><b>🗣 စကားပြောနေစဉ် မူရင်းအသံ</b><span id="tv">${Math.round(state.keepTalk * 100)}%</span></div>
@@ -330,6 +358,7 @@ function step3() {
   $('#mm').oninput = () => { state.burmese = read(); };
   $('#back').onclick = () => { state.burmese = read(); go(2); };
   $('#pitch').oninput = e => { state.pitch = +e.target.value; $('#pv').textContent = (state.pitch >= 0 ? '+' : '') + state.pitch + 'Hz'; };
+  $('#rate').oninput = e => { state.rate = +e.target.value; $('#rv').textContent = (state.rate >= 0 ? '+' : '') + state.rate + '%'; };
   $('#gap').oninput = e => { state.keepGap = +e.target.value / 100; $('#gv').textContent = e.target.value + '%'; };
   $('#talk').oninput = e => { state.keepTalk = +e.target.value / 100; $('#tv').textContent = e.target.value + '%'; };
   $('#offs').oninput = e => { state.offset = +e.target.value / 10; $('#ov').textContent = state.offset.toFixed(1) + 's'; };
@@ -358,7 +387,7 @@ function step3() {
     const p = L.PERSONAS.find(x => x.id === b.dataset.prev);
     b.textContent = '…';
     try {
-      const ab = await L.tts('မင်္ဂလာပါ၊ ဒီအသံနဲ့ ဇာတ်ကြောင်းကို ပြောပြပေးပါမယ်။', p, state.pitch);
+      const ab = await L.tts('မင်္ဂလာပါ၊ ဒီအသံနဲ့ ဇာတ်ကြောင်းကို ပြောပြပေးပါမယ်။', p, state.pitch, state.rate);
       previewAudio?.pause();
       previewAudio = new Audio(URL.createObjectURL(new Blob([ab], { type: 'audio/mpeg' })));
       previewAudio.play();
@@ -386,7 +415,7 @@ async function step4() {
     const persona = L.PERSONAS.find(p => p.id === state.personaId);
     const { video, placed, fellBack, stats } = await L.renderDub({
       file: state.file, videoDur: state.videoDur, segs: state.segs, burmese: state.burmese,
-      persona, pitch: state.pitch, keepTalk: state.keepTalk, keepGap: state.keepGap,
+      persona, pitch: state.pitch, rate: state.rate, keepTalk: state.keepTalk, keepGap: state.keepGap,
       offset: state.offset, maxTempo: state.maxTempo, dubGain: state.dubGain, onProgress: setProg
     });
     state.result = { video, url: URL.createObjectURL(video), srt: L.buildSrt(state.burmese, placed), stats };
@@ -440,7 +469,7 @@ function showResult() {
   });
   $('#toStep2')?.addEventListener('click', () => go(2));
   $('#back').onclick = () => { state.result = null; go(3); };
-  $('#again').onclick = () => { Object.assign(state, { file: null, segs: [], burmese: [], result: null }); go(1); };
+  $('#again').onclick = () => { Object.assign(state, { file: null, segs: [], origSegs: null, burmese: [], result: null }); go(1); };
 }
 
 /* ---------------- start ---------------- */
