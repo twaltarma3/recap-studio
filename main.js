@@ -5,7 +5,7 @@ import * as L from './lib.js';
 const $ = (s, r = document) => r.querySelector(s);
 const DEFAULTS = { pitch: 10, rate: 20, keepTalk: 0, keepGap: 0.3, offset: 0, maxTempo: 2.0, dubGain: 1.8 };
 const state = {
-  step: 1, file: null, videoDur: 0, lang: 'zh', segs: [], sourceLines: [],
+  step: 1, file: null, videoDur: 0, lang: 'auto', segs: [], sourceLines: [],
   burmese: [], personaId: 'TH', ...DEFAULTS, result: null, busy: false, origSegs: null,
   fxMirror: false, fxBlur: false, blurH: 15, blurY: 100, blurS: 50, blurO: 100, previewUrl: null, previewFor: null,
   fxSubs: false, subS: 5, subY: 88, subC: '#ffffff', subO: '#000000', subFont: 'pt16', fontOk: false
@@ -96,13 +96,12 @@ function pageGuide() {
         <ol>
           <li>ဘယ်ဘက်အပေါ်က <b>☰ Menu</b> ကိုနှိပ်ပြီး <b>API Key Settings</b> ကိုဖွင့်ပါ။</li>
           <li><b>AssemblyAI API Key</b> ထည့်ပါ။ မရှိသေးရင် <b>Get Free Key</b> ကနေ အခမဲ့ယူပါ။</li>
-          <li><b>Worker URL</b> (Cloudflare Worker ရဲ့ link) ထည့်ပါ။</li>
-          <li><b>🔎 စစ်ဆေးမည်</b> ကိုနှိပ်ပါ။ ✅ ပေါ်မှ <b>သိမ်းမည်</b> ကိုနှိပ်ပါ။</li>
+          <li><b>🔎 စစ်ဆေးမည်</b> ကိုနှိပ်ပါ။ ✅ ပေါ်မှ <b>သိမ်းမည်</b> ကိုနှိပ်ပါ။ (Worker URL ကို app ထဲမှာ ထည့်ပေးထားပြီးသားပါ)</li>
           <li><b>Device Video Engine</b> မှာ <b>⬇ Install</b> ကိုနှိပ်ပါ။ (~31MB၊ Wi-Fi နဲ့ တစ်ကြိမ်ပဲ ဒေါင်းရပြီး ဖုန်းထဲမှာ သိမ်းထားပေးပါတယ်)</li>
         </ol>
         <div class="tip">💡 Key တွေကို ဒီဖုန်း browser ထဲမှာပဲ သိမ်းပါတယ်။ Browser data ဖျက်ရင် ပြန်ထည့်ရပါမယ်။</div>`, true)}
 
-      ${sec(2, 'Step 1 — Video တင်ပါ', `
+      ${sec(2, 'Video တင်ပါ', `
         <ol>
           <li><b>Video File ရွေးချယ်ပါ</b> ကိုနှိပ်ပြီး Video ရွေးပါ။ (MP4၊ MOV၊ WEBM၊ MKV — ၁၀ မိနစ်အထိ)</li>
           <li><b>မူရင်းစကားပြောဘာသာ</b> ကို ရွေးပါ။ (ဥပမာ Chinese)</li>
@@ -110,7 +109,7 @@ function pageGuide() {
         </ol>
         <div class="tip">💡 ဖုန်းရဲ့ <b>Downloads</b> ဒါမှမဟုတ် <b>Movies</b> folder ထဲက ဖိုင်ကို ရွေးပါ။ Telegram၊ Google Photos ကနေ တိုက်ရိုက်ရွေးရင် ဖိုင်ဖတ်မရတာ ဖြစ်တတ်ပါတယ်။</div>`)}
 
-      ${sec(3, 'Step 2 — စာသားစစ်၊ Gemini နဲ့ ဘာသာပြန်', `
+      ${sec(3, 'စာသားစစ်၊ Gemini နဲ့ ဘာသာပြန်', `
         <ol>
           <li>ထွက်လာတဲ့ စာသားကို စစ်ပါ။ မှားတာရှိရင် ပြင်ပါ။ <b>စာကြောင်းအရေအတွက် မပြောင်းပါနဲ့။</b></li>
           <li><b>📋 Copy Full Prompt</b> ကိုနှိပ်ပါ။</li>
@@ -120,7 +119,7 @@ function pageGuide() {
         </ol>
         <div class="tip">💡 Prompt ထဲမှာ အချိန်ဆန့်အောင် စာကြောင်းတိုတို ပြန်ဖို့ ပါပြီးသားပါ။</div>`)}
 
-      ${sec(4, 'Step 3 — စာသား၊ အသံ၊ Effects', `
+      ${sec(4, 'စာသား၊ အသံ၊ Effects', `
         <b>မြန်မာစာ ပြင်ခြင်း</b>
         <ul><li>တစ်ကြောင်းလျှင် စာတစ်ကြောင်းပါ။ မကိုက်ရင် စာကြောင်းအရေအတွက် မကိုက်ကြောင်း ပြပါမယ်။</li></ul>
         <b>အသံ ရွေးခြင်း</b>
@@ -144,11 +143,11 @@ function pageGuide() {
         <div class="warn">⚠ Mirror၊ Blur၊ စာတန်းထိုး တစ်ခုခု ဖွင့်ရင် Video ကို ပြန် encode လုပ်ရလို့ ပိုကြာပါတယ် (ဖုန်းမှာ ငါးမိနစ်ထက်မက ကြာနိုင်ပါတယ်)။ မဖွင့်ရင် အရင်လိုပဲ မြန်ပါတယ်။</div>
         <p style="margin:10px 0 0">အားလုံးပြီးရင် <b>အသံထုတ်ပြီး Video ပေါင်းမည်</b> ကိုနှိပ်ပါ။</p>`)}
 
-      ${sec(5, 'Step 4 — ရလဒ်', `
+      ${sec(5, 'ရလဒ်', `
         <ol>
           <li>% bar ပြေးနေစဉ် <b>ဒီ tab ကို ဖွင့်ထားပါ၊ screen မပိတ်ပါနဲ့၊ refresh မလုပ်ပါနဲ့။</b></li>
           <li>ပြီးရင် Video ကို ကြည့်ပါ။ <b>Download</b> နဲ့ Video ကိုသိမ်းပါ၊ <b>.srt</b> နဲ့ စာတန်းထိုးဖိုင်ကိုလည်း သိမ်းလို့ရပါတယ်။</li>
-          <li><b>⚠ ရှည်လွန်းတဲ့ စာကြောင်း</b> ပေါ်ရင် — <b>တိုအောင်ခိုင်းမည့် Prompt ကူးမည်</b> ကိုနှိပ်ပြီး Gemini မှာ paste လုပ်ပါ။ ရလာတဲ့ JSON ကို <b>Step 2</b> မှာ ထည့်ပြီး Video ပြန်ထုတ်ပါ။</li>
+          <li><b>⚠ ရှည်လွန်းတဲ့ စာကြောင်း</b> ပေါ်ရင် — <b>တိုအောင်ခိုင်းမည့် Prompt ကူးမည်</b> ကိုနှိပ်ပြီး Gemini မှာ paste လုပ်ပါ။ ရလာတဲ့ JSON ကို <b>Source Text tab</b> မှာ ထည့်ပြီး Video ပြန်ထုတ်ပါ။</li>
           <li>ပြန်ပြင်ချင်ရင် အပေါ်က <b>1 / 2 / 3</b> အဆင့်ဘားကို နှိပ်ပြီး ပြန်သွားနိုင်ပါတယ်။</li>
         </ol>`)}
 
@@ -163,8 +162,8 @@ function pageGuide() {
 
       ${sec(7, 'ပြဿနာ ဖြေရှင်းနည်း', `
         <ul>
-          <li><b>အသံမထွက်ရင် / "TTS audio မရပါ"</b> — API Key Settings မှာ Worker URL မှန်မမှန် <b>🔎 စစ်ဆေးမည်</b> နဲ့ စစ်ပါ။</li>
-          <li><b>"File could not be read"</b> — Video ကို Downloads/Movies ထဲကနေ ပြန်ရွေးပါ။ Step 4 မှာ <b>🎞 Video ပြန်ရွေးပြီး ပြန်စမည်</b> ကိုနှိပ်ပါ။</li>
+          <li><b>အသံမထွက်ရင် / "TTS audio မရပါ"</b> — API Key Settings မှာ <b>🔎 စစ်ဆေးမည်</b> နဲ့ Key နဲ့ ချိတ်ဆက်မှုကို စစ်ပါ။</li>
+          <li><b>"File could not be read"</b> — Video ကို Downloads/Movies ထဲကနေ ပြန်ရွေးပါ။ Result tab မှာ <b>🎞 Video ပြန်ရွေးပြီး ပြန်စမည်</b> ကိုနှိပ်ပါ။</li>
           <li><b>စာတန်းထိုး Font မပေါ်ရင်</b> — Font dropdown အောက်က အခြေအနေစာကို ကြည့်ပါ။ ❌ ဆိုရင် တခြား Font ရွေးပါ။</li>
           <li><b>Video ထုတ်တာ အရမ်းကြာရင်</b> — Mirror၊ Blur၊ စာတန်းထိုး ကို ပိတ်လိုက်ပါ။</li>
           <li><b>Engine ဒေါင်းမရရင်</b> — API Key Settings မှာ <b>Cache ဖျက်မည်</b> ပြီး <b>Install</b> ပြန်နှိပ်ပါ။</li>
@@ -201,9 +200,6 @@ function pageKeys() {
         <button class="icon" id="kDel" title="ဖျက်မည်">🗑</button>
         <button class="icon" id="kEye" title="ပြမည်">👁</button>
       </div>
-      <label>Worker URL
-        <input id="kWorker" type="url" autocomplete="off" placeholder="https://xxxx.workers.dev" />
-      </label>
       <div class="two">
         <button class="btn" id="kTest">🔎 စစ်ဆေးမည်</button>
         <button class="btn primary" id="kSave">သိမ်းမည်</button>
@@ -224,28 +220,25 @@ function pageKeys() {
     </div>`;
 
   $('#kAai').value = localStorage.getItem('aaiKey') || '';
-  $('#kWorker').value = localStorage.getItem('workerUrl') || '';
 
   const upd = () => {
-    const k = localStorage.getItem('aaiKey') || '', w = localStorage.getItem('workerUrl') || '';
-    const dirty = $('#kAai').value.trim() !== k || $('#kWorker').value.trim() !== w;
-    const ok = !!(k && w), b = $('#aaiBadge');
+    const k = localStorage.getItem('aaiKey') || '';
+    const dirty = $('#kAai').value.trim() !== k;
+    const ok = !!k, b = $('#aaiBadge');
     b.textContent = dirty ? 'Unsaved' : ok ? 'Active' : 'Not set';
     b.className = 'badge' + (!dirty && ok ? ' ok' : '');
   };
-  $('#kAai').oninput = upd; $('#kWorker').oninput = upd;
+  $('#kAai').oninput = upd;
   $('#kEye').onclick = () => { const i = $('#kAai'); i.type = i.type === 'password' ? 'text' : 'password'; };
   $('#kDel').onclick = () => { $('#kAai').value = ''; localStorage.removeItem('aaiKey'); upd(); toast('Key ဖျက်ပြီးပါပြီ'); };
   $('#kSave').onclick = () => {
     localStorage.setItem('aaiKey', $('#kAai').value.trim());
-    localStorage.setItem('workerUrl', $('#kWorker').value.trim());
     upd(); toast('သိမ်းပြီးပါပြီ');
   };
   $('#kTest').onclick = async () => {
     localStorage.setItem('aaiKey', $('#kAai').value.trim());
-    localStorage.setItem('workerUrl', $('#kWorker').value.trim());
     upd();
-    if (!L.cfg.workerUrl || !L.cfg.aaiKey) { toast('Key နဲ့ Worker URL နှစ်ခုလုံး ထည့်ပါ'); return; }
+    if (!L.cfg.aaiKey) { toast('AssemblyAI Key ကို အရင်ထည့်ပါ'); return; }
     try {
       const r = await fetch(`${L.cfg.workerUrl}/aai/v2/transcript?limit=1`, { headers: { authorization: L.cfg.aaiKey } });
       if (r.status === 401 || r.status === 403) throw new Error('Key မမှန်ပါ');
@@ -488,8 +481,7 @@ function bindPreview() {
 
 function step1() {
   view.innerHTML = `
-    <h2>Step 1: Video တင်ပါ</h2>
-    <p class="muted">Recap လုပ်မည့် video ကို ရွေးချယ်ပါ။ (အသံကို အရင်ဆွဲထုတ်ပါမည်)</p>
+    <h2>Video တင်ပါ</h2>
     <label class="drop ${state.file ? 'has' : ''}" for="f">
       <input id="f" type="file" accept="video/*" hidden />
       <b>${state.file ? state.file.name : 'နှိပ်၍ Video File ရွေးချယ်ပါ'}</b>
@@ -502,12 +494,12 @@ function step1() {
           .map(([v, t]) => `<option value="${v}" ${v === state.lang ? 'selected' : ''}>${t}</option>`).join('')}
       </select>
     </label>
-    <button id="next" class="btn primary" ${state.file ? '' : 'disabled'}>Step 1: စာသားထုတ်မည် (Next)</button>`;
+    <button id="next" class="btn primary" ${state.file ? '' : 'disabled'}>စာသားထုတ်မည် (Next)</button>`;
   $('#f').onchange = e => { state.file = e.target.files[0] || null; state.segs = []; state.origSegs = null; L.forgetInput(); step1(); };
   $('#lang').onchange = e => { state.lang = e.target.value; };
   if (state.file) bindPreview();
   $('#next').onclick = () => {
-    if (!L.cfg.workerUrl || !L.cfg.aaiKey) { toast('API Key အရင်ထည့်ပါ'); openPage('keys'); return; }
+    if (!L.cfg.aaiKey) { toast('API Key အရင်ထည့်ပါ'); openPage('keys'); return; }
     state.segs.length ? go(2) : transcribeFlow();
   };
 }
@@ -521,7 +513,7 @@ async function transcribeFlow() {
     state.videoDur = await L.videoDuration(state.file);
     setProg(0.05, 'အသံ ဆွဲထုတ်နေသည်');
     const wav = await L.extractAudio(state.file, p => setProg(0.05 + p * 0.2, 'အသံ ဆွဲထုတ်နေသည်'));
-    const names = { uploading: 'AssemblyAI သို့ တင်နေသည်', queued: 'တန်းစီစောင့်နေသည်', processing: 'စာသားပြောင်းနေသည်' };
+    const names = { uploading: 'Server သို့ ပို့နေပါသည်', queued: 'တန်းစီစောင့်နေသည်', processing: 'စာသားထုတ်ယူနေပါသည်' };
     let tick = 0.3;
     state.origSegs = null;
     state.segs = await L.transcribe(wav, state.lang, st => { tick = Math.min(tick + 0.04, 0.95); setProg(tick, names[st] || st); });
@@ -538,7 +530,7 @@ async function transcribeFlow() {
 /* ---------------- Step 2 ---------------- */
 function step2() {
   view.innerHTML = `
-    <div class="row"><h2>Step 2: မူရင်းစာသားကို စစ်ဆေးပါ</h2><button class="ghost" id="back">Back</button></div>
+    <div class="row"><h2>မူရင်းစာသားကို စစ်ဆေးပါ</h2><button class="ghost" id="back">Back</button></div>
     <p class="muted">စာကြောင်းတစ်ကြောင်းလျှင် အချိန်တစ်ခု ကိုက်ထားသည်။ စာကြောင်းအရေအတွက် မပြောင်းပါနှင့်။ (${state.segs.length} lines)</p>
     <textarea id="src">${state.segs.map(s => s.text).join('\n').replace(/</g, '&lt;')}</textarea>
     <button id="copy" class="btn block">📋 Copy Full Prompt</button>
@@ -549,7 +541,7 @@ function step2() {
       <label>Gemini မှ ရလာသော JSON
         <textarea id="json" class="short" placeholder='{"translations": ["မြန်မာစာ ၁", "မြန်မာစာ ၂", ...]}'></textarea>
       </label>
-      <button id="next" class="btn primary">Step 2: ဘာသာပြန်အတည်ပြုမည် (Next)</button>
+      <button id="next" class="btn primary">ဘာသာပြန်အတည်ပြုမည် (Next)</button>
     </div>`;
   if (state.burmese.length) $('#json').value = JSON.stringify({ translations: state.burmese }, null, 1);
   $('#src').oninput = () => {
@@ -572,7 +564,7 @@ function step2() {
   $('#next').onclick = () => {
     try {
       const t = L.parseTranslations($('#json').value);
-      if (t.length !== state.segs.length) toast(`အရေအတွက် မကိုက်ပါ (${t.length}/${state.segs.length}) — Step 3 မှာ ပြင်ပါ`);
+      if (t.length !== state.segs.length) toast(`အရေအတွက် မကိုက်ပါ (${t.length}/${state.segs.length}) — Burmese tab မှာ ပြင်ပါ`);
       state.burmese = state.segs.map((_, i) => t[i] || '');
       go(3);
     } catch (e) { toast(e.message); }
@@ -589,7 +581,7 @@ function step3() {
       <button data-prev="${p.id}">▶ Preview</button>
     </div>`).join('');
   view.innerHTML = `
-    <div class="row"><h2>Step 3: မြန်မာဘာသာပြန်ကို စစ်ဆေးပါ</h2><button class="ghost" id="back">Back</button></div>
+    <div class="row"><h2>မြန်မာဘာသာပြန်ကို စစ်ဆေးပါ</h2><button class="ghost" id="back">Back</button></div>
     <p class="muted">တစ်ကြောင်းလျှင် စာတစ်ကြောင်း။ (${state.segs.length} lines)</p>
     <textarea id="mm" style="min-height:300px">${state.burmese.join('\n').replace(/</g, '&lt;')}</textarea>
     <div class="row" style="margin-top:20px"><b>အသံရွေးချယ်ပါ</b><span class="muted small">${L.PERSONAS.length} Voice Personas</span></div>
@@ -617,7 +609,7 @@ function step3() {
         <input id="dgain" type="range" min="100" max="250" value="${Math.round(state.dubGain * 100)}" />
       </details>
     </div>
-    <button id="next" class="btn primary">Step 3: အသံထုတ်ပြီး Video ပေါင်းမည်</button>`;
+    <button id="next" class="btn primary">အသံထုတ်ပြီး Video ပေါင်းမည်</button>`;
 
   const read = () => {
     const lines = $('#mm').value.split('\n').map(x => x.trim());
@@ -676,7 +668,7 @@ function step3() {
 async function step4() {
   if (state.result) return showResult();
   state.busy = true; renderStepper();
-  view.innerHTML = `<h2>Step 4: Video ပေါင်းနေသည်…</h2>
+  view.innerHTML = `<h2>Video ပေါင်းနေသည်…</h2>
     <p class="muted">ဒီ tab ကို ဖွင့်ထားပါ၊ screen မပိတ်ပါနှင့်။</p>${bar()}`;
   let wake; try { wake = await navigator.wakeLock?.request('screen'); } catch {}
   try {
@@ -699,7 +691,7 @@ async function step4() {
     view.innerHTML = `<h2>အမှားရှိနေပါသည်</h2>`; showErr(e);
     view.insertAdjacentHTML('beforeend', `<button class="btn primary" id="retry">ပြန်စမည်</button>
       <label class="btn block" for="repick" style="display:block;text-align:center;cursor:pointer">🎞 Video ပြန်ရွေးပြီး ပြန်စမည်<input id="repick" type="file" accept="video/*" hidden /></label>
-      <button class="btn block" id="back">Step 3 သို့ ပြန်သွားမည်</button>`);
+      <button class="btn block" id="back">Burmese tab သို့ ပြန်သွားမည်</button>`);
     $('#retry').onclick = () => step4();
     $('#repick').onchange = async ev => {
       const nf = ev.target.files[0]; if (!nf) return;
@@ -719,13 +711,13 @@ function statBlock() {
   if (long.length) h += `<div class="panel"><b>⚠ ရှည်လွန်းတဲ့ စာကြောင်း ${long.length} ကြောင်း</b>
     <p class="muted small">ID: ${long.map(x => x.i).join(', ')}<br>အသံကို အမြန်ဆုံးချုံ့လည်း အချိန်မဆန့်ပါ။ ဒီစာကြောင်းတွေကို Gemini နဲ့ တိုအောင် ပြန်ခိုင်းပါ။</p>
     <button id="shorten" class="btn block">📋 တိုအောင်ခိုင်းမည့် Prompt ကူးမည်</button>
-    <button id="toStep2" class="btn block">Step 2 သို့ သွားပြီး JSON ထည့်မည်</button></div>`;
+    <button id="toStep2" class="btn block">Source Text tab သို့ သွားပြီး JSON ထည့်မည်</button></div>`;
   return h;
 }
 
 function showResult() {
   view.innerHTML = `
-    <h2>Step 4: ရလဒ်များ (Results)</h2>
+    <h2>ရလဒ်များ (Results)</h2>
     <video src="${state.result.url}" controls playsinline></video>
     ${statBlock()}
     <button id="dl" class="btn primary">⬇ Video Download (.mp4)</button>
@@ -748,5 +740,5 @@ function showResult() {
 
 /* ---------------- start ---------------- */
 buildMenu();
-if (!L.cfg.workerUrl || !L.cfg.aaiKey) page = 'keys';
+if (!L.cfg.aaiKey) page = 'keys';
 render();

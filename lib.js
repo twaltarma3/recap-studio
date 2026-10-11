@@ -135,7 +135,7 @@ async function aai(path, opts = {}) {
     ...opts,
     headers: { authorization: cfg.aaiKey, ...(opts.headers || {}) }
   });
-  if (!r.ok) throw new Error(`AssemblyAI ${r.status}: ${await r.text()}`);
+  if (!r.ok) throw new Error(`Server ${r.status}: ${await r.text()}`);
   return r.json();
 }
 
@@ -185,7 +185,7 @@ export async function transcribe(blob, lang, onStatus) {
     await sleep(3000);
     const s = await aai('/v2/transcript/' + t.id);
     if (s.status === 'completed') break;
-    if (s.status === 'error') throw new Error('AssemblyAI: ' + s.error);
+    if (s.status === 'error') throw new Error('Server: ' + s.error);
     onStatus(s.status);
   }
 
