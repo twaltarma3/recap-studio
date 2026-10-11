@@ -340,17 +340,20 @@ function bindPreview() {
   bindPM('blurO', 'blurO', 20, 100, 5);
 
   /* subtitles */
-  const fontStatus = () => {
+  const fontStatus = msg => {
     const o = $('#subFont option[value="custom"]'); if (o) o.disabled = !state.fontOk;
     const el = $('#fontSt'); if (!el) return;
+    if (msg) { el.textContent = msg; return; }
     const b = L.BUILTIN_FONTS.find(x => x.id === state.subFont);
     el.textContent = b ? `✅ ${b.label} ကို သုံးမည်`
       : state.subFont === 'custom' ? (state.fontOk ? '✅ ကိုယ်တိုင်တင်ထားတဲ့ Font ကို သုံးမည်' : 'Font မတင်ရသေးပါ')
       : 'ဖုန်း Font ကို သုံးမည် (မြန်မာစာ ကွက်လပ်ပေါ်ရင် တခြား Font ရွေးပါ)';
   };
   const useFont = async () => {
-    fontStatus();
-    try { await L.ensureSubFont(selFont()); } catch { toast('Font ဖွင့်မရပါ — ဖုန်း Font ကို သုံးပါမယ်'); }
+    const b = L.BUILTIN_FONTS.find(x => x.id === selFont());
+    if (b) fontStatus(`⏳ ${b.label} ဖွင့်နေသည်…`); else fontStatus();
+    try { await L.ensureSubFont(selFont()); fontStatus(); }
+    catch (e) { fontStatus(`❌ Font ဖွင့်မရပါ (${String((e && e.message) || e).slice(0, 80)}) — ဖုန်း Font ကို သုံးပါမယ်`); toast('Font ဖွင့်မရပါ'); }
     apply();
   };
   $('#fxSubs').onchange = e => { state.fxSubs = e.target.checked; $('#subBox').hidden = !state.fxSubs; apply(); };
@@ -586,7 +589,7 @@ async function step4() {
   let wake; try { wake = await navigator.wakeLock?.request('screen'); } catch {}
   try {
     const persona = L.PERSONAS.find(p => p.id === state.personaId);
-    const { video, placed, fellBack, fxFailed, stats } = await L.renderDub({
+    const { video, placed, fellBack, fxFailed, fontFailed, stats } = await L.renderDub({
       file: state.file, videoDur: state.videoDur, segs: state.segs, burmese: state.burmese,
       persona, pitch: state.pitch, rate: state.rate,
       fx: {
@@ -597,7 +600,8 @@ async function step4() {
     });
     state.result = { video, url: URL.createObjectURL(video), srt: L.buildSrt(state.burmese, placed), stats };
     showResult();
-    if (fxFailed) toast('Effect (Mirror/Blur/စာတန်းထိုး) အချို့ ထည့်မရလို့ ရတာလောက်ပဲ ထုတ်ထားပါတယ်');
+    if (fontFailed) toast('Font ဖွင့်မရလို့ ဖုန်း Font နဲ့ စာတန်းထိုး ထည့်ထားပါတယ်');
+    else if (fxFailed) toast('Effect (Mirror/Blur/စာတန်းထိုး) အချို့ ထည့်မရလို့ ရတာလောက်ပဲ ထုတ်ထားပါတယ်');
     else if (fellBack) toast('မူရင်းအသံ ရောစပ်မရလို့ မြန်မာအသံချည်းပဲ ထည့်ထားပါတယ်');
   } catch (e) {
     view.innerHTML = `<h2>အမှားရှိနေပါသည်</h2>`; showErr(e);

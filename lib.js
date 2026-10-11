@@ -1,7 +1,6 @@
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { fetchFile } from '@ffmpeg/util';
-import PT16_URL from './pt16-burmese-bold.ttf?url';
-import AKK_URL from './akkhayar-robo.ttf?url';
+import { PT16_B64, AKK_B64 } from './fonts-data.js';
 
 /* ---------- settings ---------- */
 export const cfg = {
@@ -434,23 +433,23 @@ const FONT_URLS = [
 let curFace = null, fontLoaded = false;
 // fonts bundled with the app: pick either one from the Font dropdown (no upload needed)
 const BUILTIN = {
-  pt16: { label: 'PT16 Burmese Bold', family: 'RecapPT16', url: PT16_URL },
-  akk: { label: 'အက္ခရာ ရိုဘို (Akkhayar Robo)', family: 'RecapAkkhayar', url: AKK_URL }
+  pt16: { label: 'PT16 Burmese Bold', family: 'RecapPT16', data: PT16_B64 },
+  akk: { label: 'အက္ခရာ ရိုဘို (Akkhayar Robo)', family: 'RecapAkkhayar', data: AKK_B64 }
 };
 export const BUILTIN_FONTS = Object.entries(BUILTIN).map(([id, b]) => ({ id, label: b.label }));
 const bLoad = {};
+const b64ToBuf = s => { const bin = atob(s), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u.buffer; };
 function loadBuiltinFont(id) {
   const b = BUILTIN[id];
   if (!b) return Promise.resolve(true);
   if (!bLoad[id]) {
     bLoad[id] = (async () => {
-      const r = await fetch(b.url);
-      if (!r.ok) throw new Error('Font ဖိုင် ဖတ်မရပါ');
-      const ab = await r.arrayBuffer();
+      const ab = b64ToBuf(b.data);
       let face;
       try { face = new FontFace(b.family, ab, { weight: '100 900' }); await face.load(); }   // any weight -> no faux-bold
       catch { face = new FontFace(b.family, ab); await face.load(); }
       document.fonts.add(face);
+      if (!document.fonts.check(`700 32px '${b.family}'`, 'မြန်မာ')) throw new Error('Font အသုံးမပြုနိုင်ပါ');
       return true;
     })().catch(e => { delete bLoad[id]; throw e; });
   }
@@ -533,7 +532,8 @@ async function makeSubTrack(f, { file, videoDur, burmese, placed, fx }) {
   const { w: W, h: H } = sz;
   const s = fx.subs;
   const family = subFontFamily(s.font);
-  try { await ensureSubFont(s.font); } catch {}
+  let fontFailed = false;
+  try { await ensureSubFont(s.font); } catch { fontFailed = true; }
   const px = Math.max(12, Math.round(H * (s.size / 100)));
   const font = `700 ${px}px ${family}`;
   try { await document.fonts.load(font, 'မြန်မာ'); } catch {}
@@ -592,7 +592,7 @@ async function makeSubTrack(f, { file, videoDur, burmese, placed, fx }) {
   list += `file 'sub_blank.png'\n`;
   await f.writeFile('subs.txt', new TextEncoder().encode(list));
   names.push('subs.txt');
-  return { y, files: names };
+  return { y, files: names, fontFailed };
 }
 
 function dubStats(placed, maxTempo) {
@@ -726,12 +726,13 @@ export async function renderDub({ file, videoDur, segs, burmese, persona, pitch,
   }
   if (code !== 0) throw new Error('Video ပေါင်းစပ်မှု မအောင်မြင်ပါ (ffmpeg error)');
   if (fx && fx.subs && fx.subs.on && !subs) fxFailed = true;
+  const fontFailed = !!(subs && subs.fontFailed);
   const fellBack = wantMix && !usedMix;
   const out = await f.readFile('out.mp4');
   for (const x of [temp ? inName : null, 'mix.wav', 'out.mp4', ...(subs ? subs.files : [])]) { if (x) { try { await f.deleteFile(x); } catch {} } }
   setFFProgress(null);
   onProgress(1, 'ပြီးပါပြီ');
-  return { video: new Blob([out.slice().buffer], { type: 'video/mp4' }), placed, fellBack, fxFailed, stats: dubStats(placed, maxTempo) };
+  return { video: new Blob([out.slice().buffer], { type: 'video/mp4' }), placed, fellBack, fxFailed, fontFailed, stats: dubStats(placed, maxTempo) };
 }
 
 /* ---------- SRT ---------- */
