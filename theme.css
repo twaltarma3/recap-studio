@@ -203,7 +203,47 @@ body .ditem.on{
 .guide .tip{margin-top:10px;padding:10px 12px;border-radius:12px;background:#fff8e6;border:1px solid #f1d58a;font-size:13.5px;line-height:1.7}
 .guide .warn{margin-top:10px;padding:10px 12px;border-radius:12px;background:#fff0f0;border:1px solid #f1b9b9;font-size:13.5px;line-height:1.7}
 
-/* ---------- matte black background ---------- */
-html{background:#0c0c0d}
-body{background:#0c0c0d !important; background-attachment:scroll}
-#view{background:#fff;border:1px solid #2a2a30;border-radius:24px;padding:20px;margin-top:14px;box-shadow:0 10px 30px rgba(0,0,0,.55)}
+/* ---------- matte black theme (dark surfaces, light text) ---------- */
+:root{--ink:#ececf3;--muted:#a3a3b5;--line:#2c2c34;--bg:#0c0c0d;--card:#17171a;--acc:#9c8cff;--acc-soft:#25213f;--acc-dark:#2f1fa6;--ok:#4fd6a0;--err:#ff7b7b}
+html,body{background:#0c0c0d !important;color:var(--ink)}
+body{background-image:none !important}
+#view,body .card{background:linear-gradient(180deg,#1b1b1f,#141417);border:1px solid #2c2c34;border-radius:26px;padding:20px;margin-top:14px;box-shadow:0 14px 34px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.06)}
+body .panel,body .kbox,.guide details{background:linear-gradient(180deg,#202025,#18181c);border:1px solid #2e2e37;box-shadow:0 4px 0 #0a0a0b, 0 10px 18px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.06)}
+body h2,body h1,body b,body label,body summary{color:#f1f1f7}
+body .muted,body .small,body small{color:#a3a3b5}
+body a.link,body .link{color:#b4a8ff}
+body .stepper{background:linear-gradient(180deg,#1b1b1f,#141417);border:1px solid #2c2c34;box-shadow:0 8px 18px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.06)}
+body .stepper span{color:#a3a3b5}
+body .stepper b{background:linear-gradient(180deg,#2a2a31,#1d1d22);border:1px solid #38383f;color:#c9c9d6;box-shadow:0 2px 0 #09090a, inset 0 1px 0 rgba(255,255,255,.08)}
+body .stepper .on{color:#c4baff}
+body .stepper .done b{background:linear-gradient(180deg,#2b2750,#201d3d);color:#c4baff;box-shadow:0 2px 0 #09090a, inset 0 1px 0 rgba(255,255,255,.1)}
+body .stepper span.link{color:#c4baff}
+body .btn,body .ghost,body .icon{background:linear-gradient(180deg,#2c2c33,#1e1e23);border:1px solid #3a3a43;color:#f1f1f7;text-shadow:0 -1px 0 rgba(0,0,0,.5);box-shadow:0 4px 0 #09090a, 0 9px 14px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.1)}
+body .btn:active:not(:disabled),body .ghost:active:not(:disabled),body .icon:active{box-shadow:0 1px 0 #09090a, inset 0 2px 4px rgba(0,0,0,.5)}
+body .btn.primary{background:linear-gradient(180deg,#8470ff 0%,#5b46f5 55%,#4a37e0 100%);border:1px solid #3f2cc9;color:#fff;box-shadow:0 5px 0 var(--acc-dark), 0 11px 18px rgba(79,61,240,.4), inset 0 1px 0 rgba(255,255,255,.4)}
+body .btn.fire{color:#fff}
+body .btn.danger{background:linear-gradient(180deg,#3a1d1f,#2a1517);color:#ff9a9a;border:1px solid #5a2a2d;box-shadow:0 4px 0 #0d0505, inset 0 1px 0 rgba(255,255,255,.08)}
+body .top .ghost,body .burger{color:#fff}
+body textarea,body select,body input:not([type=checkbox]):not([type=range]):not([type=color]):not([type=file]),body label > input:not([type=checkbox]):not([type=range]):not([type=color]):not([type=file]){background:#0f0f12;color:#f1f1f7;border:1px solid #33333b;box-shadow:inset 0 2px 8px rgba(0,0,0,.6)}
+body textarea::placeholder,body input::placeholder{color:#7b7b8c}
+body .keyfield{background:#0f0f12;border:1px solid #33333b;box-shadow:inset 0 2px 8px rgba(0,0,0,.6)}
+body .keyfield input{background:transparent;border:none;box-shadow:none}
+body select option{background:#17171a;color:#f1f1f7}
+body .drop{background:linear-gradient(180deg,#1a1a1e,#131316);border:2px dashed #4a4a58;box-shadow:inset 0 2px 10px rgba(0,0,0,.5)}
+body .drop.has{border-color:#9c8cff;background:linear-gradient(180deg,#221f3d,#1a1830)}
+body .voice{background:linear-gradient(180deg,#26262c,#1a1a1e);border:1px solid #33333b;color:#f1f1f7;box-shadow:0 4px 0 #09090a, 0 9px 14px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.07)}
+body .voice.sel{border:2px solid #9c8cff;background:linear-gradient(180deg,#2d2859,#201d40);box-shadow:0 4px 0 #09090a, 0 11px 20px rgba(91,70,245,.3), inset 0 1px 0 rgba(255,255,255,.12)}
+body .voice button{background:linear-gradient(180deg,#34343c,#25252b);border:1px solid #43434d;color:#f1f1f7;box-shadow:0 2px 0 #09090a}
+body .voice small{color:#a3a3b5}
+body .bar{background:#0f0f12;box-shadow:inset 0 2px 5px rgba(0,0,0,.7)}
+body .badge{background:#25252b;border:1px solid #3a3a43;color:#c9c9d6}
+body .badge.ok{background:#12301f;color:#6fe0a8;border-color:#1f5a3a}
+body .badge.req{background:#3a1d1f;color:#ff9a9a;border-color:#5a2a2d}
+body .err{background:#34181a;color:#ffa0a0}
+.tip{background:#1d2a24;border:1px solid #2a4a3a;color:#bfeed7;border-radius:14px;padding:10px 14px;margin-top:12px;font-size:14px;line-height:1.7}
+.warn{background:#33290f;border:1px solid #5a4818;color:#ffdf8a;border-radius:14px;padding:10px 14px;margin-top:12px;font-size:14px;line-height:1.7}
+.tip b,.warn b{color:inherit}
+.guide .gbody{color:#dcdce6}
+.guide summary::after{color:#a3a3b5}
+body #drawer{background:linear-gradient(180deg,#101012,#17171b);}
+body .stepper .on b{color:#fff}
