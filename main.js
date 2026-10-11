@@ -1,4 +1,5 @@
 import './style.css';
+import './theme.css';
 import * as L from './lib.js';
 
 const $ = (s, r = document) => r.querySelector(s);
@@ -12,7 +13,7 @@ const state = {
 const STEPS = ['Upload', 'Source Text', 'Burmese', 'Result'];
 const view = $('#view');
 const selFont = () => (state.subFont === 'custom' && !state.fontOk) ? 'system' : state.subFont;
-let page = 'free'; // 'free' | 'premium' | 'keys'
+let page = 'free'; // 'free' | 'premium' | 'keys' | 'guide'
 
 function toast(msg) {
   const t = $('#toast'); t.textContent = msg; t.classList.add('show');
@@ -46,7 +47,7 @@ function render() {
     [null, step1, step2, step3, step4][state.step]();
   } else {
     stp.style.display = 'none';
-    (page === 'premium' ? pagePremium : pageKeys)();
+    ({ premium: pagePremium, keys: pageKeys, guide: pageGuide }[page])();
   }
   syncMenu();
 }
@@ -74,12 +75,103 @@ function buildMenu() {
       <button class="ditem" data-p="free"><span>1</span><b>Free Recap</b><small>Gemini နဲ့ ကိုယ်တိုင် ဘာသာပြန်</small></button>
       <button class="ditem" data-p="premium"><span>2</span><b>Premium Recap</b><small>မကြာမီ</small></button>
       <button class="ditem" data-p="keys"><span>3</span><b>API Key Settings</b><small>AssemblyAI Key · FFmpeg Engine</small></button>
+      <button class="ditem" data-p="guide"><span>4</span><b>အသုံးပြုပုံ လမ်းညွှန်</b><small>အဆင့်လိုက် ရှင်းလင်းချက်</small></button>
     </nav>`);
   burger.onclick = openDrawer;
   $('#scrim').onclick = closeDrawer;
   $('#dclose').onclick = closeDrawer;
   document.querySelectorAll('.ditem').forEach(b => { b.onclick = () => openPage(b.dataset.p); });
   $('#openSettings').onclick = () => openPage('keys');
+}
+
+/* ---------------- Usage guide ---------------- */
+function pageGuide() {
+  const sec = (n, title, body, open) =>
+    `<details ${open ? 'open' : ''}><summary><span class="n">${n}</span><span>${title}</span></summary><div class="gbody">${body}</div></details>`;
+  view.innerHTML = `
+    <h2>📖 အသုံးပြုပုံ လမ်းညွှန်</h2>
+    <p class="muted small">ခေါင်းစဉ်ကို နှိပ်ပြီး ဖတ်ပါ။ အဆင့် ၁ ကနေ အစဉ်လိုက် လိုက်လုပ်ရင် ရပါပြီ။</p>
+    <div class="guide">
+      ${sec(1, 'အစပိုင်း — တစ်ကြိမ်ပဲ လုပ်ရမယ်', `
+        <ol>
+          <li>ဘယ်ဘက်အပေါ်က <b>☰ Menu</b> ကိုနှိပ်ပြီး <b>API Key Settings</b> ကိုဖွင့်ပါ။</li>
+          <li><b>AssemblyAI API Key</b> ထည့်ပါ။ မရှိသေးရင် <b>Get Free Key</b> ကနေ အခမဲ့ယူပါ။</li>
+          <li><b>Worker URL</b> (Cloudflare Worker ရဲ့ link) ထည့်ပါ။</li>
+          <li><b>🔎 စစ်ဆေးမည်</b> ကိုနှိပ်ပါ။ ✅ ပေါ်မှ <b>သိမ်းမည်</b> ကိုနှိပ်ပါ။</li>
+          <li><b>Device Video Engine</b> မှာ <b>⬇ Install</b> ကိုနှိပ်ပါ။ (~31MB၊ Wi-Fi နဲ့ တစ်ကြိမ်ပဲ ဒေါင်းရပြီး ဖုန်းထဲမှာ သိမ်းထားပေးပါတယ်)</li>
+        </ol>
+        <div class="tip">💡 Key တွေကို ဒီဖုန်း browser ထဲမှာပဲ သိမ်းပါတယ်။ Browser data ဖျက်ရင် ပြန်ထည့်ရပါမယ်။</div>`, true)}
+
+      ${sec(2, 'Step 1 — Video တင်ပါ', `
+        <ol>
+          <li><b>Video File ရွေးချယ်ပါ</b> ကိုနှိပ်ပြီး Video ရွေးပါ။ (MP4၊ MOV၊ WEBM၊ MKV — ၁၀ မိနစ်အထိ)</li>
+          <li><b>မူရင်းစကားပြောဘာသာ</b> ကို ရွေးပါ။ (ဥပမာ Chinese)</li>
+          <li><b>စာသားထုတ်မည် (Next)</b> ကိုနှိပ်ပါ။ စကားပြောအသံကို စာသားပြောင်းပြီး အချိန်နဲ့တကွ ထုတ်ပေးပါမယ်။</li>
+        </ol>
+        <div class="tip">💡 ဖုန်းရဲ့ <b>Downloads</b> ဒါမှမဟုတ် <b>Movies</b> folder ထဲက ဖိုင်ကို ရွေးပါ။ Telegram၊ Google Photos ကနေ တိုက်ရိုက်ရွေးရင် ဖိုင်ဖတ်မရတာ ဖြစ်တတ်ပါတယ်။</div>`)}
+
+      ${sec(3, 'Step 2 — စာသားစစ်၊ Gemini နဲ့ ဘာသာပြန်', `
+        <ol>
+          <li>ထွက်လာတဲ့ စာသားကို စစ်ပါ။ မှားတာရှိရင် ပြင်ပါ။ <b>စာကြောင်းအရေအတွက် မပြောင်းပါနဲ့။</b></li>
+          <li><b>📋 Copy Full Prompt</b> ကိုနှိပ်ပါ။</li>
+          <li><b>Gemini App ဖွင့်မည်</b> ကိုနှိပ်ပြီး Gemini မှာ Prompt ကို Paste လုပ်ပါ။</li>
+          <li>Gemini ပေးတဲ့ <b>JSON ကို အကုန်ကူး</b>ပြီး အောက်က JSON ကွက်ထဲ Paste လုပ်ပါ။</li>
+          <li><b>ဘာသာပြန်အတည်ပြုမည် (Next)</b> ကိုနှိပ်ပါ။</li>
+        </ol>
+        <div class="tip">💡 Prompt ထဲမှာ အချိန်ဆန့်အောင် စာကြောင်းတိုတို ပြန်ဖို့ ပါပြီးသားပါ။</div>`)}
+
+      ${sec(4, 'Step 3 — စာသား၊ အသံ၊ Effects', `
+        <b>မြန်မာစာ ပြင်ခြင်း</b>
+        <ul><li>တစ်ကြောင်းလျှင် စာတစ်ကြောင်းပါ။ မကိုက်ရင် စာကြောင်းအရေအတွက် မကိုက်ကြောင်း ပြပါမယ်။</li></ul>
+        <b>အသံ ရွေးခြင်း</b>
+        <ul>
+          <li><b>သီဟ</b> (ယောက်ျား)၊ <b>နီလာ</b> (မိန်းမ) ကို ရွေးပြီး <b>▶ Preview</b> နှိပ်ပြီး နားထောင်ပါ။</li>
+          <li>Pitch (ဝါး/ကြည်)၊ အမြန်နှုန်းကို လိုသလို ညှိပါ။</li>
+        </ul>
+        <b>မူရင်းအသံ ချိန်ညှိခြင်း</b>
+        <ul>
+          <li><b>🎬 စကားမပြောတဲ့နေရာ</b> — action၊ ဂီတ၊ ဆူညံသံကို မူရင်းအသံ ပြန်ကြားရမယ့် ပမာဏ။</li>
+          <li><b>🗣 စကားပြောနေစဉ်</b> — မြန်မာသံပြောနေစဉ် မူရင်းအသံကို လျှော့ပေးမယ့် ပမာဏ။ 0% ဆို လုံးဝမကြားရပါ။</li>
+          <li>Slider တွေ အမှားမရွေ့အောင် <b>🔒 လော့ခ်</b> ချထားပါတယ်။ ပြင်ချင်ရင် 🔒 ကိုနှိပ်ပါ။ <b>↺ ပုံမှန်သို့ ပြန်ထားမည်</b> နဲ့ ပြန်ထားလို့ရပါတယ်။</li>
+          <li><b>⚙ ပိုမိုချိန်ညှိရန်</b> — ⏱ မြန်မာသံ အချိန်ရွှေ့၊ 🚀 အမြန်ဆုံး အသံမြန်နှုန်း၊ 🔊 မြန်မာသံ ပမာဏ။</li>
+        </ul>
+        <b>🎞 Video Effects (လိုမှ ဖွင့်ပါ)</b>
+        <ul>
+          <li><b>↔ Mirror</b> — Video ကို ဘယ်ညာ လှန်ပါတယ်။</li>
+          <li><b>🌫 Blur</b> — မူရင်းစာတန်းထိုးကို ဖုံးပါတယ်။ အမြင့်၊ အပေါ်အောက်နေရာ၊ Blur အား၊ အရောင်ရင့်မှုကို Preview ကြည့်ပြီး ညှိပါ။</li>
+          <li><b>💬 မြန်မာစာတန်းထိုး</b> — Font ရွေးပါ၊ စာလုံးအရွယ်ကို <b>− / +</b> နဲ့ ညှိပါ၊ နေရာနဲ့ အရောင်ရွေးပါ။</li>
+        </ul>
+        <div class="warn">⚠ Mirror၊ Blur၊ စာတန်းထိုး တစ်ခုခု ဖွင့်ရင် Video ကို ပြန် encode လုပ်ရလို့ ပိုကြာပါတယ် (ဖုန်းမှာ ငါးမိနစ်ထက်မက ကြာနိုင်ပါတယ်)။ မဖွင့်ရင် အရင်လိုပဲ မြန်ပါတယ်။</div>
+        <p style="margin:10px 0 0">အားလုံးပြီးရင် <b>အသံထုတ်ပြီး Video ပေါင်းမည်</b> ကိုနှိပ်ပါ။</p>`)}
+
+      ${sec(5, 'Step 4 — ရလဒ်', `
+        <ol>
+          <li>% bar ပြေးနေစဉ် <b>ဒီ tab ကို ဖွင့်ထားပါ၊ screen မပိတ်ပါနဲ့၊ refresh မလုပ်ပါနဲ့။</b></li>
+          <li>ပြီးရင် Video ကို ကြည့်ပါ။ <b>Download</b> နဲ့ Video ကိုသိမ်းပါ၊ <b>.srt</b> နဲ့ စာတန်းထိုးဖိုင်ကိုလည်း သိမ်းလို့ရပါတယ်။</li>
+          <li><b>⚠ ရှည်လွန်းတဲ့ စာကြောင်း</b> ပေါ်ရင် — <b>တိုအောင်ခိုင်းမည့် Prompt ကူးမည်</b> ကိုနှိပ်ပြီး Gemini မှာ paste လုပ်ပါ။ ရလာတဲ့ JSON ကို <b>Step 2</b> မှာ ထည့်ပြီး Video ပြန်ထုတ်ပါ။</li>
+          <li>ပြန်ပြင်ချင်ရင် အပေါ်က <b>1 / 2 / 3</b> အဆင့်ဘားကို နှိပ်ပြီး ပြန်သွားနိုင်ပါတယ်။</li>
+        </ol>`)}
+
+      ${sec(6, 'အကြံပြုချက်များ', `
+        <ul>
+          <li>အရင်ဆုံး <b>၁-၂ မိနစ်လောက် Video တိုတိုလေး</b> နဲ့ စမ်းပါ။</li>
+          <li>မူရင်းအသံ ကျယ်ပြီး မြန်မာသံကို ဖုံးနေရင် <b>🗣 စကားပြောနေစဉ်</b> ကို ပိုလျှော့ပါ။</li>
+          <li>မြန်မာသံ အချိန်မကိုက်ရင် <b>⏱ အချိန်ရွှေ့</b> ကို ညှိပါ။ စာကြောင်းရှည်နေရင် Gemini ကို ပိုတိုအောင် ခိုင်းပါ။</li>
+          <li>Page ကို refresh လုပ်ရင် စာသားတွေ ပျောက်ပါတယ်။</li>
+          <li>AssemblyAI free plan မှာ လစဉ်သုံးခွင့် ကန့်သတ်ချက် ရှိပါတယ်။</li>
+        </ul>`)}
+
+      ${sec(7, 'ပြဿနာ ဖြေရှင်းနည်း', `
+        <ul>
+          <li><b>အသံမထွက်ရင် / "TTS audio မရပါ"</b> — API Key Settings မှာ Worker URL မှန်မမှန် <b>🔎 စစ်ဆေးမည်</b> နဲ့ စစ်ပါ။</li>
+          <li><b>"File could not be read"</b> — Video ကို Downloads/Movies ထဲကနေ ပြန်ရွေးပါ။ Step 4 မှာ <b>🎞 Video ပြန်ရွေးပြီး ပြန်စမည်</b> ကိုနှိပ်ပါ။</li>
+          <li><b>စာတန်းထိုး Font မပေါ်ရင်</b> — Font dropdown အောက်က အခြေအနေစာကို ကြည့်ပါ။ ❌ ဆိုရင် တခြား Font ရွေးပါ။</li>
+          <li><b>Video ထုတ်တာ အရမ်းကြာရင်</b> — Mirror၊ Blur၊ စာတန်းထိုး ကို ပိတ်လိုက်ပါ။</li>
+          <li><b>Engine ဒေါင်းမရရင်</b> — API Key Settings မှာ <b>Cache ဖျက်မည်</b> ပြီး <b>Install</b> ပြန်နှိပ်ပါ။</li>
+        </ul>`)}
+    </div>
+    <button class="btn primary" id="toFree">Free Recap သို့ သွားမည်</button>`;
+  $('#toFree').onclick = () => openPage('free');
 }
 
 /* ---------------- Premium (placeholder) ---------------- */
