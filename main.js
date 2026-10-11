@@ -2,7 +2,7 @@ import './style.css';
 import * as L from './lib.js';
 
 const $ = (s, r = document) => r.querySelector(s);
-const DEFAULTS = { pitch: 10, rate: 20, keepTalk: 0, keepGap: 0.3, offset: 0, maxTempo: 2.0, dubGain: 1.8 };
+const DEFAULTS = { fxMirror: false, fxBlur: false, blurH: 15, blurY: 100, pitch: 10, rate: 20, keepTalk: 0, keepGap: 0.3, offset: 0, maxTempo: 2.0, dubGain: 1.8 };
 const state = {
   step: 1, file: null, videoDur: 0, lang: 'zh', segs: [], sourceLines: [],
   burmese: [], personaId: 'TH', ...DEFAULTS, result: null, busy: false, origSegs: null
@@ -349,6 +349,25 @@ function step3() {
         <input id="dgain" type="range" min="100" max="250" value="${Math.round(state.dubGain * 100)}" />
       </details>
     </div>
+    <div class="panel fx">
+      <b>🎞 Video Effects <span class="muted small" style="font-weight:400">(လိုမှ ဖွင့်ပါ)</span></b>
+      <label style="display:flex;align-items:center;gap:10px;font-weight:600;margin-top:12px">
+        <input id="fxMirror" type="checkbox" style="width:22px;height:22px;padding:0;margin:0" ${state.fxMirror ? 'checked' : ''} />
+        ↔ Mirror (ဘယ်ညာ လှန်မည်)
+      </label>
+      <label style="display:flex;align-items:center;gap:10px;font-weight:600;margin-top:12px">
+        <input id="fxBlur" type="checkbox" style="width:22px;height:22px;padding:0;margin:0" ${state.fxBlur ? 'checked' : ''} />
+        🌫 Blur (အောက်နားမှာ ဖုံးမည်)
+      </label>
+      <div id="blurBox" ${state.fxBlur ? '' : 'hidden'}>
+        <div class="row" style="margin-top:14px"><b>↕ အကြီးအသေး (အမြင့်)</b><span id="bhv">${state.blurH}%</span></div>
+        <input id="blurH" type="range" min="3" max="40" value="${state.blurH}" />
+        <div class="row" style="margin-top:14px"><b>⇅ အပေါ်အောက် နေရာ</b><span id="byv">${state.blurY}%</span></div>
+        <input id="blurY" type="range" min="0" max="100" value="${state.blurY}" />
+        <div class="row muted small"><span>0% (အပေါ်ဆုံး)</span><span>100% (အောက်ဆုံး)</span></div>
+      </div>
+      <p class="muted small">⚠ ဒီနှစ်ခုထဲက တစ်ခုခု ဖွင့်ရင် Video ကို ပြန် encode လုပ်ရလို့ ပိုကြာပါတယ် (ဖုန်းမှာ မိနစ်များစွာ ကြာနိုင်)။ မဖွင့်ရင် အရင်လိုပဲ မြန်ပါတယ်။</p>
+    </div>
     <button id="next" class="btn primary">Step 3: အသံထုတ်ပြီး Video ပေါင်းမည်</button>`;
 
   const read = () => {
@@ -364,9 +383,13 @@ function step3() {
   $('#offs').oninput = e => { state.offset = +e.target.value / 10; $('#ov').textContent = state.offset.toFixed(1) + 's'; };
   $('#mtempo').oninput = e => { state.maxTempo = +e.target.value / 10; $('#mv').textContent = state.maxTempo.toFixed(1) + '×'; };
   $('#dgain').oninput = e => { state.dubGain = +e.target.value / 100; $('#dv').textContent = e.target.value + '%'; };
+  $('#fxMirror').onchange = e => { state.fxMirror = e.target.checked; };
+  $('#fxBlur').onchange = e => { state.fxBlur = e.target.checked; $('#blurBox').hidden = !state.fxBlur; };
+  $('#blurH').oninput = e => { state.blurH = +e.target.value; $('#bhv').textContent = e.target.value + '%'; };
+  $('#blurY').oninput = e => { state.blurY = +e.target.value; $('#byv').textContent = e.target.value + '%'; };
 
   // sliders are locked by default so scrolling with a finger can't move them
-  const sliders = [...view.querySelectorAll('.panel input[type=range]')];
+  const sliders = [...view.querySelectorAll('.panel:not(.fx) input[type=range]')];
   let unlocked = false;
   const applyLock = () => {
     sliders.forEach(s => { s.disabled = !unlocked; });
@@ -413,14 +436,16 @@ async function step4() {
   let wake; try { wake = await navigator.wakeLock?.request('screen'); } catch {}
   try {
     const persona = L.PERSONAS.find(p => p.id === state.personaId);
-    const { video, placed, fellBack, stats } = await L.renderDub({
+    const { video, placed, fellBack, fxFailed, stats } = await L.renderDub({
       file: state.file, videoDur: state.videoDur, segs: state.segs, burmese: state.burmese,
-      persona, pitch: state.pitch, rate: state.rate, keepTalk: state.keepTalk, keepGap: state.keepGap,
+      persona, pitch: state.pitch, rate: state.rate,
+      fx: { mirror: state.fxMirror, blur: state.fxBlur, blurH: state.blurH, blurY: state.blurY }, keepTalk: state.keepTalk, keepGap: state.keepGap,
       offset: state.offset, maxTempo: state.maxTempo, dubGain: state.dubGain, onProgress: setProg
     });
     state.result = { video, url: URL.createObjectURL(video), srt: L.buildSrt(state.burmese, placed), stats };
     showResult();
-    if (fellBack) toast('မူရင်းအသံ ရောစပ်မရလို့ မြန်မာအသံချည်းပဲ ထည့်ထားပါတယ်');
+    if (fxFailed) toast('Mirror/Blur ထည့်မရလို့ မူရင်းပုံအတိုင်း ထုတ်ထားပါတယ်');
+    else if (fellBack) toast('မူရင်းအသံ ရောစပ်မရလို့ မြန်မာအသံချည်းပဲ ထည့်ထားပါတယ်');
   } catch (e) {
     view.innerHTML = `<h2>အမှားရှိနေပါသည်</h2>`; showErr(e);
     view.insertAdjacentHTML('beforeend', `<button class="btn primary" id="retry">ပြန်စမည်</button>

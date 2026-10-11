@@ -379,6 +379,24 @@ function gainExpr(iv, talk, gap, r = 0.2) {
   return `${gap.toFixed(3)}+(${(talk - gap).toFixed(3)})*min(1,${terms})`;
 }
 
+/* ---- optional video effects: mirror (flip left/right) and a blurred band (e.g. to hide burned-in subtitles) ---- */
+function buildFx(fx) {
+  if (!fx || (!fx.mirror && !fx.blur)) return '';
+  const g = [];
+  let cur = '[0:v]';
+  if (fx.mirror) { g.push(`${cur}hflip[m]`); cur = '[m]'; }
+  if (fx.blur) {
+    const h = (Math.max(3, Math.min(60, +fx.blurH || 15)) / 100).toFixed(3);   // band height, fraction of video height
+    const p = (Math.max(0, Math.min(100, +fx.blurY)) / 100).toFixed(3);        // 0 = top, 1 = bottom
+    g.push(`${cur}split[s1][s2]`);
+    g.push(`[s2]crop=w=iw:h=trunc(ih*${h}/2)*2:x=0:y=trunc((ih-oh)*${p}/2)*2,gblur=sigma=20:steps=2[bl]`);
+    g.push(`[s1][bl]overlay=x=0:y=trunc((H-h)*${p}/2)*2,format=yuv420p[v]`);
+  } else {
+    g.push(`${cur}format=yuv420p[v]`);
+  }
+  return g.join(';');
+}
+
 function dubStats(placed, maxTempo) {
   const d = placed.filter(Boolean).map(p => p.drift);
   const longLines = [];
@@ -386,7 +404,7 @@ function dubStats(placed, maxTempo) {
   return { lateCount: d.filter(x => x > 0.5).length, maxDrift: Math.max(0, ...d), longLines };
 }
 
-export async function renderDub({ file, videoDur, segs, burmese, persona, pitch, rate = 0, keepTalk = 0, keepGap = 0, offset = 0, maxTempo = 1.7, dubGain = 1.6, onProgress }) {
+export async function renderDub({ file, videoDur, segs, burmese, persona, pitch, rate = 0, fx = null, keepTalk = 0, keepGap = 0, offset = 0, maxTempo = 1.7, dubGain = 1.6, onProgress }) {
   const n = segs.length;
   const f = await getFFmpeg();
   const ctx = new OfflineAudioContext(1, Math.ceil((videoDur + 30) * SR), SR);
@@ -462,31 +480,49 @@ export async function renderDub({ file, videoDur, segs, burmese, persona, pitch,
   }
   await f.writeFile('mix.wav', wavBytes);
   setFFProgress(p => onProgress(0.85 + p * 0.15, 'Video ပေါင်းနေသည်'));
-  const outArgs = ['-c:v', 'copy', '-c:a', 'aac', '-b:a', '128k', '-shortest', '-movflags', '+faststart', 'out.mp4'];
-  const attempts = [];
   const wantMix = keepTalk > 0 || keepGap > 0;
-  if (wantMix) {
-    const g = gainExpr(duckIntervals(segs, placed), keepTalk, keepGap);
-    const head = `[0:a]volume='${g}':eval=frame[o];[1:a]volume=${dubGain.toFixed(2)},apad[d];[o][d]amix=inputs=2:duration=first:dropout_transition=0,volume=2`;
-    for (const tail of [',alimiter=limit=0.95:level=0', '']) {
-      attempts.push(['-i', inName, '-i', 'mix.wav', '-filter_complex', `${head}${tail}[a]`, '-map', '0:v:0', '-map', '[a]']);
+  const fxFilter = buildFx(fx);
+  const mixHead = wantMix
+    ? `[0:a]volume='${gainExpr(duckIntervals(segs, placed), keepTalk, keepGap)}':eval=frame[o];[1:a]volume=${dubGain.toFixed(2)},apad[d];[o][d]amix=inputs=2:duration=first:dropout_transition=0,volume=2`
+    : '';
+  // build the list of ffmpeg attempts for a given video filter ('' = copy the video stream untouched)
+  const build = vf => {
+    const vMap = vf ? ['-map', '[v]'] : ['-map', '0:v:0'];
+    const enc = vf ? ['-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '27', '-pix_fmt', 'yuv420p'] : ['-c:v', 'copy'];
+    const tail = ['-c:a', 'aac', '-b:a', '128k', '-shortest', '-movflags', '+faststart', 'out.mp4'];
+    const base = ['-i', inName, '-i', 'mix.wav'];
+    const list = [];
+    if (wantMix) {
+      for (const lim of [',alimiter=limit=0.95:level=0', '']) {
+        const fc = (vf ? vf + ';' : '') + `${mixHead}${lim}[a]`;
+        list.push({ mix: true, args: [...base, '-filter_complex', fc, ...vMap, '-map', '[a]', ...enc, ...tail] });
+      }
+    }
+    list.push({
+      mix: false,
+      args: vf
+        ? [...base, '-filter_complex', vf, ...vMap, '-map', '1:a:0', ...enc, ...tail]
+        : [...base, ...vMap, '-map', '1:a:0', ...enc, ...tail]
+    });
+    return list;
+  };
+  const plans = [build(fxFilter)];
+  if (fxFilter) plans.push(build(''));
+  let code = -1, usedMix = false, fxFailed = false;
+  outer: for (let p = 0; p < plans.length; p++) {
+    for (const a of plans[p]) {
+      code = await f.exec(a.args);
+      if (code === 0) { usedMix = a.mix; fxFailed = !!fxFilter && p > 0; break outer; }
+      try { await f.deleteFile('out.mp4'); } catch {}
     }
   }
-  attempts.push(['-i', inName, '-i', 'mix.wav', '-map', '0:v:0', '-map', '1:a:0']);
-  let code = -1, used = -1;
-  for (let k = 0; k < attempts.length; k++) {
-    code = await f.exec([...attempts[k], ...outArgs]);
-    used = k;
-    if (code === 0) break;
-    try { await f.deleteFile('out.mp4'); } catch {}
-  }
   if (code !== 0) throw new Error('Video ပေါင်းစပ်မှု မအောင်မြင်ပါ (ffmpeg error)');
-  const fellBack = wantMix && used === attempts.length - 1;
+  const fellBack = wantMix && !usedMix;
   const out = await f.readFile('out.mp4');
   for (const x of [temp ? inName : null, 'mix.wav', 'out.mp4']) { if (x) { try { await f.deleteFile(x); } catch {} } }
   setFFProgress(null);
   onProgress(1, 'ပြီးပါပြီ');
-  return { video: new Blob([out.slice().buffer], { type: 'video/mp4' }), placed, fellBack, stats: dubStats(placed, maxTempo) };
+  return { video: new Blob([out.slice().buffer], { type: 'video/mp4' }), placed, fellBack, fxFailed, stats: dubStats(placed, maxTempo) };
 }
 
 /* ---------- SRT ---------- */
