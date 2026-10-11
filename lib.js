@@ -412,7 +412,10 @@ function buildFx(fx, subs) {
     const p = (Math.max(0, Math.min(100, +fx.blurY)) / 100).toFixed(3);        // 0 = top, 1 = bottom
     const o = lbl();
     g.push(`${cur}split[s1][s2]`);
-    g.push(`[s2]crop=w=iw:h=trunc(ih*${h}/2)*2:x=0:y=trunc((ih-oh)*${p}/2)*2,gblur=sigma=20:steps=2[bl]`);
+    const sig = Math.max(2, Math.min(40, ((+fx.blurS || 50) / 100) * 40)).toFixed(1);   // blur strength (sigma)
+    const op = Math.max(0.2, Math.min(1, (+fx.blurO || 100) / 100));                    // how solid the blurred band is
+    const alpha = op < 0.99 ? `,format=yuva420p,colorchannelmixer=aa=${op.toFixed(2)}` : '';
+    g.push(`[s2]crop=w=iw:h=trunc(ih*${h}/2)*2:x=0:y=trunc((ih-oh)*${p}/2)*2,gblur=sigma=${sig}:steps=2${alpha}[bl]`);
     g.push(`[s1][bl]overlay=x=0:y=trunc((H-h)*${p}/2)*2${o}`);
     cur = o;
   }
@@ -707,6 +710,10 @@ export async function renderDub({ file, videoDur, segs, burmese, persona, pitch,
     return list;
   };
   const plans = [build(fxFilter, !!subs)];
+  if (fx && fx.blur && +fx.blurO < 100) {                       // if the see-through blur is not supported, try a solid one
+    const solid = buildFx({ ...fx, blurO: 100 }, subs);
+    if (solid !== fxFilter) plans.push(build(solid, !!subs));
+  }
   if (subs && buildFx(fx, null)) plans.push(build(buildFx(fx, null), false));
   if (fxFilter) plans.push(build('', false));
   let code = -1, usedMix = false, fxFailed = false;

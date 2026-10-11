@@ -6,7 +6,7 @@ const DEFAULTS = { pitch: 10, rate: 20, keepTalk: 0, keepGap: 0.3, offset: 0, ma
 const state = {
   step: 1, file: null, videoDur: 0, lang: 'zh', segs: [], sourceLines: [],
   burmese: [], personaId: 'TH', ...DEFAULTS, result: null, busy: false, origSegs: null,
-  fxMirror: false, fxBlur: false, blurH: 15, blurY: 100, previewUrl: null, previewFor: null,
+  fxMirror: false, fxBlur: false, blurH: 15, blurY: 100, blurS: 50, blurO: 100, previewUrl: null, previewFor: null,
   fxSubs: false, subS: 5, subY: 88, subC: '#ffffff', subO: '#000000', subFont: 'pt16', fontOk: false
 };
 const STEPS = ['Upload', 'Source Text', 'Burmese', 'Result'];
@@ -208,6 +208,9 @@ function previewUrl() {
   return state.previewUrl;
 }
 
+const pmBtn = (id, t) => `<button type="button" class="ghost" id="${id}" style="width:48px;height:48px;padding:0;margin:0;flex:none;font-size:26px;line-height:1">${t}</button>`;
+const pmRow = (id, min, max, step, val) => `<div style="display:flex;align-items:center;gap:8px;margin-top:6px">${pmBtn(id + 'M', '−')}<input id="${id}" type="range" min="${min}" max="${max}" step="${step}" value="${val}" style="flex:1;margin:0" />${pmBtn(id + 'P', '+')}</div>`;
+
 function previewBlock() {
   const url = previewUrl();
   const chk = 'width:22px;height:22px;padding:0;margin:0';
@@ -239,6 +242,12 @@ function previewBlock() {
         <div class="row" style="margin-top:14px"><b>⇅ အပေါ်အောက် နေရာ</b><span id="byv">${state.blurY}%</span></div>
         <input id="blurY" type="range" min="0" max="100" value="${state.blurY}" />
         <div class="row muted small"><span>0% (အပေါ်ဆုံး)</span><span>100% (အောက်ဆုံး)</span></div>
+        <div class="row" style="margin-top:14px"><b>💧 အကြည် / အဝါး (Blur အား)</b><span id="blurSV">${state.blurS}%</span></div>
+        ${pmRow('blurS', 5, 100, 5, state.blurS)}
+        <div class="row muted small"><span>နည်း (ပိုကြည်)</span><span>များ (ပိုဝါး)</span></div>
+        <div class="row" style="margin-top:14px"><b>🎨 အရောင်ရင့်မှု (Opacity)</b><span id="blurOV">${state.blurO}%</span></div>
+        ${pmRow('blurO', 20, 100, 5, state.blurO)}
+        <div class="row muted small"><span>နည်း (ပါးပါး)</span><span>100% (အပြည့်)</span></div>
       </div>
       <label style="display:flex;align-items:center;gap:10px;font-weight:600;margin-top:12px">
         <input id="fxSubs" type="checkbox" style="${chk}" ${state.fxSubs ? 'checked' : ''} />
@@ -287,6 +296,9 @@ function bindPreview() {
     v.style.transform = state.fxMirror ? 'scaleX(-1)' : '';
     ov.style.display = state.fxBlur ? 'block' : 'none';
     ov.style.height = state.blurH + '%';
+    const bpx = Math.max(1, Math.round((state.blurS / 100) * 40 / 2));          // ffmpeg sigma/2 ~ preview px
+    ov.style.backdropFilter = ov.style.webkitBackdropFilter = `blur(${bpx}px)`;
+    ov.style.opacity = String(Math.max(0.2, state.blurO / 100));
     ov.style.top = ((state.blurY / 100) * (100 - state.blurH)) + '%';
     const yb = $('#subYBox'); if (yb) yb.hidden = state.fxBlur;
     const sb = $('#pvSub');
@@ -315,6 +327,17 @@ function bindPreview() {
   $('#fxBlur').onchange = e => { state.fxBlur = e.target.checked; $('#blurBox').hidden = !state.fxBlur; apply(); };
   $('#blurH').oninput = e => { state.blurH = +e.target.value; $('#bhv').textContent = e.target.value + '%'; apply(); };
   $('#blurY').oninput = e => { state.blurY = +e.target.value; $('#byv').textContent = e.target.value + '%'; apply(); };
+  const bindPM = (id, key, min, max, step) => {
+    const set = x => {
+      state[key] = Math.max(min, Math.min(max, Math.round(x / step) * step));
+      $('#' + id).value = state[key]; $('#' + id + 'V').textContent = state[key] + '%'; apply();
+    };
+    $('#' + id).oninput = e => set(+e.target.value);
+    $('#' + id + 'M').onclick = () => set(state[key] - step);
+    $('#' + id + 'P').onclick = () => set(state[key] + step);
+  };
+  bindPM('blurS', 'blurS', 5, 100, 5);
+  bindPM('blurO', 'blurO', 20, 100, 5);
 
   /* subtitles */
   const fontStatus = () => {
@@ -567,7 +590,7 @@ async function step4() {
       file: state.file, videoDur: state.videoDur, segs: state.segs, burmese: state.burmese,
       persona, pitch: state.pitch, rate: state.rate,
       fx: {
-        mirror: state.fxMirror, blur: state.fxBlur, blurH: state.blurH, blurY: state.blurY,
+        mirror: state.fxMirror, blur: state.fxBlur, blurH: state.blurH, blurY: state.blurY, blurS: state.blurS, blurO: state.blurO,
         subs: { on: state.fxSubs, size: state.subS, y: state.subY, color: state.subC, outline: state.subO, font: selFont() }
       }, keepTalk: state.keepTalk, keepGap: state.keepGap,
       offset: state.offset, maxTempo: state.maxTempo, dubGain: state.dubGain, onProgress: setProg
