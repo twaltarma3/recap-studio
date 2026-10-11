@@ -3,8 +3,11 @@ import { fetchFile } from '@ffmpeg/util';
 import { PT16_B64, AKK_B64 } from './fonts-data.js';
 
 /* ---------- settings ---------- */
+// Cloudflare Worker proxy (Edge TTS + AssemblyAI). Built in, so users never have to enter it.
+const WORKER_URL = 'https://recap-proxy.twaltarma3.workers.dev';
+
 export const cfg = {
-  get workerUrl() { return (localStorage.getItem('workerUrl') || '').trim().replace(/\/$/, ''); },
+  get workerUrl() { return WORKER_URL; },
   get aaiKey() { return (localStorage.getItem('aaiKey') || '').trim(); }
 };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -127,7 +130,7 @@ export async function extractAudio(file, onProg) {
 
 /* ---------- AssemblyAI (through the worker) ---------- */
 async function aai(path, opts = {}) {
-  if (!cfg.workerUrl || !cfg.aaiKey) throw new Error('API Key Settings ထဲမှာ Worker URL နဲ့ AssemblyAI key ကို အရင်ထည့်ပါ');
+  if (!cfg.workerUrl || !cfg.aaiKey) throw new Error('API Key Settings ထဲမှာ AssemblyAI key ကို အရင်ထည့်ပါ');
   const r = await fetch(`${cfg.workerUrl}/aai${path}`, {
     ...opts,
     headers: { authorization: cfg.aaiKey, ...(opts.headers || {}) }
@@ -445,9 +448,8 @@ function loadBuiltinFont(id) {
   if (!bLoad[id]) {
     bLoad[id] = (async () => {
       const ab = b64ToBuf(b.data);
-      let face;
-      try { face = new FontFace(b.family, ab, { weight: '100 900' }); await face.load(); }   // any weight -> no faux-bold
-      catch { face = new FontFace(b.family, ab); await face.load(); }
+      const face = new FontFace(b.family, ab);   // same path as the working custom font
+      await face.load();
       document.fonts.add(face);
       if (!document.fonts.check(`700 32px '${b.family}'`, 'မြန်မာ')) throw new Error('Font အသုံးမပြုနိုင်ပါ');
       return true;
@@ -535,8 +537,24 @@ async function makeSubTrack(f, { file, videoDur, burmese, placed, fx }) {
   let fontFailed = false;
   try { await ensureSubFont(s.font); } catch { fontFailed = true; }
   const px = Math.max(12, Math.round(H * (s.size / 100)));
-  const font = `700 ${px}px ${family}`;
+  let font = `700 ${px}px ${family}`;
   try { await document.fonts.load(font, 'မြန်မာ'); } catch {}
+  // safety: make sure the chosen font really paints on a canvas; otherwise use the phone font
+  const inked = fnt => {
+    try {
+      const c = document.createElement('canvas'); c.width = 400; c.height = 120;
+      const x = c.getContext('2d'); x.font = fnt; x.textBaseline = 'middle'; x.fillStyle = '#000';
+      x.fillText('မြန်မာစာ', 10, 60);
+      const d = x.getImageData(0, 0, 400, 120).data;
+      for (let i = 3; i < d.length; i += 4) if (d[i] > 40) return true;
+    } catch {}
+    return false;
+  };
+  if (BUILTIN[s.font] || s.font === 'custom') {
+    const t = `700 60px ${family}`;
+    if (!inked(t)) await new Promise(r => setTimeout(r, 300));
+    if (!inked(t)) { font = `700 ${px}px ${SYS_FONTS}`; fontFailed = true; }
+  }
   const cv = document.createElement('canvas');
   const ctx = cv.getContext('2d');
   ctx.font = font;
