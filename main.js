@@ -2,10 +2,12 @@ import './style.css';
 import * as L from './lib.js';
 
 const $ = (s, r = document) => r.querySelector(s);
-const DEFAULTS = { fxMirror: false, fxBlur: false, blurH: 15, blurY: 100, pitch: 10, rate: 20, keepTalk: 0, keepGap: 0.3, offset: 0, maxTempo: 2.0, dubGain: 1.8 };
+const DEFAULTS = { pitch: 10, rate: 20, keepTalk: 0, keepGap: 0.3, offset: 0, maxTempo: 2.0, dubGain: 1.8 };
 const state = {
   step: 1, file: null, videoDur: 0, lang: 'zh', segs: [], sourceLines: [],
-  burmese: [], personaId: 'TH', ...DEFAULTS, result: null, busy: false, origSegs: null
+  burmese: [], personaId: 'TH', ...DEFAULTS, result: null, busy: false, origSegs: null,
+  fxMirror: false, fxBlur: false, blurH: 15, blurY: 100, previewUrl: null, previewFor: null,
+  fxSubs: false, subS: 5, subY: 88, subC: '#ffffff', subO: '#000000', subCustom: false, fontOk: false
 };
 const STEPS = ['Upload', 'Source Text', 'Burmese', 'Result'];
 const view = $('#view');
@@ -196,6 +198,154 @@ function pageKeys() {
 }
 
 /* ---------------- Step 1 ---------------- */
+function previewUrl() {
+  if (state.previewFor !== state.file) {
+    if (state.previewUrl) URL.revokeObjectURL(state.previewUrl);
+    state.previewUrl = state.file ? URL.createObjectURL(state.file) : null;
+    state.previewFor = state.file;
+  }
+  return state.previewUrl;
+}
+
+function previewBlock() {
+  const url = previewUrl();
+  const chk = 'width:22px;height:22px;padding:0;margin:0';
+  return `
+    <div class="panel fx">
+      <b>🎞 Video Effects <span class="muted small" style="font-weight:400">(လိုမှ ဖွင့်ပါ)</span></b>
+      <p class="muted small" style="margin:6px 0 0">Video ကို လှန်ပြီး စာတန်းထိုးကို Blur နဲ့ အုပ်ဖို့ အောက်မှာ ကြည့်ပြီး ချိန်ပါ။ (Preview မှာ အသံမပါပါ)</p>
+      <div style="position:relative;margin-top:12px;border-radius:14px;overflow:hidden;background:#000">
+        <video id="pvVid" src="${url}" playsinline muted preload="metadata" style="display:block;width:100%;margin:0;border-radius:0"></video>
+        <div id="pvBlur" style="display:none;position:absolute;left:0;right:0;pointer-events:none;box-sizing:border-box;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);background:rgba(255,255,255,.08);border-top:1px dashed rgba(255,255,255,.8);border-bottom:1px dashed rgba(255,255,255,.8)"></div>
+        <div id="pvSub" style="display:none;position:absolute;left:4%;right:4%;text-align:center;pointer-events:none;transform:translateY(-50%);line-height:1.35;font-weight:700">မြန်မာစာတန်းထိုး နမူနာ စာကြောင်း</div>
+      </div>
+      <div class="row" style="margin-top:8px;gap:8px">
+        <button class="ghost" id="pvPlay" type="button">▶</button>
+        <input id="pvSeek" type="range" min="0" max="1000" value="0" style="flex:1" />
+        <span id="pvT" class="muted small" style="white-space:nowrap">0:00</span>
+      </div>
+      <label style="display:flex;align-items:center;gap:10px;font-weight:600;margin-top:12px">
+        <input id="fxMirror" type="checkbox" style="${chk}" ${state.fxMirror ? 'checked' : ''} />
+        ↔ Mirror (ဘယ်ညာ လှန်မည်)
+      </label>
+      <label style="display:flex;align-items:center;gap:10px;font-weight:600;margin-top:12px">
+        <input id="fxBlur" type="checkbox" style="${chk}" ${state.fxBlur ? 'checked' : ''} />
+        🌫 Blur (စာတန်းထိုး ဖုံးမည်)
+      </label>
+      <div id="blurBox" ${state.fxBlur ? '' : 'hidden'}>
+        <div class="row" style="margin-top:14px"><b>↕ အကြီးအသေး (အမြင့်)</b><span id="bhv">${state.blurH}%</span></div>
+        <input id="blurH" type="range" min="3" max="40" value="${state.blurH}" />
+        <div class="row" style="margin-top:14px"><b>⇅ အပေါ်အောက် နေရာ</b><span id="byv">${state.blurY}%</span></div>
+        <input id="blurY" type="range" min="0" max="100" value="${state.blurY}" />
+        <div class="row muted small"><span>0% (အပေါ်ဆုံး)</span><span>100% (အောက်ဆုံး)</span></div>
+      </div>
+      <label style="display:flex;align-items:center;gap:10px;font-weight:600;margin-top:12px">
+        <input id="fxSubs" type="checkbox" style="${chk}" ${state.fxSubs ? 'checked' : ''} />
+        💬 မြန်မာစာတန်းထိုး ထည့်မည်
+      </label>
+      <div id="subBox" ${state.fxSubs ? '' : 'hidden'}>
+        <div class="row" style="margin-top:14px"><b>🔠 စာလုံး အရွယ်အစား</b><span id="ssv">${state.subS}%</span></div>
+        <input id="subS" type="range" min="3" max="12" value="${state.subS}" />
+        <div id="subYBox" ${state.fxBlur ? 'hidden' : ''}>
+          <div class="row" style="margin-top:14px"><b>⇅ စာတန်း အပေါ်အောက် နေရာ</b><span id="syv">${state.subY}%</span></div>
+          <input id="subY" type="range" min="5" max="95" value="${state.subY}" />
+        </div>
+        <p class="muted small" style="margin:8px 0 0">Blur ဖွင့်ထားရင် စာတန်းကို Blur ဘားရဲ့ အလယ်မှာ ချပေးပါမယ်။</p>
+        <div class="row" style="margin-top:12px">
+          <label style="margin:0;display:flex;align-items:center;gap:8px">စာလုံးအရောင်
+            <input id="subC" type="color" value="${state.subC}" style="width:48px;height:36px;padding:2px;margin:0" /></label>
+          <label style="margin:0;display:flex;align-items:center;gap:8px">အနားသတ်
+            <input id="subO" type="color" value="${state.subO}" style="width:48px;height:36px;padding:2px;margin:0" /></label>
+        </div>
+        <label>Font
+          <select id="subFont">
+            <option value="system" ${state.subCustom ? '' : 'selected'}>ဖုန်း Font (default)</option>
+            <option value="custom" ${state.subCustom ? 'selected' : ''}>တင်ထားတဲ့ Font</option>
+          </select>
+        </label>
+        <div class="two">
+          <button class="btn" id="fontDl" type="button">⬇ Noto Sans Myanmar ဒေါင်းမည်</button>
+          <label class="btn" style="margin:0;text-align:center;cursor:pointer">📁 Font ဖိုင် တင်မည်
+            <input id="fontUp" type="file" accept=".ttf,.otf,.woff,.woff2" hidden /></label>
+        </div>
+        <p class="muted small" id="fontSt" style="margin:8px 0 0"></p>
+      </div>
+      <p class="muted small">⚠ Mirror၊ Blur၊ စာတန်းထိုး တစ်ခုခု ဖွင့်ရင် Video ကို ပြန် encode လုပ်ရလို့ ပိုကြာပါတယ် (ဖုန်းမှာ မိနစ်များစွာ ကြာနိုင်)။ မဖွင့်ရင် အရင်လိုပဲ မြန်ပါတယ်။</p>
+    </div>`;
+}
+
+function bindPreview() {
+  const v = $('#pvVid'), ov = $('#pvBlur');
+  if (!v || !ov) return;
+  const apply = () => {
+    v.style.transform = state.fxMirror ? 'scaleX(-1)' : '';
+    ov.style.display = state.fxBlur ? 'block' : 'none';
+    ov.style.height = state.blurH + '%';
+    ov.style.top = ((state.blurY / 100) * (100 - state.blurH)) + '%';
+    const yb = $('#subYBox'); if (yb) yb.hidden = state.fxBlur;
+    const sb = $('#pvSub');
+    if (sb) {
+      sb.style.display = state.fxSubs ? 'block' : 'none';
+      const wh = v.clientHeight || 200;
+      sb.style.fontSize = Math.max(8, Math.round(wh * state.subS / 100)) + 'px';
+      sb.style.color = state.subC;
+      const o = state.subO;
+      sb.style.textShadow = `-1.5px -1.5px 0 ${o},1.5px -1.5px 0 ${o},-1.5px 1.5px 0 ${o},1.5px 1.5px 0 ${o},0 2px 3px ${o}`;
+      sb.style.fontFamily = L.subFontFamily(state.subCustom && state.fontOk);
+      sb.style.top = (state.fxBlur ? (state.blurY / 100) * (100 - state.blurH) + state.blurH / 2 : state.subY) + '%';
+    }
+  };
+  const fmt = s => { s = Math.max(0, Math.floor(s || 0)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
+  $('#pvPlay').onclick = () => { v.paused ? v.play() : v.pause(); };
+  v.onclick = () => $('#pvPlay').click();
+  v.onplay = () => { $('#pvPlay').textContent = '⏸'; };
+  v.onpause = () => { $('#pvPlay').textContent = '▶'; };
+  v.ontimeupdate = () => {
+    if (v.duration) $('#pvSeek').value = Math.round((v.currentTime / v.duration) * 1000);
+    $('#pvT').textContent = fmt(v.currentTime) + ' / ' + fmt(v.duration);
+  };
+  $('#pvSeek').oninput = e => { if (v.duration) v.currentTime = (e.target.value / 1000) * v.duration; };
+  $('#fxMirror').onchange = e => { state.fxMirror = e.target.checked; apply(); };
+  $('#fxBlur').onchange = e => { state.fxBlur = e.target.checked; $('#blurBox').hidden = !state.fxBlur; apply(); };
+  $('#blurH').oninput = e => { state.blurH = +e.target.value; $('#bhv').textContent = e.target.value + '%'; apply(); };
+  $('#blurY').oninput = e => { state.blurY = +e.target.value; $('#byv').textContent = e.target.value + '%'; apply(); };
+
+  /* subtitles */
+  const fontStatus = () => {
+    const el = $('#fontSt');
+    if (el) el.textContent = state.fontOk ? '✅ Font တင်ထားပြီး' : 'Font မတင်ရသေးပါ — ဖုန်း Font ကို သုံးမည် (မြန်မာစာ ကွက်လပ်ပေါ်ရင် Font ဒေါင်းပါ)';
+  };
+  $('#fxSubs').onchange = e => { state.fxSubs = e.target.checked; $('#subBox').hidden = !state.fxSubs; apply(); };
+  $('#subS').oninput = e => { state.subS = +e.target.value; $('#ssv').textContent = e.target.value + '%'; apply(); };
+  $('#subY').oninput = e => { state.subY = +e.target.value; $('#syv').textContent = e.target.value + '%'; apply(); };
+  $('#subC').oninput = e => { state.subC = e.target.value; apply(); };
+  $('#subO').oninput = e => { state.subO = e.target.value; apply(); };
+  $('#subFont').onchange = e => { state.subCustom = e.target.value === 'custom'; apply(); };
+  $('#fontDl').onclick = async () => {
+    const b = $('#fontDl'); b.disabled = true; b.textContent = 'ဒေါင်းနေသည်…';
+    try {
+      await L.downloadDefaultFont();
+      state.fontOk = true; state.subCustom = true; $('#subFont').value = 'custom';
+      toast('✅ Font အဆင်သင့်ပါပြီ');
+    } catch (err) { toast((err.message || 'Font ဒေါင်းမရပါ').slice(0, 80)); }
+    b.disabled = false; b.textContent = '⬇ Noto Sans Myanmar ဒေါင်းမည်';
+    fontStatus(); apply();
+  };
+  $('#fontUp').onchange = async e => {
+    const file = e.target.files[0]; if (!file) return;
+    try {
+      await L.saveSubFont(file);
+      state.fontOk = true; state.subCustom = true; $('#subFont').value = 'custom';
+      toast('✅ Font တင်ပြီးပါပြီ');
+    } catch { toast('Font ဖိုင် မမှန်ပါ (.ttf / .otf / .woff2)'); }
+    fontStatus(); apply();
+  };
+  v.onloadedmetadata = apply;
+  fontStatus();
+  L.loadSubFont().then(ok => { if (ok && !state.fontOk) { state.fontOk = true; fontStatus(); apply(); } });
+  apply();
+}
+
 function step1() {
   view.innerHTML = `
     <h2>Step 1: Video တင်ပါ</h2>
@@ -205,6 +355,7 @@ function step1() {
       <b>${state.file ? state.file.name : 'နှိပ်၍ Video File ရွေးချယ်ပါ'}</b>
       <span class="muted small">${state.file ? (state.file.size / 1048576).toFixed(1) + ' MB' : 'MP4, MOV, WEBM, MKV · ၁၀ မိနစ်အထိ'}</span>
     </label>
+    ${state.file ? previewBlock() : ''}
     <label>မူရင်းစကားပြောဘာသာ
       <select id="lang">
         ${[['zh', 'Chinese 中文'], ['en', 'English'], ['ja', 'Japanese'], ['ko', 'Korean'], ['hi', 'Hindi'], ['auto', 'Auto detect']]
@@ -214,6 +365,7 @@ function step1() {
     <button id="next" class="btn primary" ${state.file ? '' : 'disabled'}>Step 1: စာသားထုတ်မည် (Next)</button>`;
   $('#f').onchange = e => { state.file = e.target.files[0] || null; state.segs = []; state.origSegs = null; L.forgetInput(); step1(); };
   $('#lang').onchange = e => { state.lang = e.target.value; };
+  if (state.file) bindPreview();
   $('#next').onclick = () => {
     if (!L.cfg.workerUrl || !L.cfg.aaiKey) { toast('API Key အရင်ထည့်ပါ'); openPage('keys'); return; }
     state.segs.length ? go(2) : transcribeFlow();
@@ -250,13 +402,11 @@ function step2() {
     <p class="muted">စာကြောင်းတစ်ကြောင်းလျှင် အချိန်တစ်ခု ကိုက်ထားသည်။ စာကြောင်းအရေအတွက် မပြောင်းပါနှင့်။ (${state.segs.length} lines)</p>
     <textarea id="src">${state.segs.map(s => s.text).join('\n').replace(/</g, '&lt;')}</textarea>
     <button id="copy" class="btn block">📋 Copy Full Prompt</button>
-    <button id="copyRecap" class="btn block">🎬 Recap Script Prompt ကူးမည် (စမ်းသပ်)</button>
-    ${state.origSegs ? '<button id="restoreSrc" class="btn block">↺ မူရင်း စာကြောင်းများ ပြန်ထားမည်</button>' : ''}
     <div class="panel">
       <b>🤖 Gemini App ဖြင့် ဘာသာပြန်ရန် (Free)</b>
       <p class="muted small">Prompt ကို Copy ကူးပြီး Gemini တွင် Paste လုပ်ပါ။ ရလာသော JSON ကို အောက်တွင် ထည့်ပါ။</p>
       <a class="link" href="https://gemini.google.com/app" target="_blank" rel="noopener">Gemini App ဖွင့်မည် ↗</a>
-      <label>Gemini မှ ရလာသော JSON (ဒါမှမဟုတ် Recap Script)
+      <label>Gemini မှ ရလာသော JSON
         <textarea id="json" class="short" placeholder='{"translations": ["မြန်မာစာ ၁", "မြန်မာစာ ၂", ...]}'></textarea>
       </label>
       <button id="next" class="btn primary">Step 2: ဘာသာပြန်အတည်ပြုမည် (Next)</button>
@@ -273,19 +423,7 @@ function step2() {
     return true;
   };
   $('#back').onclick = () => go(1);
-  $('#copyRecap').onclick = async () => {
-    if (state.origSegs) { toast('မူရင်း စာကြောင်းများ အရင်ပြန်ထားပါ'); return; }
-    if (!syncSrc()) return;
-    const text = L.buildRecapPrompt(state.segs);
-    try { await navigator.clipboard.writeText(text); toast('Recap Prompt ကူးပြီးပါပြီ — Gemini မှာ Video ပါတင်ပါ'); }
-    catch { $('#json').value = text; toast('ကူးမရပါ — အောက်ကနေ ရွေးကူးပါ'); }
-  };
-  $('#restoreSrc')?.addEventListener('click', () => {
-    state.segs = state.origSegs; state.origSegs = null; state.burmese = [];
-    toast('မူရင်း စာကြောင်းများ ပြန်ထားပြီးပါပြီ'); step2();
-  });
   $('#copy').onclick = async () => {
-    if (state.origSegs) { toast('မူရင်း စာကြောင်းများ အရင်ပြန်ထားပါ'); return; }
     if (!syncSrc()) return;
     const text = L.buildPrompt(state.segs);
     try { await navigator.clipboard.writeText(text); toast('Prompt ကူးပြီးပါပြီ'); }
@@ -293,16 +431,6 @@ function step2() {
   };
   $('#next').onclick = () => {
     try {
-      if (!/"translations"/.test($('#json').value)) {
-        // Recap Script mode: free-form script -> sentences spread over the original timeline
-        const sents = L.parseScript($('#json').value);
-        if (!state.origSegs) state.origSegs = state.segs.map(s => ({ ...s }));
-        state.segs = L.layoutScript(sents, state.origSegs);
-        state.burmese = sents.slice();
-        toast(`Script ${sents.length} ကြောင်း ခွဲပြီးပါပြီ`);
-        go(3);
-        return;
-      }
       const t = L.parseTranslations($('#json').value);
       if (t.length !== state.segs.length) toast(`အရေအတွက် မကိုက်ပါ (${t.length}/${state.segs.length}) — Step 3 မှာ ပြင်ပါ`);
       state.burmese = state.segs.map((_, i) => t[i] || '');
@@ -349,25 +477,6 @@ function step3() {
         <input id="dgain" type="range" min="100" max="250" value="${Math.round(state.dubGain * 100)}" />
       </details>
     </div>
-    <div class="panel fx">
-      <b>🎞 Video Effects <span class="muted small" style="font-weight:400">(လိုမှ ဖွင့်ပါ)</span></b>
-      <label style="display:flex;align-items:center;gap:10px;font-weight:600;margin-top:12px">
-        <input id="fxMirror" type="checkbox" style="width:22px;height:22px;padding:0;margin:0" ${state.fxMirror ? 'checked' : ''} />
-        ↔ Mirror (ဘယ်ညာ လှန်မည်)
-      </label>
-      <label style="display:flex;align-items:center;gap:10px;font-weight:600;margin-top:12px">
-        <input id="fxBlur" type="checkbox" style="width:22px;height:22px;padding:0;margin:0" ${state.fxBlur ? 'checked' : ''} />
-        🌫 Blur (အောက်နားမှာ ဖုံးမည်)
-      </label>
-      <div id="blurBox" ${state.fxBlur ? '' : 'hidden'}>
-        <div class="row" style="margin-top:14px"><b>↕ အကြီးအသေး (အမြင့်)</b><span id="bhv">${state.blurH}%</span></div>
-        <input id="blurH" type="range" min="3" max="40" value="${state.blurH}" />
-        <div class="row" style="margin-top:14px"><b>⇅ အပေါ်အောက် နေရာ</b><span id="byv">${state.blurY}%</span></div>
-        <input id="blurY" type="range" min="0" max="100" value="${state.blurY}" />
-        <div class="row muted small"><span>0% (အပေါ်ဆုံး)</span><span>100% (အောက်ဆုံး)</span></div>
-      </div>
-      <p class="muted small">⚠ ဒီနှစ်ခုထဲက တစ်ခုခု ဖွင့်ရင် Video ကို ပြန် encode လုပ်ရလို့ ပိုကြာပါတယ် (ဖုန်းမှာ မိနစ်များစွာ ကြာနိုင်)။ မဖွင့်ရင် အရင်လိုပဲ မြန်ပါတယ်။</p>
-    </div>
     <button id="next" class="btn primary">Step 3: အသံထုတ်ပြီး Video ပေါင်းမည်</button>`;
 
   const read = () => {
@@ -383,10 +492,6 @@ function step3() {
   $('#offs').oninput = e => { state.offset = +e.target.value / 10; $('#ov').textContent = state.offset.toFixed(1) + 's'; };
   $('#mtempo').oninput = e => { state.maxTempo = +e.target.value / 10; $('#mv').textContent = state.maxTempo.toFixed(1) + '×'; };
   $('#dgain').oninput = e => { state.dubGain = +e.target.value / 100; $('#dv').textContent = e.target.value + '%'; };
-  $('#fxMirror').onchange = e => { state.fxMirror = e.target.checked; };
-  $('#fxBlur').onchange = e => { state.fxBlur = e.target.checked; $('#blurBox').hidden = !state.fxBlur; };
-  $('#blurH').oninput = e => { state.blurH = +e.target.value; $('#bhv').textContent = e.target.value + '%'; };
-  $('#blurY').oninput = e => { state.blurY = +e.target.value; $('#byv').textContent = e.target.value + '%'; };
 
   // sliders are locked by default so scrolling with a finger can't move them
   const sliders = [...view.querySelectorAll('.panel:not(.fx) input[type=range]')];
@@ -439,12 +544,15 @@ async function step4() {
     const { video, placed, fellBack, fxFailed, stats } = await L.renderDub({
       file: state.file, videoDur: state.videoDur, segs: state.segs, burmese: state.burmese,
       persona, pitch: state.pitch, rate: state.rate,
-      fx: { mirror: state.fxMirror, blur: state.fxBlur, blurH: state.blurH, blurY: state.blurY }, keepTalk: state.keepTalk, keepGap: state.keepGap,
+      fx: {
+        mirror: state.fxMirror, blur: state.fxBlur, blurH: state.blurH, blurY: state.blurY,
+        subs: { on: state.fxSubs, size: state.subS, y: state.subY, color: state.subC, outline: state.subO, custom: state.subCustom && state.fontOk }
+      }, keepTalk: state.keepTalk, keepGap: state.keepGap,
       offset: state.offset, maxTempo: state.maxTempo, dubGain: state.dubGain, onProgress: setProg
     });
     state.result = { video, url: URL.createObjectURL(video), srt: L.buildSrt(state.burmese, placed), stats };
     showResult();
-    if (fxFailed) toast('Mirror/Blur ထည့်မရလို့ မူရင်းပုံအတိုင်း ထုတ်ထားပါတယ်');
+    if (fxFailed) toast('Effect (Mirror/Blur/စာတန်းထိုး) အချို့ ထည့်မရလို့ ရတာလောက်ပဲ ထုတ်ထားပါတယ်');
     else if (fellBack) toast('မူရင်းအသံ ရောစပ်မရလို့ မြန်မာအသံချည်းပဲ ထည့်ထားပါတယ်');
   } catch (e) {
     view.innerHTML = `<h2>အမှားရှိနေပါသည်</h2>`; showErr(e);

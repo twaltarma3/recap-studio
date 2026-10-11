@@ -380,7 +380,7 @@ function gainExpr(iv, talk, gap, r = 0.2) {
 }
 
 /* ---- optional video effects: mirror (flip left/right) and a blurred band (e.g. to hide burned-in subtitles) ---- */
-function buildFx(fx) {
+function buildFxOld(fx) {
   if (!fx || (!fx.mirror && !fx.blur)) return '';
   const g = [];
   let cur = '[0:v]';
@@ -395,6 +395,168 @@ function buildFx(fx) {
     g.push(`${cur}format=yuv420p[v]`);
   }
   return g.join(';');
+}
+
+/* ---- video filter graph: mirror -> blurred band -> burned-in subtitles (input 2 = png sequence) ---- */
+function buildFx(fx, subs) {
+  const mirror = !!(fx && fx.mirror), blur = !!(fx && fx.blur);
+  if (!mirror && !blur && !subs) return '';
+  const g = [];
+  let cur = '[0:v]', n = 0;
+  const lbl = () => `[t${n++}]`;
+  if (mirror) { const o = lbl(); g.push(`${cur}hflip${o}`); cur = o; }
+  if (blur) {
+    const h = (Math.max(3, Math.min(60, +fx.blurH || 15)) / 100).toFixed(3);   // band height, fraction of video height
+    const p = (Math.max(0, Math.min(100, +fx.blurY)) / 100).toFixed(3);        // 0 = top, 1 = bottom
+    const o = lbl();
+    g.push(`${cur}split[s1][s2]`);
+    g.push(`[s2]crop=w=iw:h=trunc(ih*${h}/2)*2:x=0:y=trunc((ih-oh)*${p}/2)*2,gblur=sigma=20:steps=2[bl]`);
+    g.push(`[s1][bl]overlay=x=0:y=trunc((H-h)*${p}/2)*2${o}`);
+    cur = o;
+  }
+  if (subs) { const o = lbl(); g.push(`${cur}[2:v]overlay=x=0:y=${subs.y}:shortest=1${o}`); cur = o; }
+  g.push(`${cur}format=yuv420p[v]`);
+  return g.join(';');
+}
+
+/* ---- subtitle font (kept in Cache Storage after the first time) ---- */
+const FONT_CACHE = 'subfont-v1', FONT_KEY = '/recap-sub-font', FONT_NAME = 'RecapSubFont';
+const SYS_FONTS = `'Noto Sans Myanmar','Padauk','Myanmar Text','Pyidaungsu',sans-serif`;
+const FONT_URLS = [
+  'https://cdn.jsdelivr.net/fontsource/fonts/noto-sans-myanmar@latest/myanmar-700-normal.woff2',
+  'https://cdn.jsdelivr.net/fontsource/fonts/noto-sans-myanmar@latest/myanmar-400-normal.woff2'
+];
+let curFace = null, fontLoaded = false;
+export const subFontFamily = custom => (custom ? `'${FONT_NAME}',` : '') + SYS_FONTS;
+
+async function installFont(ab) {
+  const face = new FontFace(FONT_NAME, ab);
+  await face.load();                       // throws if the file is not a valid font
+  if (curFace) { try { document.fonts.delete(curFace); } catch {} }
+  document.fonts.add(face);
+  curFace = face; fontLoaded = true;
+}
+export async function loadSubFont() {
+  if (fontLoaded) return true;
+  try {
+    const c = await caches.open(FONT_CACHE);
+    const r = await c.match(FONT_KEY);
+    if (!r) return false;
+    await installFont(await r.arrayBuffer());
+    return true;
+  } catch { return false; }
+}
+export async function saveSubFont(blob) {
+  const ab = await blob.arrayBuffer();
+  await installFont(ab);
+  try { const c = await caches.open(FONT_CACHE); await c.put(FONT_KEY, new Response(new Blob([ab]))); } catch {}
+}
+export async function downloadDefaultFont() {
+  for (const u of FONT_URLS) {
+    try {
+      const r = await fetch(u);
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      await saveSubFont(await r.blob());
+      return;
+    } catch {}
+  }
+  throw new Error('Font ဒေါင်းလုဒ် မရပါ — Font ဖိုင်ကို ကိုယ်တိုင် တင်ပါ');
+}
+
+function videoSize(file) {
+  return new Promise(res => {
+    const v = document.createElement('video');
+    v.preload = 'metadata';
+    const url = URL.createObjectURL(file);
+    v.onloadedmetadata = () => { res({ w: v.videoWidth, h: v.videoHeight }); URL.revokeObjectURL(url); };
+    v.onerror = () => { res(null); URL.revokeObjectURL(url); };
+    v.src = url;
+  });
+}
+
+// word-wrap Burmese text (no spaces) with Intl.Segmenter when the browser has it
+function wrapLines(ctx, text, maxW) {
+  let units;
+  try { units = [...new Intl.Segmenter('my', { granularity: 'word' }).segment(text)].map(s => s.segment); }
+  catch { units = [...text]; }
+  const lines = [];
+  let cur = '';
+  for (const u of units) {
+    const t = cur + u;
+    if (!cur || ctx.measureText(t).width <= maxW) cur = t;
+    else { lines.push(cur.trim()); cur = u.replace(/^\s+/, ''); }
+  }
+  if (cur.trim()) lines.push(cur.trim());
+  return lines;
+}
+
+// draws every subtitle line as a transparent PNG strip and lists them (with timings) for ffmpeg's concat demuxer
+async function makeSubTrack(f, { file, videoDur, burmese, placed, fx }) {
+  const sz = await videoSize(file);
+  if (!sz || !sz.w || !sz.h) throw new Error('video size');
+  const { w: W, h: H } = sz;
+  const s = fx.subs;
+  const family = subFontFamily(s.custom);
+  if (s.custom) await loadSubFont();
+  const px = Math.max(12, Math.round(H * (s.size / 100)));
+  const font = `700 ${px}px ${family}`;
+  try { await document.fonts.load(font, 'မြန်မာ'); } catch {}
+  const cv = document.createElement('canvas');
+  const ctx = cv.getContext('2d');
+  ctx.font = font;
+  const maxW = W * 0.92;
+
+  const items = [];
+  placed.forEach((p, i) => { if (p && burmese[i]) items.push({ i, p, text: burmese[i] }); });
+  if (!items.length) throw new Error('no lines');
+  items.forEach((it, k) => {
+    it.lines = wrapLines(ctx, it.text, maxW);
+    const next = items[k + 1];
+    it.start = it.p.start;
+    it.end = Math.min(it.p.end + 0.15, next ? next.p.start : Infinity);
+  });
+  const maxL = Math.min(4, Math.max(1, ...items.map(x => x.lines.length)));
+  const lh = Math.round(px * 1.35);
+  const bandH = Math.ceil(lh * maxL + px * 0.5);
+
+  // vertical centre: middle of the blur band if blur is on, otherwise the chosen position
+  let cy;
+  if (fx.blur) { const bh = (H * fx.blurH) / 100; cy = (fx.blurY / 100) * (H - bh) + bh / 2; }
+  else cy = (s.y / 100) * H;
+  const y = Math.round(Math.max(0, Math.min(H - bandH, cy - bandH / 2)));
+
+  cv.width = W; cv.height = bandH;
+  const names = [];
+  const draw = async (name, lines) => {
+    ctx.clearRect(0, 0, W, bandH);
+    if (lines) {
+      ctx.font = font; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+      ctx.lineWidth = Math.max(2, px * 0.16); ctx.strokeStyle = s.outline; ctx.fillStyle = s.color;
+      const L = lines.slice(0, maxL);
+      const top = (bandH - L.length * lh) / 2 + lh / 2;
+      L.forEach((t, j) => { const yy = top + j * lh; ctx.strokeText(t, W / 2, yy); ctx.fillText(t, W / 2, yy); });
+    }
+    const blob = await new Promise(r => cv.toBlob(r, 'image/png'));
+    await f.writeFile(name, new Uint8Array(await blob.arrayBuffer()));
+    names.push(name);
+  };
+
+  await draw('sub_blank.png', null);
+  let t = 0, list = '';
+  const add = (name, d) => { if (d > 0.001) list += `file '${name}'\nduration ${d.toFixed(3)}\n`; };
+  for (const it of items) {
+    const st = Math.max(it.start, t);
+    if (st > t) add('sub_blank.png', st - t);
+    const name = `sub_${it.i}.png`;
+    await draw(name, it.lines);
+    add(name, it.end - st);
+    t = Math.max(t, it.end);
+  }
+  add('sub_blank.png', Math.max(videoDur - t, 0) + 5);
+  list += `file 'sub_blank.png'\n`;
+  await f.writeFile('subs.txt', new TextEncoder().encode(list));
+  names.push('subs.txt');
+  return { y, files: names };
 }
 
 function dubStats(placed, maxTempo) {
@@ -481,16 +643,21 @@ export async function renderDub({ file, videoDur, segs, burmese, persona, pitch,
   await f.writeFile('mix.wav', wavBytes);
   setFFProgress(p => onProgress(0.85 + p * 0.15, 'Video ပေါင်းနေသည်'));
   const wantMix = keepTalk > 0 || keepGap > 0;
-  const fxFilter = buildFx(fx);
+  let subs = null;
+  if (fx && fx.subs && fx.subs.on) {
+    onProgress(0.86, 'စာတန်းထိုး ပုံ ဆွဲနေသည်');
+    try { subs = await makeSubTrack(f, { file, videoDur, burmese, placed, fx }); } catch { subs = null; }
+  }
+  const fxFilter = buildFx(fx, subs);
   const mixHead = wantMix
     ? `[0:a]volume='${gainExpr(duckIntervals(segs, placed), keepTalk, keepGap)}':eval=frame[o];[1:a]volume=${dubGain.toFixed(2)},apad[d];[o][d]amix=inputs=2:duration=first:dropout_transition=0,volume=2`
     : '';
   // build the list of ffmpeg attempts for a given video filter ('' = copy the video stream untouched)
-  const build = vf => {
+  const build = (vf, withSubs) => {
     const vMap = vf ? ['-map', '[v]'] : ['-map', '0:v:0'];
     const enc = vf ? ['-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '27', '-pix_fmt', 'yuv420p'] : ['-c:v', 'copy'];
     const tail = ['-c:a', 'aac', '-b:a', '128k', '-shortest', '-movflags', '+faststart', 'out.mp4'];
-    const base = ['-i', inName, '-i', 'mix.wav'];
+    const base = ['-i', inName, '-i', 'mix.wav', ...(withSubs ? ['-f', 'concat', '-safe', '0', '-i', 'subs.txt'] : [])];
     const list = [];
     if (wantMix) {
       for (const lim of [',alimiter=limit=0.95:level=0', '']) {
@@ -506,8 +673,9 @@ export async function renderDub({ file, videoDur, segs, burmese, persona, pitch,
     });
     return list;
   };
-  const plans = [build(fxFilter)];
-  if (fxFilter) plans.push(build(''));
+  const plans = [build(fxFilter, !!subs)];
+  if (subs && buildFx(fx, null)) plans.push(build(buildFx(fx, null), false));
+  if (fxFilter) plans.push(build('', false));
   let code = -1, usedMix = false, fxFailed = false;
   outer: for (let p = 0; p < plans.length; p++) {
     for (const a of plans[p]) {
@@ -517,9 +685,10 @@ export async function renderDub({ file, videoDur, segs, burmese, persona, pitch,
     }
   }
   if (code !== 0) throw new Error('Video ပေါင်းစပ်မှု မအောင်မြင်ပါ (ffmpeg error)');
+  if (fx && fx.subs && fx.subs.on && !subs) fxFailed = true;
   const fellBack = wantMix && !usedMix;
   const out = await f.readFile('out.mp4');
-  for (const x of [temp ? inName : null, 'mix.wav', 'out.mp4']) { if (x) { try { await f.deleteFile(x); } catch {} } }
+  for (const x of [temp ? inName : null, 'mix.wav', 'out.mp4', ...(subs ? subs.files : [])]) { if (x) { try { await f.deleteFile(x); } catch {} } }
   setFFProgress(null);
   onProgress(1, 'ပြီးပါပြီ');
   return { video: new Blob([out.slice().buffer], { type: 'video/mp4' }), placed, fellBack, fxFailed, stats: dubStats(placed, maxTempo) };
