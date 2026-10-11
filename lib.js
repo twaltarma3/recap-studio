@@ -1,5 +1,7 @@
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { fetchFile } from '@ffmpeg/util';
+import PT16_URL from './pt16-burmese-bold.ttf?url';
+import AKK_URL from './akkhayar-robo.ttf?url';
 
 /* ---------- settings ---------- */
 export const cfg = {
@@ -427,7 +429,38 @@ const FONT_URLS = [
   'https://cdn.jsdelivr.net/fontsource/fonts/noto-sans-myanmar@latest/myanmar-400-normal.woff2'
 ];
 let curFace = null, fontLoaded = false;
-export const subFontFamily = custom => (custom ? `'${FONT_NAME}',` : '') + SYS_FONTS;
+// fonts bundled with the app: pick either one from the Font dropdown (no upload needed)
+const BUILTIN = {
+  pt16: { label: 'PT16 Burmese Bold', family: 'RecapPT16', url: PT16_URL },
+  akk: { label: 'အက္ခရာ ရိုဘို (Akkhayar Robo)', family: 'RecapAkkhayar', url: AKK_URL }
+};
+export const BUILTIN_FONTS = Object.entries(BUILTIN).map(([id, b]) => ({ id, label: b.label }));
+const bLoad = {};
+function loadBuiltinFont(id) {
+  const b = BUILTIN[id];
+  if (!b) return Promise.resolve(true);
+  if (!bLoad[id]) {
+    bLoad[id] = (async () => {
+      const r = await fetch(b.url);
+      if (!r.ok) throw new Error('Font ဖိုင် ဖတ်မရပါ');
+      const ab = await r.arrayBuffer();
+      let face;
+      try { face = new FontFace(b.family, ab, { weight: '100 900' }); await face.load(); }   // any weight -> no faux-bold
+      catch { face = new FontFace(b.family, ab); await face.load(); }
+      document.fonts.add(face);
+      return true;
+    })().catch(e => { delete bLoad[id]; throw e; });
+  }
+  return bLoad[id];
+}
+// sel: 'system' | 'pt16' | 'akk' | 'custom'
+export const subFontFamily = sel =>
+  (sel === 'custom' ? `'${FONT_NAME}',` : BUILTIN[sel] ? `'${BUILTIN[sel].family}',` : '') + SYS_FONTS;
+export async function ensureSubFont(sel) {
+  if (sel === 'custom') return loadSubFont();
+  if (BUILTIN[sel]) return loadBuiltinFont(sel);
+  return true;
+}
 
 async function installFont(ab) {
   const face = new FontFace(FONT_NAME, ab);
@@ -496,8 +529,8 @@ async function makeSubTrack(f, { file, videoDur, burmese, placed, fx }) {
   if (!sz || !sz.w || !sz.h) throw new Error('video size');
   const { w: W, h: H } = sz;
   const s = fx.subs;
-  const family = subFontFamily(s.custom);
-  if (s.custom) await loadSubFont();
+  const family = subFontFamily(s.font);
+  try { await ensureSubFont(s.font); } catch {}
   const px = Math.max(12, Math.round(H * (s.size / 100)));
   const font = `700 ${px}px ${family}`;
   try { await document.fonts.load(font, 'မြန်မာ'); } catch {}

@@ -7,10 +7,11 @@ const state = {
   step: 1, file: null, videoDur: 0, lang: 'zh', segs: [], sourceLines: [],
   burmese: [], personaId: 'TH', ...DEFAULTS, result: null, busy: false, origSegs: null,
   fxMirror: false, fxBlur: false, blurH: 15, blurY: 100, previewUrl: null, previewFor: null,
-  fxSubs: false, subS: 5, subY: 88, subC: '#ffffff', subO: '#000000', subCustom: false, fontOk: false
+  fxSubs: false, subS: 5, subY: 88, subC: '#ffffff', subO: '#000000', subFont: 'pt16', fontOk: false
 };
 const STEPS = ['Upload', 'Source Text', 'Burmese', 'Result'];
 const view = $('#view');
+const selFont = () => (state.subFont === 'custom' && !state.fontOk) ? 'system' : state.subFont;
 let page = 'free'; // 'free' | 'premium' | 'keys'
 
 function toast(msg) {
@@ -244,8 +245,12 @@ function previewBlock() {
         💬 မြန်မာစာတန်းထိုး ထည့်မည်
       </label>
       <div id="subBox" ${state.fxSubs ? '' : 'hidden'}>
-        <div class="row" style="margin-top:14px"><b>🔠 စာလုံး အရွယ်အစား</b><span id="ssv">${state.subS}%</span></div>
-        <input id="subS" type="range" min="3" max="12" value="${state.subS}" />
+        <div class="row" style="margin-top:14px"><b>🔠 စာလုံး အရွယ်အစား</b><span id="ssv">${(+state.subS).toFixed(1)}%</span></div>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:6px">
+          <button type="button" class="ghost" id="subSm" aria-label="လျှော့မည်" style="width:48px;height:48px;padding:0;margin:0;flex:none;font-size:26px;line-height:1">−</button>
+          <input id="subS" type="range" min="3" max="12" step="0.5" value="${state.subS}" style="flex:1;margin:0" />
+          <button type="button" class="ghost" id="subSp" aria-label="တိုးမည်" style="width:48px;height:48px;padding:0;margin:0;flex:none;font-size:26px;line-height:1">+</button>
+        </div>
         <div id="subYBox" ${state.fxBlur ? 'hidden' : ''}>
           <div class="row" style="margin-top:14px"><b>⇅ စာတန်း အပေါ်အောက် နေရာ</b><span id="syv">${state.subY}%</span></div>
           <input id="subY" type="range" min="5" max="95" value="${state.subY}" />
@@ -259,8 +264,9 @@ function previewBlock() {
         </div>
         <label>Font
           <select id="subFont">
-            <option value="system" ${state.subCustom ? '' : 'selected'}>ဖုန်း Font (default)</option>
-            <option value="custom" ${state.subCustom ? 'selected' : ''}>တင်ထားတဲ့ Font</option>
+            <option value="system" ${state.subFont === 'system' ? 'selected' : ''}>ဖုန်း Font (default)</option>
+            ${L.BUILTIN_FONTS.map(b => `<option value="${b.id}" ${state.subFont === b.id ? 'selected' : ''}>${b.label}</option>`).join('')}
+            <option value="custom" ${state.subFont === 'custom' ? 'selected' : ''} ${state.fontOk ? '' : 'disabled'}>ကိုယ်တိုင်တင်ထားတဲ့ Font</option>
           </select>
         </label>
         <div class="two">
@@ -270,7 +276,7 @@ function previewBlock() {
         </div>
         <p class="muted small" id="fontSt" style="margin:8px 0 0"></p>
       </div>
-      <p class="muted small">⚠ Mirror၊ Blur၊ စာတန်းထိုး တစ်ခုခု ဖွင့်ရင် Video ကို ပြန် encode လုပ်ရလို့ ပိုကြာပါတယ် (ဖုန်းမှာ မိနစ်များစွာ ကြာနိုင်)။ မဖွင့်ရင် အရင်လိုပဲ မြန်ပါတယ်။</p>
+      <p class="muted small">⚠ Mirror၊ Blur၊ စာတန်းထိုး တစ်ခုခု ဖွင့်ရင် Video ကို ပြန် encode လုပ်ရလို့ ပိုကြာပါတယ် (ဖုန်းမှာ ငါးမိနစ်ထက်မက ကြာနိုင်ပါတယ်)။ မဖွင့်ရင် အရင်လိုပဲ မြန်ပါတယ်။</p>
     </div>`;
 }
 
@@ -291,7 +297,7 @@ function bindPreview() {
       sb.style.color = state.subC;
       const o = state.subO;
       sb.style.textShadow = `-1.5px -1.5px 0 ${o},1.5px -1.5px 0 ${o},-1.5px 1.5px 0 ${o},1.5px 1.5px 0 ${o},0 2px 3px ${o}`;
-      sb.style.fontFamily = L.subFontFamily(state.subCustom && state.fontOk);
+      sb.style.fontFamily = L.subFontFamily(selFont());
       sb.style.top = (state.fxBlur ? (state.blurY / 100) * (100 - state.blurH) + state.blurH / 2 : state.subY) + '%';
     }
   };
@@ -312,20 +318,35 @@ function bindPreview() {
 
   /* subtitles */
   const fontStatus = () => {
-    const el = $('#fontSt');
-    if (el) el.textContent = state.fontOk ? '✅ Font တင်ထားပြီး' : 'Font မတင်ရသေးပါ — ဖုန်း Font ကို သုံးမည် (မြန်မာစာ ကွက်လပ်ပေါ်ရင် Font ဒေါင်းပါ)';
+    const o = $('#subFont option[value="custom"]'); if (o) o.disabled = !state.fontOk;
+    const el = $('#fontSt'); if (!el) return;
+    const b = L.BUILTIN_FONTS.find(x => x.id === state.subFont);
+    el.textContent = b ? `✅ ${b.label} ကို သုံးမည်`
+      : state.subFont === 'custom' ? (state.fontOk ? '✅ ကိုယ်တိုင်တင်ထားတဲ့ Font ကို သုံးမည်' : 'Font မတင်ရသေးပါ')
+      : 'ဖုန်း Font ကို သုံးမည် (မြန်မာစာ ကွက်လပ်ပေါ်ရင် တခြား Font ရွေးပါ)';
+  };
+  const useFont = async () => {
+    fontStatus();
+    try { await L.ensureSubFont(selFont()); } catch { toast('Font ဖွင့်မရပါ — ဖုန်း Font ကို သုံးပါမယ်'); }
+    apply();
   };
   $('#fxSubs').onchange = e => { state.fxSubs = e.target.checked; $('#subBox').hidden = !state.fxSubs; apply(); };
-  $('#subS').oninput = e => { state.subS = +e.target.value; $('#ssv').textContent = e.target.value + '%'; apply(); };
+  const setS = v => {
+    state.subS = Math.max(3, Math.min(12, Math.round(v * 2) / 2));
+    $('#subS').value = state.subS; $('#ssv').textContent = state.subS.toFixed(1) + '%'; apply();
+  };
+  $('#subS').oninput = e => setS(+e.target.value);
+  $('#subSm').onclick = () => setS(state.subS - 0.5);
+  $('#subSp').onclick = () => setS(state.subS + 0.5);
   $('#subY').oninput = e => { state.subY = +e.target.value; $('#syv').textContent = e.target.value + '%'; apply(); };
   $('#subC').oninput = e => { state.subC = e.target.value; apply(); };
   $('#subO').oninput = e => { state.subO = e.target.value; apply(); };
-  $('#subFont').onchange = e => { state.subCustom = e.target.value === 'custom'; apply(); };
+  $('#subFont').onchange = e => { state.subFont = e.target.value; useFont(); };
   $('#fontDl').onclick = async () => {
     const b = $('#fontDl'); b.disabled = true; b.textContent = 'ဒေါင်းနေသည်…';
     try {
       await L.downloadDefaultFont();
-      state.fontOk = true; state.subCustom = true; $('#subFont').value = 'custom';
+      state.fontOk = true; state.subFont = 'custom'; fontStatus(); $('#subFont').value = 'custom';
       toast('✅ Font အဆင်သင့်ပါပြီ');
     } catch (err) { toast((err.message || 'Font ဒေါင်းမရပါ').slice(0, 80)); }
     b.disabled = false; b.textContent = '⬇ Noto Sans Myanmar ဒေါင်းမည်';
@@ -335,7 +356,7 @@ function bindPreview() {
     const file = e.target.files[0]; if (!file) return;
     try {
       await L.saveSubFont(file);
-      state.fontOk = true; state.subCustom = true; $('#subFont').value = 'custom';
+      state.fontOk = true; state.subFont = 'custom'; fontStatus(); $('#subFont').value = 'custom';
       toast('✅ Font တင်ပြီးပါပြီ');
     } catch { toast('Font ဖိုင် မမှန်ပါ (.ttf / .otf / .woff2)'); }
     fontStatus(); apply();
@@ -343,6 +364,7 @@ function bindPreview() {
   v.onloadedmetadata = apply;
   fontStatus();
   L.loadSubFont().then(ok => { if (ok && !state.fontOk) { state.fontOk = true; fontStatus(); apply(); } });
+  useFont();
   apply();
 }
 
@@ -546,7 +568,7 @@ async function step4() {
       persona, pitch: state.pitch, rate: state.rate,
       fx: {
         mirror: state.fxMirror, blur: state.fxBlur, blurH: state.blurH, blurY: state.blurY,
-        subs: { on: state.fxSubs, size: state.subS, y: state.subY, color: state.subC, outline: state.subO, custom: state.subCustom && state.fontOk }
+        subs: { on: state.fxSubs, size: state.subS, y: state.subY, color: state.subC, outline: state.subO, font: selFont() }
       }, keepTalk: state.keepTalk, keepGap: state.keepGap,
       offset: state.offset, maxTempo: state.maxTempo, dubGain: state.dubGain, onProgress: setProg
     });
