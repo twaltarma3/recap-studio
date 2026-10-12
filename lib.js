@@ -697,6 +697,7 @@ function dubStats(placed, maxTempo) {
 export async function renderDub({ file, videoDur, segs, burmese, persona, pitch, rate = 0, fx = null, keepTalk = 0, keepGap = 0, offset = 0, maxTempo = 1.7, dubGain = 1.6, onProgress }) {
   const n = segs.length;
   const f = await getFFmpeg();
+  const flog = []; const onLog = ({ message }) => { flog.push(String(message)); if (flog.length > 400) flog.shift(); }; try { f.on('log', onLog); } catch {}
   const ctx = new OfflineAudioContext(1, Math.ceil((videoDur + 30) * SR), SR);
 
   // 1) TTS (3 in parallel) — 0..50%
@@ -820,23 +821,27 @@ export async function renderDub({ file, videoDur, segs, burmese, persona, pitch,
   if (subs && ovl) { const f2 = buildFx(fx, subs, geo, 0); plans.push(build(f2, true, false)); }       // without watermark / logo
   if ((subs || ovl) && buildFx(fx, null, geo, 0)) plans.push(build(buildFx(fx, null, geo, 0), false, false));
   if (fxFilter) plans.push(build('', false));
-  let code = -1, usedMix = false, fxFailed = false;
+  let code = -1, usedMix = false, fxFailed = false, diag = '';
   outer: for (let p = 0; p < plans.length; p++) {
     for (const a of plans[p]) {
+      flog.length = 0; flog.push(`#plan ${p + 1} ${a.mix ? 'mix' : 'nomix'}`);
       code = await f.exec(a.args);
+      if (code !== 0 && !diag) diag = flog.filter(x => x.length < 300).slice(-14).join('\n');
       if (code === 0) { usedMix = a.mix; fxFailed = !!fxFilter && p > 0; break outer; }
       try { await f.deleteFile('out.mp4'); } catch {}
     }
   }
   if (code !== 0) throw new Error('Video ပေါင်းစပ်မှု မအောင်မြင်ပါ (ffmpeg error)');
   if (fx && fx.subs && fx.subs.on && !subs) fxFailed = true;
+  try { f.off('log', onLog); } catch {}
+  if (fx && fx.subs && fx.subs.on && !subs) diag = (diag ? diag + '\n' : '') + 'subtitle track build failed' + (subs === null ? '' : '');
   const fontFailed = !!(subs && subs.fontFailed);
   const fellBack = wantMix && !usedMix;
   const out = await f.readFile('out.mp4');
   for (const x of [temp ? inName : null, 'mix.wav', 'out.mp4', ovl ? 'ovl.png' : null, ...(subs ? subs.files : [])]) { if (x) { try { await f.deleteFile(x); } catch {} } }
   setFFProgress(null);
   onProgress(1, 'ပြီးပါပြီ');
-  return { video: new Blob([out.slice().buffer], { type: 'video/mp4' }), placed, fellBack, fxFailed, fontFailed, stats: dubStats(placed, maxTempo) };
+  return { video: new Blob([out.slice().buffer], { type: 'video/mp4' }), placed, fellBack, fxFailed, fontFailed, diag, geoOk: !!geo, ovlOk: ovl, subsOk: !!subs, stats: dubStats(placed, maxTempo) };
 }
 
 /* ---------- SRT ---------- */

@@ -805,7 +805,7 @@ async function step4() {
   let wake; try { wake = await navigator.wakeLock?.request('screen'); } catch {}
   try {
     const persona = L.PERSONAS.find(p => p.id === state.personaId);
-    const { video, placed, fellBack, fxFailed, fontFailed, stats } = await L.renderDub({
+    const { video, placed, fellBack, fxFailed, fontFailed, diag, geoOk, ovlOk, subsOk, stats } = await L.renderDub({
       file: state.file, videoDur: state.videoDur, segs: state.segs, burmese: state.burmese,
       persona, pitch: state.pitch, rate: state.rate,
       fx: {
@@ -817,6 +817,7 @@ async function step4() {
       }, keepTalk: state.keepTalk, keepGap: state.keepGap,
       offset: state.offset, maxTempo: state.maxTempo, dubGain: state.dubGain, onProgress: setProg
     });
+    state.diag = `geo:${geoOk} subs:${subsOk} overlay:${ovlOk} fxFailed:${fxFailed}\n${diag || ''}`;
     state.result = { video, url: URL.createObjectURL(video), srt: L.buildSrt(state.burmese, placed), stats };
     showResult();
     if (fontFailed) toast('Font ဖွင့်မရလို့ ဖုန်း Font နဲ့ စာတန်းထိုး ထည့်ထားပါတယ်');
@@ -855,6 +856,7 @@ function showResult() {
     <h2>ရလဒ်များ (Results)</h2>
     <video src="${state.result.url}" controls playsinline></video>
     ${statBlock()}
+    ${state.diag && /fxFailed:true|false\n[^]/.test(state.diag) && /fxFailed:true|failed|Error|error/i.test(state.diag) ? `<details style="margin:10px 0"><summary class="muted small">🛠 Effect log (အမှားရှာရန်)</summary><pre id="diagTxt" style="white-space:pre-wrap;font-size:11px;max-height:220px;overflow:auto">${state.diag.replace(/</g, '&lt;')}</pre><button class="btn block" id="diagCp" type="button">📋 Log ကူးမည်</button></details>` : ''}
     <button id="dl" class="btn primary">⬇ Video Download (.mp4)</button>
     <button id="srt" class="btn block">Download Subtitles (.srt)</button>
     <div class="row" style="margin-top:14px">
@@ -862,6 +864,7 @@ function showResult() {
       <button id="again" class="ghost">Video အသစ်</button>
     </div>`;
   const base = state.file.name.replace(/\.[^.]+$/, '');
+  $('#diagCp')?.addEventListener('click', async () => { try { await navigator.clipboard.writeText(state.diag); toast('ကူးပြီးပါပြီ'); } catch { toast('ကူးမရပါ'); } });
   $('#dl').onclick = () => download(state.result.video, base + '_recap.mp4');
   $('#srt').onclick = () => download(new Blob([state.result.srt], { type: 'text/plain' }), base + '_burmese.srt');
   $('#shorten')?.addEventListener('click', async () => {
