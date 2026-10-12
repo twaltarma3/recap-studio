@@ -617,8 +617,15 @@ function step1() {
       <b>${state.file ? state.file.name : 'နှိပ်၍ Video File ရွေးချယ်ပါ'}</b>
       <span class="muted small">${state.file ? (state.file.size / 1048576).toFixed(1) + ' MB' : 'MP4, MOV, WEBM, MKV · ၁၀ မိနစ်အထိ'}</span>
     </label>
+    <div style="margin:10px 0 0">
+      <div style="display:flex;gap:8px;align-items:center">
+        <input id="vUrl" type="url" inputmode="url" placeholder="🔗 သို့မဟုတ် Video လင့် (တိုက်ရိုက် .mp4) ကူးထည့်ပါ" style="flex:1;margin:0" />
+        <button id="vGet" type="button" class="btn" style="margin:0;flex:none;min-height:48px">ဆွဲမည်</button>
+      </div>
+      <p id="vSt" class="muted small" style="margin:6px 0 0"></p>
+    </div>
     ${state.file ? previewBlock() : ''}
-    <label>မူရင်းစကားပြောဘာသာ
+    <label>မူရင်းစကားပြောဘာသာ"
       <select id="lang">
         ${[['zh', 'Chinese 中文'], ['en', 'English'], ['ja', 'Japanese'], ['ko', 'Korean'], ['hi', 'Hindi'], ['auto', 'Auto detect']]
           .map(([v, t]) => `<option value="${v}" ${v === state.lang ? 'selected' : ''}>${t}</option>`).join('')}
@@ -626,6 +633,30 @@ function step1() {
     </label>
     <button id="next" class="btn primary" ${state.file ? '' : 'disabled'}>စာသားထုတ်မည် (Next)</button>`;
   $('#f').onchange = e => { state.file = e.target.files[0] || null; state.segs = []; state.origSegs = null; L.forgetInput(); step1(); };
+  $('#vGet').onclick = async () => {
+    const u = $('#vUrl').value.trim(), st = $('#vSt'), btn = $('#vGet');
+    if (!/^https?:\/\//i.test(u)) { st.textContent = 'လင့်ကို http:// သို့ https:// နဲ့ စပြီး ထည့်ပါ'; return; }
+    btn.disabled = true; st.textContent = '⏳ ဆွဲနေသည်…';
+    try {
+      const r = await fetch(u);
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const total = +r.headers.get('content-length') || 0, rd = r.body.getReader(), parts = []; let got = 0;
+      for (;;) {
+        const { done, value } = await rd.read(); if (done) break;
+        parts.push(value); got += value.length;
+        st.textContent = `⏳ ဆွဲနေသည်… ${(got / 1048576).toFixed(1)}${total ? ' / ' + (total / 1048576).toFixed(1) : ''} MB`;
+      }
+      const type = (r.headers.get('content-type') || '').split(';')[0];
+      if (type && !/^video\/|octet-stream/i.test(type)) throw new Error('video မဟုတ်ပါ (' + type + ')');
+      let name = decodeURIComponent((u.split('?')[0].split('/').pop() || 'video')).slice(0, 60);
+      if (!/\.(mp4|mov|webm|mkv|m4v)$/i.test(name)) name += '.mp4';
+      state.file = new File(parts, name, { type: type && type.startsWith('video/') ? type : 'video/mp4' });
+      state.segs = []; state.origSegs = null; L.forgetInput(); step1();
+    } catch (e) {
+      st.textContent = '❌ ဆွဲမရပါ — ' + (e.message === 'Failed to fetch' ? 'ဒီ website က တိုက်ရိုက်ဆွဲခွင့်မပေးပါ (YouTube / Facebook / TikTok လိုမျိုးလင့်တွေ မရပါ)။ ဖုန်းထဲ ဒေါင်းပြီး ရွေးပါ' : e.message);
+      btn.disabled = false;
+    }
+  };
   $('#lang').onchange = e => { state.lang = e.target.value; };
   if (state.file) bindPreview();
   $('#next').onclick = () => {
