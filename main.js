@@ -321,7 +321,8 @@ function previewBlock() {
     <div class="panel fx">
       <b>🎞 Video Effects <span class="muted small" style="font-weight:400">(လိုမှ ဖွင့်ပါ)</span></b>
       <p class="muted small" style="margin:6px 0 0">အောက်က Tab တွေမှာ ရွေးပြီး Preview မှာ ကြည့်ချိန်ပါ။ (Preview မှာ အသံမပါပါ)</p>
-      <div id="pvBox" style="position:relative;margin:12px auto 0;border-radius:14px;overflow:hidden;background:#000">
+      <div id="pvSticky" style="position:sticky;top:64px;z-index:4;background:#1e1e22;margin:10px -6px 0;padding:6px 6px 4px;border-radius:14px;box-shadow:0 8px 14px -6px rgba(0,0,0,.7)">
+      <div id="pvBox" style="position:relative;margin:0 auto;border-radius:14px;overflow:hidden;background:#000">
         <div id="pvInner" style="position:relative;width:100%;height:100%;transform-origin:center">
           <video id="pvBg" src="${url}" playsinline muted preload="metadata" style="display:none;position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:blur(18px) brightness(.8);transform:scale(1.15);margin:0;border-radius:0"></video>
           <video id="pvVid" src="${url}" playsinline muted preload="metadata" style="display:block;position:relative;width:100%;margin:0;border-radius:0"></video>
@@ -335,6 +336,7 @@ function previewBlock() {
         <button class="ghost" id="pvPlay" type="button">▶</button>
         <input id="pvSeek" type="range" min="0" max="1000" value="0" style="flex:1" />
         <span id="pvT" class="muted small" style="white-space:nowrap">0:00</span>
+      </div>
       </div>
       <div class="tabs" id="fxTabs">
         <button type="button" data-tab="video">🎬 Video</button>
@@ -447,16 +449,12 @@ function bindPreview() {
   const box = $('#pvBox'), inner = $('#pvInner'), bg = $('#pvBg');
   const apply = () => {
     const r = RATIO_NUM[state.fxRatio];
-    if (r) {
-      box.style.aspectRatio = String(r); box.style.width = `min(100%, calc(62vh * ${r}))`;
-      inner.style.position = 'absolute'; inner.style.inset = '0';
-      v.style.height = '100%'; v.style.objectFit = state.fxFit === 'pad' ? 'contain' : 'cover';
-      bg.style.display = state.fxFit === 'pad' ? 'block' : 'none';
-    } else {
-      box.style.aspectRatio = ''; box.style.width = '100%';
-      inner.style.position = 'relative'; inner.style.inset = ''; inner.style.height = '';
-      v.style.height = ''; v.style.objectFit = ''; bg.style.display = 'none';
-    }
+    const ar = r || (v.videoWidth && v.videoHeight ? v.videoWidth / v.videoHeight : 16 / 9);
+    box.style.aspectRatio = String(ar); box.style.width = `min(100%, calc(36vh * ${ar}))`;
+    inner.style.position = 'absolute'; inner.style.inset = '0';
+    v.style.height = '100%'; v.style.objectFit = (r && state.fxFit === 'crop') ? 'cover' : 'contain';
+    bg.style.display = (r && state.fxFit === 'pad') ? 'block' : 'none';
+    const hd = document.querySelector('header.top'); if (hd) $('#pvSticky').style.top = hd.offsetHeight + 'px';
     inner.style.transform = `${state.fxMirror ? 'scaleX(-1) ' : ''}scale(${state.fxZoom / 100})`;
     const fb = $('#fitBox'); if (fb) fb.hidden = !r;
     document.querySelectorAll('#ratioChips .chip').forEach(c => c.classList.toggle('on', c.dataset.r === state.fxRatio));
