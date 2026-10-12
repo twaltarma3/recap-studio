@@ -314,22 +314,22 @@ const GEMINI_MODELS = ['gemini-flash-latest', 'gemini-2.5-flash', 'gemini-2.5-fl
 const GEM_DIRECT = 'https://generativelanguage.googleapis.com';
 const isLocErr = m => /location is not supported/i.test(m || '');
 async function geminiFetch(path, init, key) {
-  // Google blocks some countries (e.g. Myanmar) when called straight from the phone -> go through the Worker instead.
-  let viaWorker = false; try { viaWorker = localStorage.getItem('gemViaWorker') === '1'; } catch {}
+  // Google blocks some countries (e.g. Myanmar). Try straight from the phone first (works with a VPN), then via the Worker.
   const headers = { ...(init.headers || {}), 'x-goog-api-key': key };
   const go = base => fetch(base + path, { ...init, headers });
-  if (viaWorker) return go(cfg.workerUrl + '/gemini');
-  const r = await go(GEM_DIRECT);
-  if (r.status === 400) {
-    let m = ''; try { m = (await r.clone().json()).error?.message || ''; } catch {}
-    if (isLocErr(m)) {
-      const w = await go(cfg.workerUrl + '/gemini');
-      if (w.status !== 404 && w.status !== 403) { try { localStorage.setItem('gemViaWorker', '1'); } catch {} return w; }
-      const e = new Error('Gemini က သင့်နေရာကို ပိတ်ထားပါတယ် — Worker အသစ် (worker.js) ကို Cloudflare မှာ အစားထိုးပါ၊ ဒါမှမဟုတ် VPN ဖွင့်ပါ');
-      e.status = 400; e.loc = true; throw e;
+  let last = null;
+  for (const base of [GEM_DIRECT, cfg.workerUrl + '/gemini']) {
+    let r;
+    try { r = await go(base); } catch (e) { last = last || e; continue; }
+    if (r.status === 400) {
+      let m = ''; try { m = (await r.clone().json()).error?.message || ''; } catch {}
+      if (isLocErr(m)) { last = last && last.status ? last : r; continue; }       // blocked from this route -> try the next one
     }
+    if (base !== GEM_DIRECT && (r.status === 404 || r.status === 403)) continue;  // old Worker without the Gemini route
+    return r;
   }
-  return r;
+  if (last instanceof Response) return last;                                      // location error from every route
+  throw last || new Error('Failed to fetch');
 }
 async function geminiCall(prompt, key, model) {
   const r = await geminiFetch(`/v1beta/models/${model}:generateContent`, {
