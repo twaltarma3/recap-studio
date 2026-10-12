@@ -5,7 +5,7 @@ import * as L from './lib.js';
 const $ = (s, r = document) => r.querySelector(s);
 const DEFAULTS = { pitch: 10, rate: 20, keepTalk: 0, keepGap: 0.3, offset: 0, maxTempo: 2.0, dubGain: 1.8 };
 const state = {
-  step: 1, file: null, videoDur: 0, lang: 'auto', segs: [], sourceLines: [],
+  step: 1, showSrc: false, file: null, videoDur: 0, lang: 'auto', segs: [], sourceLines: [],
   burmese: [], personaId: 'TH', ...DEFAULTS, result: null, busy: false, origSegs: null,
   fxMirror: false, fxBlur: false, blurH: 15, blurY: 100, blurS: 50, blurO: 100, previewUrl: null, previewFor: null,
   fxSubs: false, subS: 5, subY: 88, subC: '#ffffff', subO: '#000000', subFont: 'pt16', fontOk: false
@@ -32,9 +32,10 @@ const download = (blob, name) => { const a = document.createElement('a'); a.href
 const canGo = n => !state.busy && n !== state.step &&
   (n === 1 || (n === 2 && state.segs.length > 0) || (n === 3 && state.burmese.length > 0) || (n === 4 && !!state.result));
 function renderStepper() {
-  $('#stepper').innerHTML = STEPS.map((s, i) => {
-    const n = i + 1, cls = n === state.step ? 'on' : n < state.step ? 'done' : '';
-    return `<span class="${cls} ${canGo(n) ? 'link' : ''}" data-n="${n}"><b>${n}</b>${s}</span>`;
+  const vis = STEPS.map((s, i) => ({ s, n: i + 1 })).filter(x => x.n !== 2 || state.showSrc || state.step === 2);   // Source Text tab only appears when it is needed
+  $('#stepper').innerHTML = vis.map((x, k) => {
+    const n = x.n, cls = n === state.step ? 'on' : n < state.step ? 'done' : '';
+    return `<span class="${cls} ${canGo(n) ? 'link' : ''}" data-n="${n}"><b>${k + 1}</b>${x.s}</span>`;
   }).join('');
   $('#stepper').querySelectorAll('.link').forEach(el => { el.onclick = () => go(+el.dataset.n); });
 }
@@ -208,8 +209,8 @@ function pageKeys() {
 
     <div class="kbox">
       <div class="krow">
-        <b>Gemini API Key<br><span class="muted small" style="font-weight:400">(အလိုအလျောက် ဘာသာပြန်ရန် — မထည့်လည်းရ)</span></b>
-        <div class="badges"><span class="badge" id="gemBadge"></span></div>
+        <b>Gemini API Key<br><span class="muted small" style="font-weight:400">(အလိုအလျောက် ဘာသာပြန်ရန်)</span></b>
+        <div class="badges"><span class="badge req">Required</span><span class="badge" id="gemBadge"></span></div>
       </div>
       <p style="margin:8px 0 10px"><a class="link small" href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Get Free Key ↗</a></p>
       <div class="keyfield">
@@ -270,7 +271,7 @@ function pageKeys() {
   const gupd = () => {
     const k = localStorage.getItem('geminiKey') || '';
     const dirty = $('#kGem').value.trim() !== k, b = $('#gemBadge');
-    b.textContent = dirty ? 'Unsaved' : k ? 'Active' : 'Optional';
+    b.textContent = dirty ? 'Unsaved' : k ? 'Active' : 'Not set';
     b.className = 'badge' + (!dirty && k ? ' ok' : '');
   };
   $('#kGem').oninput = gupd;
@@ -540,9 +541,29 @@ function step1() {
   $('#lang').onchange = e => { state.lang = e.target.value; };
   if (state.file) bindPreview();
   $('#next').onclick = () => {
-    if (!L.cfg.aaiKey) { toast('API Key အရင်ထည့်ပါ'); openPage('keys'); return; }
-    state.segs.length ? go(2) : transcribeFlow();
+    if (!L.cfg.aaiKey || !L.cfg.geminiKey) { toast('AssemblyAI နဲ့ Gemini Key နှစ်ခုလုံး အရင်ထည့်ပါ'); openPage('keys'); return; }
+    if (!state.segs.length) transcribeFlow();
+    else if (state.burmese.length) go(3);
+    else autoTranslate();
   };
+}
+
+// Gemini translates the transcript; on success jump straight to the Burmese tab, otherwise open Source Text so the user can fix / paste by hand
+async function autoTranslate() {
+  if (!L.cfg.geminiKey || !state.segs.length) return false;
+  state.busy = true; renderStepper();
+  view.innerHTML = `<h2>ဘာသာပြန်နေသည်…</h2><p class="muted">ခဏစောင့်ပါ။</p>${bar()}`;
+  setProg(0.5, 'ဘာသာပြန်နေသည်');
+  try {
+    const t = await L.geminiTranslate(state.segs, s => setProg(0.6, s));
+    state.busy = false;
+    if (t.length === state.segs.length) { state.burmese = t; go(3); toast('ဘာသာပြန်ပြီးပါပြီ'); return true; }
+    state.burmese = state.segs.map((_, i) => t[i] || '');
+    state.showSrc = true; go(2); toast(`အရေအတွက် မကိုက်ပါ (${t.length}/${state.segs.length}) — စစ်ပြီး ပြင်ပါ`); return true;
+  } catch (e) {
+    state.busy = false; state.showSrc = true; go(2);
+    toast(e.message === 'Failed to fetch' ? 'ဘာသာပြန် မရပါ — ကိုယ်တိုင် ဆက်လုပ်ပါ' : e.message); return true;
+  }
 }
 
 async function transcribeFlow() {
@@ -559,16 +580,8 @@ async function transcribeFlow() {
     state.origSegs = null;
     state.segs = await L.transcribe(wav, state.lang, st => { tick = Math.min(tick + 0.04, 0.95); setProg(tick, names[st] || st); });
     state.burmese = []; state.busy = false;
-    if (L.cfg.geminiKey && state.segs.length) {          // Gemini key set -> translate straight away
-      state.busy = true; setProg(0.96, 'ဘာသာပြန်နေသည်');
-      try {
-        const t = await L.geminiTranslate(state.segs, s => setProg(0.97, s));
-        state.busy = false;
-        if (t.length === state.segs.length) { state.burmese = t; go(3); toast('ဘာသာပြန်ပြီးပါပြီ'); return; }
-        state.burmese = state.segs.map((_, i) => t[i] || '');
-        go(2); toast(`အရေအတွက် မကိုက်ပါ (${t.length}/${state.segs.length}) — စစ်ပြီး ပြင်ပါ`); return;
-      } catch (e) { state.busy = false; go(2); toast(e.message === 'Failed to fetch' ? 'ဘာသာပြန် မရပါ — ကိုယ်တိုင် ဆက်လုပ်ပါ' : e.message); return; }
-    }
+    if (await autoTranslate()) return;
+    state.showSrc = true;
     go(2);
   } catch (e) {
     view.innerHTML = `<h2>အမှားရှိနေပါသည်</h2>`; showErr(e);
@@ -683,7 +696,7 @@ function step3() {
     return lines;
   };
   $('#mm').oninput = () => { state.burmese = read(); };
-  $('#back').onclick = () => { state.burmese = read(); go(2); };
+  $('#back').onclick = () => { state.burmese = read(); go(state.showSrc ? 2 : 1); };
   $('#pitch').oninput = e => { state.pitch = +e.target.value; $('#pv').textContent = (state.pitch >= 0 ? '+' : '') + state.pitch + 'Hz'; };
   $('#rate').oninput = e => { state.rate = +e.target.value; $('#rv').textContent = (state.rate >= 0 ? '+' : '') + state.rate + '%'; };
   $('#gap').oninput = e => { state.keepGap = +e.target.value / 100; $('#gv').textContent = e.target.value + '%'; };
@@ -800,12 +813,12 @@ function showResult() {
     const t = L.buildShortenPrompt(state.segs, state.burmese, state.result.stats.longLines);
     try { await navigator.clipboard.writeText(t); toast('Prompt ကူးပြီးပါပြီ — Gemini မှာ paste လုပ်ပါ'); } catch { toast('ကူးမရပါ'); }
   });
-  $('#toStep2')?.addEventListener('click', () => go(2));
+  $('#toStep2')?.addEventListener('click', () => { state.showSrc = true; go(2); });
   $('#back').onclick = () => { state.result = null; go(3); };
-  $('#again').onclick = () => { Object.assign(state, { file: null, segs: [], origSegs: null, burmese: [], result: null }); go(1); };
+  $('#again').onclick = () => { Object.assign(state, { showSrc: false, file: null, segs: [], origSegs: null, burmese: [], result: null }); go(1); };
 }
 
 /* ---------------- start ---------------- */
 buildMenu();
-if (!L.cfg.aaiKey) page = 'keys';
+if (!L.cfg.aaiKey || !L.cfg.geminiKey) page = 'keys';
 render();
