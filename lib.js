@@ -9,7 +9,10 @@ const WORKER_URL = 'https://recap-proxy.twaltarma3.workers.dev';
 export const cfg = {
   get workerUrl() { return WORKER_URL; },
   get aaiKey() { return (localStorage.getItem('aaiKey') || '').trim(); },
-  get geminiKey() { return (localStorage.getItem('geminiKey') || '').trim(); }
+  get geminiKey() { return (localStorage.getItem('geminiKey') || '').trim(); },
+  get orKey() { return (localStorage.getItem('orKey') || '').trim(); },
+  get orModel() { return (localStorage.getItem('orModel') || '').trim(); },
+  get aiReady() { return !!(this.orKey || this.geminiKey); }          // OpenRouter or Gemini key -> auto translate
 };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
@@ -361,7 +364,7 @@ export async function geminiPing() {
   if (r.status === 400 || r.status === 403) { let m = ''; try { m = (await r.json()).error?.message || ''; } catch {} throw new Error(isLocErr(m) ? 'Gemini က သင့်နေရာကို ပိတ်ထားပါတယ်' : 'Key မမှန်ပါ'); }
   if (!r.ok) throw new Error('Server ပြန်ကြားချက်: ' + r.status);
 }
-export async function geminiTranslate(segs, onStatus) {
+async function geminiTranslateOnly(segs, onStatus) {
   const key = cfg.geminiKey;
   if (!key) throw new Error('API Key Settings ထဲမှာ Gemini Key ကို အရင်ထည့်ပါ');
   const prompt = buildPrompt(segs);
@@ -383,6 +386,64 @@ export async function geminiTranslate(segs, onStatus) {
   }
   if (best) return best;                                          // caller shows the count mismatch
   throw lastErr || new Error('ဘာသာပြန်မရပါ');
+}
+
+/* ---------- OpenRouter (works from Myanmar without a VPN) ---------- */
+export const OR_DEFAULT_MODELS = ['google/gemma-4-31b-it:free', 'nvidia/nemotron-3-ultra-550b-a55b:free', 'google/gemma-4-26b-a4b-it:free'];
+const OR_URL = 'https://openrouter.ai/api/v1';
+async function orCall(prompt, key, model) {
+  const r = await fetch(OR_URL + '/chat/completions', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: 'Bearer ' + key, 'X-Title': 'Recap Studio' },
+    body: JSON.stringify({ model, temperature: 0.7, messages: [{ role: 'user', content: prompt }] })
+  });
+  let j = null; try { j = await r.json(); } catch {}
+  const m = j?.error?.message || '';
+  if (!r.ok || j?.error) {
+    const st = r.ok ? (j.error.code || 500) : r.status;
+    const e = new Error(st === 401 ? 'OpenRouter Key မမှန်ပါ' :
+      st === 402 ? 'OpenRouter credit မလောက်ပါ' :
+      st === 429 ? 'OpenRouter သုံးခွင့် ပြည့်နေပါတယ် — ခဏနေမှ ပြန်စမ်းပါ' :
+      `OpenRouter ${st}: ${String(m).slice(0, 120)}`);
+    e.status = st; throw e;
+  }
+  const t = j?.choices?.[0]?.message?.content;
+  if (!t) throw new Error('AI က ပြန်စာ မပေးပါ');
+  return t;
+}
+export async function orPing() {
+  const r = await fetch(OR_URL + '/auth/key', { headers: { authorization: 'Bearer ' + cfg.orKey } });
+  if (r.status === 401 || r.status === 403) throw new Error('Key မမှန်ပါ');
+  if (!r.ok) throw new Error('Server ပြန်ကြားချက်: ' + r.status);
+}
+async function orTranslate(segs, onStatus) {
+  const key = cfg.orKey;
+  const models = [...(cfg.orModel ? [cfg.orModel] : []), ...OR_DEFAULT_MODELS.filter(m => m !== cfg.orModel)];
+  const prompt = buildPrompt(segs);
+  let best = null, lastErr;
+  for (let round = 0; round < 3; round++) {
+    for (const model of models) {
+      try {
+        onStatus?.(round ? `ပြန်ကြိုးစားနေသည် (${round})` : 'ဘာသာပြန်နေသည်');
+        const arr = parseTranslations(await orCall(prompt, key, model));
+        if (!best || Math.abs(arr.length - segs.length) < Math.abs(best.length - segs.length)) best = arr;
+        if (arr.length === segs.length) return arr;
+        lastErr = new Error('count');
+      } catch (e) {
+        lastErr = e;
+        if (e.status === 401 || e.status === 402) throw e;      // key / credit problem: retrying cannot help
+      }
+    }
+    await sleep(2500 * (round + 1));
+  }
+  if (best) return best;
+  throw lastErr || new Error('ဘာသာပြန်မရပါ');
+}
+
+// translate with whichever key is set (OpenRouter first: it works from Myanmar without a VPN)
+export async function aiTranslate(segs, onStatus) {
+  if (cfg.orKey) return orTranslate(segs, onStatus);
+  return geminiTranslateOnly(segs, onStatus);
 }
 
 /* ---------- TTS ---------- */

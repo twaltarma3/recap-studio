@@ -209,8 +209,29 @@ function pageKeys() {
 
     <div class="kbox">
       <div class="krow">
-        <b>Gemini API Key<br><span class="muted small" style="font-weight:400">(အလိုအလျောက် ဘာသာပြန်ရန်)</span></b>
-        <div class="badges"><span class="badge req">Required</span><span class="badge" id="gemBadge"></span></div>
+        <b>OpenRouter API Key<br><span class="muted small" style="font-weight:400">(အလိုအလျောက် ဘာသာပြန်ရန် — VPN မလို)</span></b>
+        <div class="badges"><span class="badge req">Required*</span><span class="badge" id="orBadge"></span></div>
+      </div>
+      <p style="margin:8px 0 10px"><a class="link small" href="https://openrouter.ai/keys" target="_blank" rel="noopener">Get Free Key ↗</a></p>
+      <div class="keyfield">
+        <input id="kOr" type="password" autocomplete="off" placeholder="OpenRouter API Key (sk-or-...)" />
+        <button class="icon" id="oDel" title="ဖျက်မည်">🗑</button>
+        <button class="icon" id="oEye" title="ပြမည်">👁</button>
+      </div>
+      <label class="small" style="margin-top:10px">Model (မထည့်လည်းရ)
+        <input id="kOrModel" type="text" autocomplete="off" placeholder="google/gemma-4-31b-it:free" />
+      </label>
+      <div class="two">
+        <button class="btn" id="oTest">🔎 စစ်ဆေးမည်</button>
+        <button class="btn primary" id="oSave">သိမ်းမည်</button>
+      </div>
+      <p class="muted small" style="margin:8px 0 0">* OpenRouter သို့ Gemini Key နှစ်ခုထဲက တစ်ခုခု လိုပါတယ်။</p>
+    </div>
+
+    <div class="kbox">
+      <div class="krow">
+        <b>Gemini API Key<br><span class="muted small" style="font-weight:400">(VPN လိုတတ်သည် — မထည့်လည်းရ)</span></b>
+        <div class="badges"><span class="badge" id="gemBadge"></span></div>
       </div>
       <p style="margin:8px 0 10px"><a class="link small" href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Get Free Key ↗</a></p>
       <div class="keyfield">
@@ -266,12 +287,34 @@ function pageKeys() {
   };
   upd();
 
+  /* OpenRouter card */
+  $('#kOr').value = localStorage.getItem('orKey') || '';
+  $('#kOrModel').value = localStorage.getItem('orModel') || '';
+  const oupd = () => {
+    const k = localStorage.getItem('orKey') || '';
+    const dirty = $('#kOr').value.trim() !== k, b = $('#orBadge');
+    b.textContent = dirty ? 'Unsaved' : k ? 'Active' : 'Not set';
+    b.className = 'badge' + (!dirty && k ? ' ok' : '');
+  };
+  const osave = () => { localStorage.setItem('orKey', $('#kOr').value.trim()); localStorage.setItem('orModel', $('#kOrModel').value.trim()); oupd(); };
+  $('#kOr').oninput = oupd;
+  $('#oEye').onclick = () => { const i = $('#kOr'); i.type = i.type === 'password' ? 'text' : 'password'; };
+  $('#oDel').onclick = () => { $('#kOr').value = ''; localStorage.removeItem('orKey'); oupd(); toast('Key ဖျက်ပြီးပါပြီ'); };
+  $('#oSave').onclick = () => { osave(); toast('သိမ်းပြီးပါပြီ'); };
+  $('#oTest').onclick = async () => {
+    osave();
+    if (!L.cfg.orKey) { toast('OpenRouter Key ကို အရင်ထည့်ပါ'); return; }
+    try { await L.orPing(); toast('✅ Key မှန်ပါတယ်'); }
+    catch (e) { toast(e.message === 'Failed to fetch' ? 'အင်တာနက် ချိတ်ဆက်မရပါ' : e.message); }
+  };
+  oupd();
+
   /* Gemini card */
   $('#kGem').value = localStorage.getItem('geminiKey') || '';
   const gupd = () => {
     const k = localStorage.getItem('geminiKey') || '';
     const dirty = $('#kGem').value.trim() !== k, b = $('#gemBadge');
-    b.textContent = dirty ? 'Unsaved' : k ? 'Active' : 'Not set';
+    b.textContent = dirty ? 'Unsaved' : k ? 'Active' : 'Optional';
     b.className = 'badge' + (!dirty && k ? ' ok' : '');
   };
   $('#kGem').oninput = gupd;
@@ -539,7 +582,7 @@ function step1() {
   $('#lang').onchange = e => { state.lang = e.target.value; };
   if (state.file) bindPreview();
   $('#next').onclick = () => {
-    if (!L.cfg.aaiKey || !L.cfg.geminiKey) { toast('AssemblyAI နဲ့ Gemini Key နှစ်ခုလုံး အရင်ထည့်ပါ'); openPage('keys'); return; }
+    if (!L.cfg.aaiKey || !L.cfg.aiReady) { toast('AssemblyAI Key နဲ့ OpenRouter (ဒါမှမဟုတ် Gemini) Key အရင်ထည့်ပါ'); openPage('keys'); return; }
     if (!state.segs.length) transcribeFlow();
     else if (state.burmese.length) go(3);
     else autoTranslate();
@@ -548,12 +591,12 @@ function step1() {
 
 // Gemini translates the transcript; on success jump straight to the Burmese tab, otherwise open Source Text so the user can fix / paste by hand
 async function autoTranslate() {
-  if (!L.cfg.geminiKey || !state.segs.length) return false;
+  if (!L.cfg.aiReady || !state.segs.length) return false;
   state.busy = true; renderStepper();
   view.innerHTML = `<h2>ဘာသာပြန်နေသည်…</h2><p class="muted">ခဏစောင့်ပါ။</p>${bar()}`;
   setProg(0.5, 'ဘာသာပြန်နေသည်');
   try {
-    const t = await L.geminiTranslate(state.segs, s => setProg(0.6, s));
+    const t = await L.aiTranslate(state.segs, s => setProg(0.6, s));
     state.busy = false;
     if (t.length === state.segs.length) { state.burmese = t; go(3); toast('ဘာသာပြန်ပြီးပါပြီ'); return true; }
     state.burmese = state.segs.map((_, i) => t[i] || '');
@@ -597,8 +640,8 @@ function step2() {
     ${state.srcNote ? `<div class="err" id="srcNote"></div>` : ''}
     <p class="muted">စာကြောင်းတစ်ကြောင်းလျှင် အချိန်တစ်ခု ကိုက်ထားသည်။ စာကြောင်းအရေအတွက် မပြောင်းပါနှင့်။ (${state.segs.length} lines)</p>
     <textarea id="src">${state.segs.map(s => s.text).join('\n').replace(/</g, '&lt;')}</textarea>
-    ${L.cfg.geminiKey ? `<button id="auto" class="btn primary">✨ Gemini နဲ့ အလိုအလျောက် ဘာသာပြန်မည်</button>
-    <div id="autoMsg" class="muted small" style="margin-top:8px"></div>` : `<p class="muted small" style="margin-top:12px">💡 API Key Settings မှာ Gemini Key ထည့်ထားရင် Copy/Paste မလုပ်ဘဲ အလိုအလျောက် ဘာသာပြန်ပေးပါမယ်။</p>`}
+    ${L.cfg.aiReady ? `<button id="auto" class="btn primary">✨ AI နဲ့ အလိုအလျောက် ဘာသာပြန်မည်</button>
+    <div id="autoMsg" class="muted small" style="margin-top:8px"></div>` : `<p class="muted small" style="margin-top:12px">💡 API Key Settings မှာ OpenRouter သို့ Gemini Key ထည့်ထားရင် Copy/Paste မလုပ်ဘဲ အလိုအလျောက် ဘာသာပြန်ပေးပါမယ်။</p>`}
     <button id="copy" class="btn block">📋 Copy Full Prompt</button>
     <div class="panel">
       <b>🤖 Gemini App ဖြင့် ဘာသာပြန်ရန် (Free)</b>
@@ -632,7 +675,7 @@ function step2() {
     if (!syncSrc()) return;
     const btn = $('#auto'); btn.disabled = true;
     try {
-      const t = await L.geminiTranslate(state.segs, s => { $('#autoMsg').textContent = s + '…'; });
+      const t = await L.aiTranslate(state.segs, s => { $('#autoMsg').textContent = s + '…'; });
       if (t.length !== state.segs.length) {
         $('#json').value = JSON.stringify({ translations: t }, null, 1);
         toast(`အရေအတွက် မကိုက်ပါ (${t.length}/${state.segs.length}) — အောက်က JSON ကို စစ်ပြီး Next နှိပ်ပါ`);
@@ -821,5 +864,5 @@ function showResult() {
 
 /* ---------------- start ---------------- */
 buildMenu();
-if (!L.cfg.aaiKey || !L.cfg.geminiKey) page = 'keys';
+if (!L.cfg.aaiKey || !L.cfg.aiReady) page = 'keys';
 render();
