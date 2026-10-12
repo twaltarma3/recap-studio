@@ -8,7 +8,7 @@ const state = {
   step: 1, showSrc: false, file: null, videoDur: 0, lang: 'auto', segs: [], sourceLines: [],
   burmese: [], personaId: 'TH', ...DEFAULTS, result: null, busy: false, origSegs: null,
   fxMirror: false, fxBlur: false, blurH: 15, blurY: 100, blurS: 50, blurO: 100, previewUrl: null, previewFor: null,
-  fxRatio: 'orig', fxFit: 'crop', fxZoom: 100, wmOn: false, wmText: '', wmPos: 'br', wmSize: 4,
+  pStyle: 'recap', fxRatio: 'orig', fxFit: 'crop', fxZoom: 100, wmOn: false, wmText: '', wmPos: 'br', wmSize: 4,
   logoOn: false, logoData: null, logoPos: 'tr', logoSize: 14, tab: 'video',
   fxSubs: false, subS: 5, subY: 88, subC: '#ffffff', subO: '#000000', subFont: 'pt16', fontOk: false
 };
@@ -663,6 +663,7 @@ function step2() {
     <div class="row"><h2>မူရင်းစာသားကို စစ်ဆေးပါ</h2><button class="ghost" id="back">Back</button></div>
     <p class="muted">စာကြောင်းတစ်ကြောင်းလျှင် အချိန်တစ်ခု ကိုက်ထားသည်။ စာကြောင်းအရေအတွက် မပြောင်းပါနှင့်။ (${state.segs.length} lines)</p>
     <textarea id="src">${state.segs.map(s => s.text).join('\n').replace(/</g, '&lt;')}</textarea>
+    <div class="chips" id="pStyle" style="margin:0 0 8px"><button type="button" class="chip" data-s="recap">🔥 Recap (လှုပ်ရှား)</button><button type="button" class="chip" data-s="chat">💬 ရိုးရိုးစကားပြော</button></div>
     <button id="copy" class="btn block">📋 Copy Full Prompt</button>
     <div class="panel">
       <b>🤖 Gemini App ဖြင့် ဘာသာပြန်ရန် (Free)</b>
@@ -684,10 +685,13 @@ function step2() {
     lines.forEach((t, i) => { state.segs[i].text = t; });
     return true;
   };
+  const paintS = () => document.querySelectorAll('#pStyle .chip').forEach(c => c.classList.toggle('on', c.dataset.s === state.pStyle));
+  document.querySelectorAll('#pStyle .chip').forEach(c => c.onclick = () => { state.pStyle = c.dataset.s; paintS(); });
+  paintS();
   $('#back').onclick = () => go(1);
   $('#copy').onclick = async () => {
     if (!syncSrc()) return;
-    const text = L.buildPrompt(state.segs);
+    const text = L.buildPrompt(state.segs, state.pStyle);
     try { await navigator.clipboard.writeText(text); toast('Prompt ကူးပြီးပါပြီ'); }
     catch { $('#json').value = text; toast('ကူးမရပါ — အောက်ကနေ ရွေးကူးပါ'); }
   };

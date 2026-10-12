@@ -201,12 +201,17 @@ export async function transcribe(blob, lang, onStatus) {
 }
 
 /* ---------- Gemini prompt (same format as the original app) ---------- */
-export function buildPrompt(segs) {
+export function buildPrompt(segs, style = 'recap') {
   const lines = segs.map((s, i) => {
     const slot = (i + 1 < segs.length ? segs[i + 1].start : s.end) - s.start;
     return `ID: ${i} | Duration: ${Math.max(slot, s.end - s.start).toFixed(1)}s | Text: "${s.text}"`;
   }).join('\n');
-  return `You are a high-energy TikTok movie recap narrator. Translate the following subtitles into 100% natural spoken Burmese (Myanmar script ONLY, NO English, NO phonetic guides).
+  const head = style === 'chat' ? `You are a professional video dubbing translator. You MUST translate the following subtitles into natural spoken Burmese (Myanmar script ONLY, NO English, NO phonetic guides).
+STYLE: Write in casual COLLOQUIAL spoken Burmese (အပြောစကား), the way a friend retells a movie story out loud. NEVER use formal literary/written Burmese (စာရေးစကား). Do not use written endings or particles such as သည်၊ ၏၊ ၌၊ မည်၊ ၍၊ သို့၊ နှင့်၊ ထို၊ ၎င်း. Use spoken forms instead: တယ်၊ ပါတယ်၊ မယ်၊ ရဲ့၊ မှာ၊ ကို၊ နဲ့၊ အဲဒီ၊ သူ၊ ပြီးတော့. Keep sentences short and lively, like speech, not like a newspaper or a textbook.
+Examples (written -> spoken):
+သူသည် အိမ်သို့ ပြန်သွားသည်။ -> သူ အိမ်ကို ပြန်သွားတယ်။
+ထိုအခါ သူမသည် ငိုကြွေးခဲ့၏။ -> အဲဒီအခါ သူမ ငိုချလိုက်တယ်။
+` : `You are a high-energy TikTok movie recap narrator. Translate the following subtitles into 100% natural spoken Burmese (Myanmar script ONLY, NO English, NO phonetic guides).
 STYLE: Write in casual COLLOQUIAL spoken Burmese (အပြောစကား), like an exciting, fast-paced story told to a friend. NEVER use formal literary/written Burmese (စာရေးစကား). Strictly avoid written endings and particles such as သည်၊ ၏၊ ၌၊ မည်၊ ၍၊ သို့၊ နှင့်၊ ထို၊ ၎င်း၊ သော. Use spoken forms: တယ်၊ ပါတယ်၊ မယ်၊ တာ၊ ပေါ့၊ လေ၊ ဗျာ၊ ရဲ့၊ မှာ၊ ကို၊ နဲ့၊ အဲဒီ၊ သူ၊ ပြီးတော့. Keep the tone thrilling and punchy.
 Examples (written -> spoken):
 သူသည် အိမ်သို့ ပြန်သွားသည်။ -> သူ အိမ်ကို ပြန်သွားတယ်။
@@ -214,7 +219,8 @@ Examples (written -> spoken):
 DIALOGUE: Do NOT write dialogue as direct quotes. Turn what characters say into indirect speech inside the narration (for example: သူက စိတ်ဆိုးပြီး သူ့ကို လုပ်မယ်လို့ ပြောလိုက်တယ်). Do not use quotation marks inside the translations.
 TTS: Keep every line short and punchy. Use commas ( , ) only for natural breathing pauses.
 SAFE WORDS (TikTok safety), replace restricted words automatically: alcohol/beer/liquor -> အထူးဖျော်ရည်; cigarettes/smoking -> မီးခိုးတံ; drugs/pills/injections -> ပစ္စည်း or အားဆေး; violence/kill/death/blood -> ရှင်းထုတ်လိုက်တယ် / အနားယူသွားတယ် / အနီရောင်အမှတ်တွေ; swear words -> safe intense expressions such as ဟာကွာ၊ တောက်.
-Translate each line so that it sounds natural in a movie recap narration. Do not translate word-for-word.
+`;
+  return `${head}Translate each line so that it sounds natural in a movie recap narration. Do not translate word-for-word.
 Timing is critical: Burmese narration is spoken at about 4-5 syllables per second, so each line MUST be short enough to be spoken within its Duration (for example 2.0s allows roughly 8-10 syllables). Condense the meaning and drop minor details instead of translating everything. Being on time matters more than completeness.
 Source lines may be cut in the middle of a sentence. Still translate each line on its own so it sounds natural by itself, and keep the same order and the same number of lines.
 Return the result STRICTLY as a JSON object with a single key "translations" containing an array of strings in order, exactly one string per ID.
@@ -543,6 +549,7 @@ function videoSize(file) {
     const url = URL.createObjectURL(file);
     v.onloadedmetadata = () => { res({ w: v.videoWidth, h: v.videoHeight }); URL.revokeObjectURL(url); };
     v.onerror = () => { res(null); URL.revokeObjectURL(url); };
+    setTimeout(() => res(null), 6000);
     v.src = url;
   });
 }
@@ -778,7 +785,18 @@ export async function renderDub({ file, videoDur, segs, burmese, persona, pitch,
   let geo = null;
   if (fx) {
     const needGeo = fx.ratio && fx.ratio !== 'orig' || +fx.zoom > 100 || (fx.subs && fx.subs.on) || (fx.wm && fx.wm.on) || (fx.logo && fx.logo.on);
-    if (needGeo) { try { const sz = await videoSize(file); if (sz && sz.w && sz.h) geo = outGeometry(sz, fx); } catch {} }
+    if (needGeo) {
+      let sz = null;
+      try { sz = await videoSize(file); } catch {}
+      if (!(sz && sz.w && sz.h)) {                                   // browser can't decode this codec -> ask ffmpeg itself
+        try {
+          flog.length = 0; await f.exec(['-i', inName]);
+          const t = flog.join('\n'), m = t.match(/Video:[^\n]*?[ ,](\d{2,5})x(\d{2,5})/), rot = t.match(/rotation of (-?[\d.]+)/);
+          if (m) { sz = { w: +m[1], h: +m[2] }; if (rot && Math.abs(Math.round(+rot[1])) % 180 === 90) sz = { w: sz.h, h: sz.w }; }
+        } catch {}
+      }
+      if (sz && sz.w && sz.h) geo = outGeometry(sz, fx);
+    }
     fx = { ...fx, geo };
   }
   let subs = null, ovl = false;
