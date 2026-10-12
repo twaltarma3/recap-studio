@@ -256,3 +256,8 @@ body .stepper .on b{color:#fff}
 .chip{margin:0;padding:10px 14px;min-height:44px;border-radius:12px;border:1px solid #2c2c33;background:#1b1b1f;color:#d8d8e0;font-weight:600;box-shadow:none}
 .chip.on{border-color:#8470ff;background:linear-gradient(135deg,#8470ff,#4a37e0);color:#fff}
 .pane[hidden],#fitBox[hidden]{display:none}
+
+/* guide page: dark tip / warn boxes (override the older light ones) */
+body .guide .tip{background:#1d2a24;border:1px solid #2a4a3a;color:#bfeed7}
+body .guide .warn{background:#33290f;border:1px solid #5a4818;color:#ffdf8a}
+body .guide .tip b,body .guide .warn b{color:inherit}
