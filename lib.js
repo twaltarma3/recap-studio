@@ -309,7 +309,7 @@ export function parseTranslations(raw) {
 }
 
 /* ---------- TTS ---------- */
-export async function tts(text, persona, pitchOffset = 0, rateOffset = 0, tries = 3) {
+export async function tts(text, persona, pitchOffset = 0, rateOffset = 0, tries = 6) {
   let last;
   for (let k = 0; k < tries; k++) {
     try {
@@ -322,7 +322,7 @@ export async function tts(text, persona, pitchOffset = 0, rateOffset = 0, tries 
       const ab = await r.arrayBuffer();
       if (ab.byteLength < 200) throw new Error('TTS audio မရပါ');
       return ab;
-    } catch (e) { last = e; await sleep(600 * (k + 1)); }
+    } catch (e) { last = e; await sleep(Math.min(5000, 700 * (k + 1) ** 1.5)); }
   }
   throw last;
 }
