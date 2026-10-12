@@ -310,51 +310,76 @@ export function parseTranslations(raw) {
 }
 
 /* ---------- Gemini (called straight from the phone with the user's own key) ---------- */
-const GEMINI_MODELS = ['gemini-flash-latest', 'gemini-2.5-flash'];
+const GEMINI_MODELS = ['gemini-flash-latest', 'gemini-2.5-flash', 'gemini-2.5-flash-lite'];
+const GEM_DIRECT = 'https://generativelanguage.googleapis.com';
+const isLocErr = m => /location is not supported/i.test(m || '');
+async function geminiFetch(path, init, key) {
+  // Google blocks some countries (e.g. Myanmar) when called straight from the phone -> go through the Worker instead.
+  let viaWorker = false; try { viaWorker = localStorage.getItem('gemViaWorker') === '1'; } catch {}
+  const headers = { ...(init.headers || {}), 'x-goog-api-key': key };
+  const go = base => fetch(base + path, { ...init, headers });
+  if (viaWorker) return go(cfg.workerUrl + '/gemini');
+  const r = await go(GEM_DIRECT);
+  if (r.status === 400) {
+    let m = ''; try { m = (await r.clone().json()).error?.message || ''; } catch {}
+    if (isLocErr(m)) {
+      const w = await go(cfg.workerUrl + '/gemini');
+      if (w.status !== 404 && w.status !== 403) { try { localStorage.setItem('gemViaWorker', '1'); } catch {} return w; }
+      const e = new Error('Gemini က သင့်နေရာကို ပိတ်ထားပါတယ် — Worker အသစ် (worker.js) ကို Cloudflare မှာ အစားထိုးပါ၊ ဒါမှမဟုတ် VPN ဖွင့်ပါ');
+      e.status = 400; e.loc = true; throw e;
+    }
+  }
+  return r;
+}
 async function geminiCall(prompt, key, model) {
-  const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+  const r = await geminiFetch(`/v1beta/models/${model}:generateContent`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
+    headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
       generationConfig: { temperature: 0.7, responseMimeType: 'application/json', maxOutputTokens: 32768 }
     })
-  });
+  }, key);
   if (!r.ok) {
     let m = ''; try { m = (await r.json()).error?.message || ''; } catch {}
-    const e = new Error(r.status === 400 && /API key/i.test(m) ? 'Gemini Key မမှန်ပါ' :
+    const e = new Error(isLocErr(m) ? 'Gemini က သင့်နေရာကို ပိတ်ထားပါတယ် — VPN ဖွင့်ပါ' :
+      r.status === 400 && /API key/i.test(m) ? 'Gemini Key မမှန်ပါ' :
       r.status === 403 ? 'Gemini Key အသုံးပြုခွင့်မရှိပါ' :
       r.status === 429 ? 'Gemini သုံးခွင့် ပြည့်နေပါတယ် — ခဏနေမှ ပြန်စမ်းပါ' :
+      r.status === 503 ? 'Gemini အလုပ်များနေပါတယ် — ခဏနေမှ ပြန်စမ်းပါ' :
       `Gemini ${r.status}: ${m.slice(0, 120)}`);
-    e.status = r.status; throw e;
+    e.status = r.status; e.loc = isLocErr(m); throw e;
   }
   const j = await r.json();
   const t = (j.candidates?.[0]?.content?.parts || []).map(p => p.text || '').join('');
   if (!t) throw new Error('Gemini က ပြန်စာ မပေးပါ');
   return t;
 }
-// returns an array of Burmese lines, one per segment (retries once on a count mismatch / busy server)
+// returns an array of Burmese lines, one per segment. Busy / over-limit -> tries the other models and waits between rounds.
+export async function geminiPing() {
+  const r = await geminiFetch('/v1beta/models?pageSize=1', { method: 'GET' }, cfg.geminiKey);
+  if (r.status === 400 || r.status === 403) { let m = ''; try { m = (await r.json()).error?.message || ''; } catch {} throw new Error(isLocErr(m) ? 'Gemini က သင့်နေရာကို ပိတ်ထားပါတယ်' : 'Key မမှန်ပါ'); }
+  if (!r.ok) throw new Error('Server ပြန်ကြားချက်: ' + r.status);
+}
 export async function geminiTranslate(segs, onStatus) {
   const key = cfg.geminiKey;
   if (!key) throw new Error('API Key Settings ထဲမှာ Gemini Key ကို အရင်ထည့်ပါ');
   const prompt = buildPrompt(segs);
   let best = null, lastErr;
-  for (let attempt = 0; attempt < 3; attempt++) {
+  for (let round = 0; round < 4; round++) {
     for (const model of GEMINI_MODELS) {
       try {
-        onStatus?.(attempt ? 'ပြန်ကြိုးစားနေသည်' : 'ဘာသာပြန်နေသည်');
+        onStatus?.(round ? `ပြန်ကြိုးစားနေသည် (${round})` : 'ဘာသာပြန်နေသည်');
         const arr = parseTranslations(await geminiCall(prompt, key, model));
         if (!best || Math.abs(arr.length - segs.length) < Math.abs(best.length - segs.length)) best = arr;
         if (arr.length === segs.length) return arr;
-        throw new Error('count');
+        lastErr = new Error('count');
       } catch (e) {
         lastErr = e;
-        if (e.status === 400 || e.status === 403) throw e;       // bad key: no point retrying
-        if (e.status === 404) continue;                           // model name not available -> next model
-        if (e.status === 429 || e.status >= 500) await sleep(2500);
-        break;
+        if (e.loc || e.status === 403 || (e.status === 400 && /Key/.test(e.message))) throw e;   // retrying cannot help
       }
     }
+    await sleep(2500 * (round + 1));
   }
   if (best) return best;                                          // caller shows the count mismatch
   throw lastErr || new Error('ဘာသာပြန်မရပါ');

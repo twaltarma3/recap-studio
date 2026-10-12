@@ -282,9 +282,7 @@ function pageKeys() {
     localStorage.setItem('geminiKey', $('#kGem').value.trim()); gupd();
     if (!L.cfg.geminiKey) { toast('Gemini Key ကို အရင်ထည့်ပါ'); return; }
     try {
-      const r = await fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=1', { headers: { 'x-goog-api-key': L.cfg.geminiKey } });
-      if (r.status === 400 || r.status === 403) throw new Error('Key မမှန်ပါ');
-      if (!r.ok) throw new Error('Server ပြန်ကြားချက်: ' + r.status);
+      await L.geminiPing();
       toast('✅ Key မှန်ပါတယ်');
     } catch (e) { toast(e.message === 'Failed to fetch' ? 'အင်တာနက် ချိတ်ဆက်မရပါ' : e.message); }
   };
