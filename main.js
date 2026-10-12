@@ -8,6 +8,8 @@ const state = {
   step: 1, showSrc: false, file: null, videoDur: 0, lang: 'auto', segs: [], sourceLines: [],
   burmese: [], personaId: 'TH', ...DEFAULTS, result: null, busy: false, origSegs: null,
   fxMirror: false, fxBlur: false, blurH: 15, blurY: 100, blurS: 50, blurO: 100, previewUrl: null, previewFor: null,
+  fxRatio: 'orig', fxFit: 'crop', fxZoom: 100, wmOn: false, wmText: '', wmPos: 'br', wmSize: 4,
+  logoOn: false, logoData: null, logoPos: 'tr', logoSize: 14, tab: 'video',
   fxSubs: false, subS: 5, subY: 88, subC: '#ffffff', subO: '#000000', subFont: 'pt16', fontOk: false
 };
 const STEPS = ['Upload', 'Source Text', 'Burmese', 'Result'];
@@ -141,7 +143,7 @@ function pageGuide() {
           <li><b>🌫 Blur</b> — မူရင်းစာတန်းထိုးကို ဖုံးပါတယ်။ အမြင့်၊ အပေါ်အောက်နေရာ၊ Blur အား၊ အရောင်ရင့်မှုကို Preview ကြည့်ပြီး ညှိပါ။</li>
           <li><b>💬 မြန်မာစာတန်းထိုး</b> — Font ရွေးပါ၊ စာလုံးအရွယ်ကို <b>− / +</b> နဲ့ ညှိပါ၊ နေရာနဲ့ အရောင်ရွေးပါ။</li>
         </ul>
-        <div class="warn">⚠ Mirror၊ Blur၊ စာတန်းထိုး တစ်ခုခု ဖွင့်ရင် Video ကို ပြန် encode လုပ်ရလို့ ပိုကြာပါတယ် (ဖုန်းမှာ ငါးမိနစ်ထက်မက ကြာနိုင်ပါတယ်)။ မဖွင့်ရင် အရင်လိုပဲ မြန်ပါတယ်။</div>
+        <div class="warn">⚠ Ratio၊ Zoom၊ Mirror၊ Blur၊ စာတန်းထိုး၊ Watermark၊ Logo တစ်ခုခု ဖွင့်ရင် Video ကို ပြန် encode လုပ်ရလို့ ပိုကြာပါတယ် (ဖုန်းမှာ ငါးမိနစ်ထက်မက ကြာနိုင်ပါတယ်)။ မဖွင့်ရင် အရင်လိုပဲ မြန်ပါတယ်။</div>
         <p style="margin:10px 0 0">အားလုံးပြီးရင် <b>အသံထုတ်ပြီး Video ပေါင်းမည်</b> ကိုနှိပ်ပါ။</p>`)}
 
       ${sec(5, 'ရလဒ်', `
@@ -297,23 +299,61 @@ function previewUrl() {
 const pmBtn = (id, t) => `<button type="button" class="ghost" id="${id}" style="width:48px;height:48px;padding:0;margin:0;flex:none;font-size:26px;line-height:1">${t}</button>`;
 const pmRow = (id, min, max, step, val) => `<div style="display:flex;align-items:center;gap:8px;margin-top:6px">${pmBtn(id + 'M', '−')}<input id="${id}" type="range" min="${min}" max="${max}" step="${step}" value="${val}" style="flex:1;margin:0" />${pmBtn(id + 'P', '+')}</div>`;
 
+const posChips = () => [['tl', '↖'], ['tr', '↗'], ['bl', '↙'], ['br', '↘']].map(([k, t]) => `<button type="button" class="chip" data-p="${k}">${t}</button>`).join('');
+const RATIO_NUM = { '9:16': 9 / 16, '3:4': 3 / 4, '16:9': 16 / 9, '1:1': 1 };
+function fileToLogo(file) {
+  return new Promise((res, rej) => {
+    const img = new Image(), u = URL.createObjectURL(file);
+    img.onload = () => {
+      const k = Math.min(1, 256 / Math.max(img.width, img.height));
+      const c = document.createElement('canvas'); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(u); res(c.toDataURL('image/png'));
+    };
+    img.onerror = () => { URL.revokeObjectURL(u); rej(new Error('ပုံ မဖွင့်နိုင်ပါ')); };
+    img.src = u;
+  });
+}
+
 function previewBlock() {
   const url = previewUrl();
   const chk = 'width:22px;height:22px;padding:0;margin:0';
   return `
     <div class="panel fx">
       <b>🎞 Video Effects <span class="muted small" style="font-weight:400">(လိုမှ ဖွင့်ပါ)</span></b>
-      <p class="muted small" style="margin:6px 0 0">Video ကို လှန်ပြီး စာတန်းထိုးကို Blur နဲ့ အုပ်ဖို့ အောက်မှာ ကြည့်ပြီး ချိန်ပါ။ (Preview မှာ အသံမပါပါ)</p>
-      <div style="position:relative;margin-top:12px;border-radius:14px;overflow:hidden;background:#000">
-        <video id="pvVid" src="${url}" playsinline muted preload="metadata" style="display:block;width:100%;margin:0;border-radius:0"></video>
+      <p class="muted small" style="margin:6px 0 0">အောက်က Tab တွေမှာ ရွေးပြီး Preview မှာ ကြည့်ချိန်ပါ။ (Preview မှာ အသံမပါပါ)</p>
+      <div id="pvBox" style="position:relative;margin:12px auto 0;border-radius:14px;overflow:hidden;background:#000">
+        <div id="pvInner" style="position:relative;width:100%;height:100%;transform-origin:center">
+          <video id="pvBg" src="${url}" playsinline muted preload="metadata" style="display:none;position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:blur(18px) brightness(.8);transform:scale(1.15);margin:0;border-radius:0"></video>
+          <video id="pvVid" src="${url}" playsinline muted preload="metadata" style="display:block;position:relative;width:100%;margin:0;border-radius:0"></video>
+        </div>
         <div id="pvBlur" style="display:none;position:absolute;left:0;right:0;pointer-events:none;box-sizing:border-box;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);background:rgba(255,255,255,.08);border-top:1px dashed rgba(255,255,255,.8);border-bottom:1px dashed rgba(255,255,255,.8)"></div>
         <div id="pvSub" style="display:none;position:absolute;left:4%;right:4%;text-align:center;pointer-events:none;transform:translateY(-50%);line-height:1.35;font-weight:700">မြန်မာစာတန်းထိုး နမူနာ စာကြောင်း</div>
+        <div id="pvWm" style="display:none;position:absolute;pointer-events:none;font-weight:700;color:#fff;opacity:.75;white-space:nowrap;text-shadow:0 0 3px #000,0 0 3px #000"></div>
+        <img id="pvLogo" alt="" style="display:none;position:absolute;pointer-events:none;border-radius:50%;object-fit:cover" />
       </div>
       <div class="row" style="margin-top:8px;gap:8px">
         <button class="ghost" id="pvPlay" type="button">▶</button>
         <input id="pvSeek" type="range" min="0" max="1000" value="0" style="flex:1" />
         <span id="pvT" class="muted small" style="white-space:nowrap">0:00</span>
       </div>
+      <div class="tabs" id="fxTabs">
+        <button type="button" data-tab="video">🎬 Video</button>
+        <button type="button" data-tab="caps">💬 စာတန်း</button>
+        <button type="button" data-tab="extra">✨ Extras</button>
+      </div>
+      <div class="pane" data-pane="video">
+        <b style="display:block;margin-top:14px">📐 အချိုး (Ratio)</b>
+        <div class="chips" id="ratioChips">
+          ${[['orig', 'မူရင်း'], ['9:16', '9:16'], ['3:4', '3:4'], ['16:9', '16:9'], ['1:1', '1:1']].map(([k, t]) => `<button type="button" class="chip" data-r="${k}">${t}</button>`).join('')}
+        </div>
+        <div id="fitBox" hidden>
+          <div class="chips" id="fitChips" style="margin-top:8px">
+            <button type="button" class="chip" data-f="crop">✂ Crop (အပြည့်)</button>
+            <button type="button" class="chip" data-f="pad">🌫 Blur နောက်ခံ</button>
+          </div>
+        </div>
+        <div class="row" style="margin-top:14px"><b>🔍 Zoom</b><span id="fxZoomV">${state.fxZoom}%</span></div>
+        ${pmRow('fxZoom', 100, 250, 10, state.fxZoom)}
       <label style="display:flex;align-items:center;gap:10px;font-weight:600;margin-top:12px">
         <input id="fxMirror" type="checkbox" style="${chk}" ${state.fxMirror ? 'checked' : ''} />
         ↔ Mirror (ဘယ်ညာ လှန်မည်)
@@ -335,6 +375,8 @@ function previewBlock() {
         ${pmRow('blurO', 20, 100, 5, state.blurO)}
         <div class="row muted small"><span>နည်း (ပါးပါး)</span><span>100% (အပြည့်)</span></div>
       </div>
+      </div>
+      <div class="pane" data-pane="caps">
       <label style="display:flex;align-items:center;gap:10px;font-weight:600;margin-top:12px">
         <input id="fxSubs" type="checkbox" style="${chk}" ${state.fxSubs ? 'checked' : ''} />
         💬 မြန်မာစာတန်းထိုး ထည့်မည်
@@ -371,6 +413,30 @@ function previewBlock() {
         </div>
         <p class="muted small" id="fontSt" style="margin:8px 0 0"></p>
       </div>
+      </div>
+      <div class="pane" data-pane="extra">
+        <label style="display:flex;align-items:center;gap:10px;font-weight:600;margin-top:14px">
+          <input id="wmOn" type="checkbox" style="${chk}" ${state.wmOn ? 'checked' : ''} /> 🏷 Watermark စာသား
+        </label>
+        <div id="wmBox" ${state.wmOn ? '' : 'hidden'}>
+          <input id="wmText" type="text" placeholder="ဥပမာ - @ChannelName" value="${state.wmText.replace(/"/g, '&quot;')}" style="margin-top:8px" />
+          <div class="row" style="margin-top:12px"><b>နေရာ</b></div>
+          <div class="chips" data-pos="wmPos">${posChips()}</div>
+          <div class="row" style="margin-top:14px"><b>အရွယ်အစား</b><span id="wmSizeV">${state.wmSize}%</span></div>
+          ${pmRow('wmSize', 2, 10, 1, state.wmSize)}
+        </div>
+        <label style="display:flex;align-items:center;gap:10px;font-weight:600;margin-top:18px">
+          <input id="logoOn" type="checkbox" style="${chk}" ${state.logoOn ? 'checked' : ''} /> ⭕ Logo (စက်ဝိုင်း)
+        </label>
+        <div id="logoBox" ${state.logoOn ? '' : 'hidden'}>
+          <label class="btn" style="display:block;margin:8px 0 0;text-align:center;cursor:pointer" id="logoPick">🖼 ${state.logoData ? 'Logo ပြောင်းမည်' : 'Logo ပုံ ရွေးမည်'}
+            <input id="logoUp" type="file" accept="image/*" hidden /></label>
+          <div class="row" style="margin-top:12px"><b>နေရာ</b></div>
+          <div class="chips" data-pos="logoPos">${posChips()}</div>
+          <div class="row" style="margin-top:14px"><b>အရွယ်အစား</b><span id="logoSizeV">${state.logoSize}%</span></div>
+          ${pmRow('logoSize', 5, 40, 1, state.logoSize)}
+        </div>
+      </div>
       <p class="muted small">⚠ Mirror၊ Blur၊ စာတန်းထိုး တစ်ခုခု ဖွင့်ရင် Video ကို ပြန် encode လုပ်ရလို့ ပိုကြာပါတယ် (ဖုန်းမှာ ငါးမိနစ်ထက်မက ကြာနိုင်ပါတယ်)။ မဖွင့်ရင် အရင်လိုပဲ မြန်ပါတယ်။</p>
     </div>`;
 }
@@ -378,8 +444,44 @@ function previewBlock() {
 function bindPreview() {
   const v = $('#pvVid'), ov = $('#pvBlur');
   if (!v || !ov) return;
+  const box = $('#pvBox'), inner = $('#pvInner'), bg = $('#pvBg');
   const apply = () => {
-    v.style.transform = state.fxMirror ? 'scaleX(-1)' : '';
+    const r = RATIO_NUM[state.fxRatio];
+    if (r) {
+      box.style.aspectRatio = String(r); box.style.width = `min(100%, calc(62vh * ${r}))`;
+      inner.style.position = 'absolute'; inner.style.inset = '0';
+      v.style.height = '100%'; v.style.objectFit = state.fxFit === 'pad' ? 'contain' : 'cover';
+      bg.style.display = state.fxFit === 'pad' ? 'block' : 'none';
+    } else {
+      box.style.aspectRatio = ''; box.style.width = '100%';
+      inner.style.position = 'relative'; inner.style.inset = ''; inner.style.height = '';
+      v.style.height = ''; v.style.objectFit = ''; bg.style.display = 'none';
+    }
+    inner.style.transform = `${state.fxMirror ? 'scaleX(-1) ' : ''}scale(${state.fxZoom / 100})`;
+    const fb = $('#fitBox'); if (fb) fb.hidden = !r;
+    document.querySelectorAll('#ratioChips .chip').forEach(c => c.classList.toggle('on', c.dataset.r === state.fxRatio));
+    document.querySelectorAll('#fitChips .chip').forEach(c => c.classList.toggle('on', c.dataset.f === state.fxFit));
+    document.querySelectorAll('#fxTabs button').forEach(c => c.classList.toggle('on', c.dataset.tab === state.tab));
+    document.querySelectorAll('.fx .pane').forEach(p => { p.hidden = p.dataset.pane !== state.tab; });
+    document.querySelectorAll('[data-pos]').forEach(g => g.querySelectorAll('.chip').forEach(c => c.classList.toggle('on', c.dataset.p === state[g.dataset.pos])));
+    const bw = box.clientWidth || 300, bh = box.clientHeight || 200, mn = Math.min(bw, bh), mg = Math.round(mn * 0.035);
+    const place = (el, pos) => {
+      el.style.left = el.style.right = el.style.top = el.style.bottom = '';
+      el.style[pos.endsWith('l') ? 'left' : 'right'] = mg + 'px';
+      el.style[pos.startsWith('t') ? 'top' : 'bottom'] = mg + 'px';
+    };
+    const wm = $('#pvWm');
+    if (wm) {
+      const on = state.wmOn && state.wmText.trim();
+      wm.style.display = on ? 'block' : 'none';
+      if (on) { wm.textContent = state.wmText; wm.style.fontSize = Math.max(8, Math.round(mn * state.wmSize / 100)) + 'px'; wm.style.fontFamily = L.subFontFamily(selFont()); place(wm, state.wmPos); }
+    }
+    const lg = $('#pvLogo');
+    if (lg) {
+      const on = state.logoOn && state.logoData;
+      lg.style.display = on ? 'block' : 'none';
+      if (on) { if (lg.src !== state.logoData) lg.src = state.logoData; const d = Math.round(mn * state.logoSize / 100); lg.style.width = lg.style.height = d + 'px'; place(lg, state.logoPos); }
+    }
     ov.style.display = state.fxBlur ? 'block' : 'none';
     ov.style.height = state.blurH + '%';
     const bpx = Math.max(1, Math.round((state.blurS / 100) * 40 / 2));          // ffmpeg sigma/2 ~ preview px
@@ -400,6 +502,11 @@ function bindPreview() {
     }
   };
   const fmt = s => { s = Math.max(0, Math.floor(s || 0)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
+  const bgv = $('#pvBg');
+  const syncBg = () => { if (bgv.style.display === 'none') return; if (Math.abs(bgv.currentTime - v.currentTime) > 0.3) bgv.currentTime = v.currentTime; };
+  v.addEventListener('play', () => { syncBg(); bgv.play().catch(() => {}); });
+  v.addEventListener('pause', () => bgv.pause());
+  v.addEventListener('seeked', syncBg); v.addEventListener('timeupdate', syncBg);
   $('#pvPlay').onclick = () => { v.paused ? v.play() : v.pause(); };
   v.onclick = () => $('#pvPlay').click();
   v.onplay = () => { $('#pvPlay').textContent = '⏸'; };
@@ -409,6 +516,18 @@ function bindPreview() {
     $('#pvT').textContent = fmt(v.currentTime) + ' / ' + fmt(v.duration);
   };
   $('#pvSeek').oninput = e => { if (v.duration) v.currentTime = (e.target.value / 1000) * v.duration; };
+  document.querySelectorAll('#fxTabs button').forEach(b => b.onclick = () => { state.tab = b.dataset.tab; apply(); });
+  document.querySelectorAll('#ratioChips .chip').forEach(b => b.onclick = () => { state.fxRatio = b.dataset.r; apply(); });
+  document.querySelectorAll('#fitChips .chip').forEach(b => b.onclick = () => { state.fxFit = b.dataset.f; apply(); });
+  document.querySelectorAll('[data-pos] .chip').forEach(b => b.onclick = () => { state[b.parentElement.dataset.pos] = b.dataset.p; apply(); });
+  $('#wmOn').onchange = e => { state.wmOn = e.target.checked; $('#wmBox').hidden = !state.wmOn; apply(); };
+  $('#wmText').oninput = e => { state.wmText = e.target.value; apply(); };
+  $('#logoOn').onchange = e => { state.logoOn = e.target.checked; $('#logoBox').hidden = !state.logoOn; apply(); };
+  $('#logoUp').onchange = async e => {
+    const f = e.target.files[0]; if (!f) return;
+    try { state.logoData = await fileToLogo(f); $('#logoPick').firstChild.textContent = '🖼 Logo ပြောင်းမည် '; apply(); }
+    catch (err) { toast(err.message); }
+  };
   $('#fxMirror').onchange = e => { state.fxMirror = e.target.checked; apply(); };
   $('#fxBlur').onchange = e => { state.fxBlur = e.target.checked; $('#blurBox').hidden = !state.fxBlur; apply(); };
   $('#blurH').oninput = e => { state.blurH = +e.target.value; $('#bhv').textContent = e.target.value + '%'; apply(); };
@@ -423,6 +542,18 @@ function bindPreview() {
     $('#' + id + 'P').onclick = () => set(state[key] + step);
   };
   bindPM('blurS', 'blurS', 5, 100, 5);
+  const bindPM2 = (id, key, min, max, step) => {
+    const set = x => {
+      state[key] = Math.max(min, Math.min(max, Math.round(x / step) * step));
+      $('#' + id).value = state[key]; $('#' + id + 'V').textContent = state[key] + '%'; apply();
+    };
+    $('#' + id).oninput = e => set(+e.target.value);
+    $('#' + id + 'M').onclick = () => set(state[key] - step);
+    $('#' + id + 'P').onclick = () => set(state[key] + step);
+  };
+  bindPM2('fxZoom', 'fxZoom', 100, 250, 10);
+  bindPM2('wmSize', 'wmSize', 2, 10, 1);
+  bindPM2('logoSize', 'logoSize', 5, 40, 1);
   bindPM('blurO', 'blurO', 20, 100, 5);
 
   /* subtitles */
@@ -678,6 +809,9 @@ async function step4() {
       file: state.file, videoDur: state.videoDur, segs: state.segs, burmese: state.burmese,
       persona, pitch: state.pitch, rate: state.rate,
       fx: {
+        ratio: state.fxRatio, fit: state.fxFit, zoom: state.fxZoom,
+        wm: { on: state.wmOn, text: state.wmText, pos: state.wmPos, size: state.wmSize },
+        logo: { on: state.logoOn, data: state.logoData, pos: state.logoPos, size: state.logoSize },
         mirror: state.fxMirror, blur: state.fxBlur, blurH: state.blurH, blurY: state.blurY, blurS: state.blurS, blurO: state.blurO,
         subs: { on: state.fxSubs, size: state.subS, y: state.subY, color: state.subC, outline: state.subO, font: selFont() }
       }, keepTalk: state.keepTalk, keepGap: state.keepGap,

@@ -247,3 +247,12 @@ body .err{background:#34181a;color:#ffa0a0}
 .guide summary::after{color:#a3a3b5}
 body #drawer{background:linear-gradient(180deg,#101012,#17171b);}
 body .stepper .on b{color:#fff}
+
+/* effect tabs + chips (same palette) */
+.tabs{display:flex;gap:6px;margin-top:14px;padding:4px;background:#0e0e11;border:1px solid #26262c;border-radius:14px}
+.tabs button{flex:1;margin:0;padding:10px 4px;min-height:44px;border:0;border-radius:11px;background:transparent;color:#a9a9b4;font-weight:600;box-shadow:none}
+.tabs button.on{background:linear-gradient(135deg,#8470ff,#4a37e0);color:#fff}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.chip{margin:0;padding:10px 14px;min-height:44px;border-radius:12px;border:1px solid #2c2c33;background:#1b1b1f;color:#d8d8e0;font-weight:600;box-shadow:none}
+.chip.on{border-color:#8470ff;background:linear-gradient(135deg,#8470ff,#4a37e0);color:#fff}
+.pane[hidden],#fitBox[hidden]{display:none}

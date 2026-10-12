@@ -401,29 +401,62 @@ function buildFxOld(fx) {
   return g.join(';');
 }
 
-/* ---- video filter graph: mirror -> blurred band -> burned-in subtitles (input 2 = png sequence) ---- */
-function buildFx(fx, subs) {
+/* ---- output geometry: aspect ratio (crop / blurred padding), zoom ---- */
+const even = n => Math.max(2, Math.round(n / 2) * 2);
+const RATIOS = { '9:16': 9 / 16, '3:4': 3 / 4, '16:9': 16 / 9, '1:1': 1 };
+export function outGeometry(sz, fx) {
+  const W = even(sz.w), H = even(sz.h);
+  const r = fx && RATIOS[fx.ratio];
+  if (!r) return { W, H, OW: W, OH: H, ratio: false };
+  const long = Math.min(Math.max(W, H), 1280);
+  const OW = r <= 1 ? even(long * r) : even(long), OH = r <= 1 ? even(long) : even(long / r);
+  return { W, H, OW, OH, ratio: true };
+}
+
+/* ---- video filter graph: ratio -> mirror -> zoom -> blurred band -> burned-in subtitles -> watermark/logo ---- */
+// subs: {y} (input 2 = png sequence); g: geometry from outGeometry(); ovl: input index of the watermark/logo png (0 = none)
+function buildFx(fx, subs, g, ovl = 0) {
   const mirror = !!(fx && fx.mirror), blur = !!(fx && fx.blur);
-  if (!mirror && !blur && !subs) return '';
-  const g = [];
+  const zoom = Math.max(1, Math.min(3, (+(fx && fx.zoom) || 100) / 100));
+  const geo = !!(g && g.ratio), doZoom = zoom > 1.001 && g;
+  if (!mirror && !blur && !subs && !geo && !doZoom && !ovl) return '';
+  const gr = [];
   let cur = '[0:v]', n = 0;
   const lbl = () => `[t${n++}]`;
-  if (mirror) { const o = lbl(); g.push(`${cur}hflip${o}`); cur = o; }
+  if (geo) {
+    const o = lbl();
+    if (fx.fit === 'pad') {
+      gr.push(`${cur}split[p1][p2]`);
+      gr.push(`[p1]scale=${g.OW}:${g.OH}:force_original_aspect_ratio=increase,crop=${g.OW}:${g.OH},scale=${even(g.OW / 6)}:${even(g.OH / 6)},gblur=sigma=6:steps=2,scale=${g.OW}:${g.OH}[pbg]`);
+      gr.push(`[p2]scale=${g.OW}:${g.OH}:force_original_aspect_ratio=decrease[pfg]`);
+      gr.push(`[pbg][pfg]overlay=x=(W-w)/2:y=(H-h)/2${o}`);
+    } else {
+      gr.push(`${cur}scale=${g.OW}:${g.OH}:force_original_aspect_ratio=increase,crop=${g.OW}:${g.OH}${o}`);
+    }
+    cur = o;
+  }
+  if (mirror) { const o = lbl(); gr.push(`${cur}hflip${o}`); cur = o; }
+  if (doZoom) {
+    const o = lbl();
+    gr.push(`${cur}crop=${even(g.OW / zoom)}:${even(g.OH / zoom)},scale=${g.OW}:${g.OH}${o}`);
+    cur = o;
+  }
   if (blur) {
     const h = (Math.max(3, Math.min(60, +fx.blurH || 15)) / 100).toFixed(3);   // band height, fraction of video height
     const p = (Math.max(0, Math.min(100, +fx.blurY)) / 100).toFixed(3);        // 0 = top, 1 = bottom
     const o = lbl();
-    g.push(`${cur}split[s1][s2]`);
+    gr.push(`${cur}split[s1][s2]`);
     const sig = Math.max(2, Math.min(40, ((+fx.blurS || 50) / 100) * 40)).toFixed(1);   // blur strength (sigma)
     const op = Math.max(0.2, Math.min(1, (+fx.blurO || 100) / 100));                    // how solid the blurred band is
     const alpha = op < 0.99 ? `,format=yuva420p,colorchannelmixer=aa=${op.toFixed(2)}` : '';
-    g.push(`[s2]crop=w=iw:h=trunc(ih*${h}/2)*2:x=0:y=trunc((ih-oh)*${p}/2)*2,gblur=sigma=${sig}:steps=2${alpha}[bl]`);
-    g.push(`[s1][bl]overlay=x=0:y=trunc((H-h)*${p}/2)*2${o}`);
+    gr.push(`[s2]crop=w=iw:h=trunc(ih*${h}/2)*2:x=0:y=trunc((ih-oh)*${p}/2)*2,gblur=sigma=${sig}:steps=2${alpha}[bl]`);
+    gr.push(`[s1][bl]overlay=x=0:y=trunc((H-h)*${p}/2)*2${o}`);
     cur = o;
   }
-  if (subs) { const o = lbl(); g.push(`${cur}[2:v]overlay=x=0:y=${subs.y}:shortest=1${o}`); cur = o; }
-  g.push(`${cur}format=yuv420p[v]`);
-  return g.join(';');
+  if (subs) { const o = lbl(); gr.push(`${cur}[2:v]overlay=x=0:y=${subs.y}:shortest=1${o}`); cur = o; }
+  if (ovl) { const o = lbl(); gr.push(`${cur}[${ovl}:v]overlay=x=0:y=0${o}`); cur = o; }
+  gr.push(`${cur}format=yuv420p[v]`);
+  return gr.join(';');
 }
 
 /* ---- subtitle font (kept in Cache Storage after the first time) ---- */
@@ -529,7 +562,7 @@ function wrapLines(ctx, text, maxW) {
 
 // draws every subtitle line as a transparent PNG strip and lists them (with timings) for ffmpeg's concat demuxer
 async function makeSubTrack(f, { file, videoDur, burmese, placed, fx }) {
-  const sz = await videoSize(file);
+  const sz = fx.geo ? { w: fx.geo.OW, h: fx.geo.OH } : await videoSize(file);     // subtitles are drawn on the OUTPUT frame size
   if (!sz || !sz.w || !sz.h) throw new Error('video size');
   const { w: W, h: H } = sz;
   const s = fx.subs;
@@ -611,6 +644,47 @@ async function makeSubTrack(f, { file, videoDur, burmese, placed, fx }) {
   await f.writeFile('subs.txt', new TextEncoder().encode(list));
   names.push('subs.txt');
   return { y, files: names, fontFailed };
+}
+
+// watermark text + circular logo drawn once onto a transparent PNG the size of the output frame
+const loadImg = src => new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error('logo')); i.src = src; });
+async function makeOverlay(f, fx, g) {
+  const wm = fx.wm && fx.wm.on && String(fx.wm.text || '').trim() ? fx.wm : null;
+  const lg = fx.logo && fx.logo.on && fx.logo.data ? fx.logo : null;
+  if (!wm && !lg) return null;
+  const W = g.OW, H = g.OH, m = Math.round(Math.min(W, H) * 0.035);
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const ctx = cv.getContext('2d');
+  const place = (pos, w, h) => ({
+    x: pos.endsWith('l') ? m : W - m - w,
+    y: pos.startsWith('t') ? m : H - m - h
+  });
+  if (lg) {
+    try {
+      const img = await loadImg(lg.data);
+      const d = Math.round(Math.min(W, H) * (Math.max(5, Math.min(40, +lg.size || 14)) / 100));
+      const p = place(lg.pos || 'tr', d, d);
+      ctx.save(); ctx.beginPath(); ctx.arc(p.x + d / 2, p.y + d / 2, d / 2, 0, Math.PI * 2); ctx.closePath(); ctx.clip();
+      const k = Math.max(d / img.width, d / img.height);                          // cover-fit into the circle
+      ctx.drawImage(img, p.x + (d - img.width * k) / 2, p.y + (d - img.height * k) / 2, img.width * k, img.height * k);
+      ctx.restore();
+    } catch {}
+  }
+  if (wm) {
+    const px = Math.max(10, Math.round(Math.min(W, H) * (Math.max(2, Math.min(10, +wm.size || 4)) / 100)));
+    try { await ensureSubFont(fx.subs && fx.subs.font); } catch {}
+    const fam = subFontFamily(fx.subs && fx.subs.font);
+    try { await document.fonts.load(`700 ${px}px ${fam}`, wm.text); } catch {}
+    ctx.font = `700 ${px}px ${fam}`; ctx.textBaseline = 'top';
+    const tw = Math.ceil(ctx.measureText(wm.text).width), th = Math.round(px * 1.3);
+    const p = place(wm.pos || 'br', tw, th);
+    ctx.globalAlpha = 0.75; ctx.lineJoin = 'round'; ctx.lineWidth = Math.max(2, px * 0.14);
+    ctx.strokeStyle = '#000'; ctx.fillStyle = '#fff';
+    ctx.strokeText(wm.text, p.x, p.y); ctx.fillText(wm.text, p.x, p.y);
+  }
+  const blob = await new Promise(r => cv.toBlob(r, 'image/png'));
+  await f.writeFile('ovl.png', new Uint8Array(await blob.arrayBuffer()));
+  return true;
 }
 
 function dubStats(placed, maxTempo) {
@@ -697,21 +771,32 @@ export async function renderDub({ file, videoDur, segs, burmese, persona, pitch,
   await f.writeFile('mix.wav', wavBytes);
   setFFProgress(p => onProgress(0.85 + p * 0.15, 'Video ပေါင်းနေသည်'));
   const wantMix = keepTalk > 0 || keepGap > 0;
-  let subs = null;
+  let geo = null;
+  if (fx) {
+    const needGeo = fx.ratio && fx.ratio !== 'orig' || +fx.zoom > 100 || (fx.subs && fx.subs.on) || (fx.wm && fx.wm.on) || (fx.logo && fx.logo.on);
+    if (needGeo) { try { const sz = await videoSize(file); if (sz && sz.w && sz.h) geo = outGeometry(sz, fx); } catch {} }
+    fx = { ...fx, geo };
+  }
+  let subs = null, ovl = false;
+  if (geo && fx && ((fx.wm && fx.wm.on) || (fx.logo && fx.logo.on))) {
+    onProgress(0.855, 'Watermark / Logo ဆွဲနေသည်');
+    try { ovl = !!(await makeOverlay(f, fx, geo)); } catch { ovl = false; }
+  }
   if (fx && fx.subs && fx.subs.on) {
     onProgress(0.86, 'စာတန်းထိုး ပုံ ဆွဲနေသည်');
     try { subs = await makeSubTrack(f, { file, videoDur, burmese, placed, fx }); } catch { subs = null; }
   }
-  const fxFilter = buildFx(fx, subs);
+  const ovlIdx = ovl ? (subs ? 3 : 2) : 0;
+  const fxFilter = buildFx(fx, subs, geo, ovlIdx);
   const mixHead = wantMix
     ? `[0:a]volume='${gainExpr(duckIntervals(segs, placed), keepTalk, keepGap)}':eval=frame[o];[1:a]volume=${dubGain.toFixed(2)},apad[d];[o][d]amix=inputs=2:duration=first:dropout_transition=0,volume=2`
     : '';
   // build the list of ffmpeg attempts for a given video filter ('' = copy the video stream untouched)
-  const build = (vf, withSubs) => {
+  const build = (vf, withSubs, withOvl = false) => {
     const vMap = vf ? ['-map', '[v]'] : ['-map', '0:v:0'];
     const enc = vf ? ['-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '27', '-pix_fmt', 'yuv420p'] : ['-c:v', 'copy'];
     const tail = ['-c:a', 'aac', '-b:a', '128k', '-shortest', '-movflags', '+faststart', 'out.mp4'];
-    const base = ['-i', inName, '-i', 'mix.wav', ...(withSubs ? ['-f', 'concat', '-safe', '0', '-i', 'subs.txt'] : [])];
+    const base = ['-i', inName, '-i', 'mix.wav', ...(withSubs ? ['-f', 'concat', '-safe', '0', '-i', 'subs.txt'] : []), ...(withOvl ? ['-i', 'ovl.png'] : [])];
     const list = [];
     if (wantMix) {
       for (const lim of [',alimiter=limit=0.95:level=0', '']) {
@@ -727,12 +812,13 @@ export async function renderDub({ file, videoDur, segs, burmese, persona, pitch,
     });
     return list;
   };
-  const plans = [build(fxFilter, !!subs)];
+  const plans = [build(fxFilter, !!subs, ovl)];
   if (fx && fx.blur && +fx.blurO < 100) {                       // if the see-through blur is not supported, try a solid one
-    const solid = buildFx({ ...fx, blurO: 100 }, subs);
-    if (solid !== fxFilter) plans.push(build(solid, !!subs));
+    const solid = buildFx({ ...fx, blurO: 100 }, subs, geo, ovlIdx);
+    if (solid !== fxFilter) plans.push(build(solid, !!subs, ovl));
   }
-  if (subs && buildFx(fx, null)) plans.push(build(buildFx(fx, null), false));
+  if (subs && ovl) { const f2 = buildFx(fx, subs, geo, 0); plans.push(build(f2, true, false)); }       // without watermark / logo
+  if ((subs || ovl) && buildFx(fx, null, geo, 0)) plans.push(build(buildFx(fx, null, geo, 0), false, false));
   if (fxFilter) plans.push(build('', false));
   let code = -1, usedMix = false, fxFailed = false;
   outer: for (let p = 0; p < plans.length; p++) {
@@ -747,7 +833,7 @@ export async function renderDub({ file, videoDur, segs, burmese, persona, pitch,
   const fontFailed = !!(subs && subs.fontFailed);
   const fellBack = wantMix && !usedMix;
   const out = await f.readFile('out.mp4');
-  for (const x of [temp ? inName : null, 'mix.wav', 'out.mp4', ...(subs ? subs.files : [])]) { if (x) { try { await f.deleteFile(x); } catch {} } }
+  for (const x of [temp ? inName : null, 'mix.wav', 'out.mp4', ovl ? 'ovl.png' : null, ...(subs ? subs.files : [])]) { if (x) { try { await f.deleteFile(x); } catch {} } }
   setFFProgress(null);
   onProgress(1, 'ပြီးပါပြီ');
   return { video: new Blob([out.slice().buffer], { type: 'video/mp4' }), placed, fellBack, fxFailed, fontFailed, stats: dubStats(placed, maxTempo) };
