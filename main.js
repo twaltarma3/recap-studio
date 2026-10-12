@@ -219,7 +219,7 @@ function pageKeys() {
         <button class="icon" id="oEye" title="ပြမည်">👁</button>
       </div>
       <label class="small" style="margin-top:10px">Model (မထည့်လည်းရ)
-        <input id="kOrModel" type="text" autocomplete="off" placeholder="google/gemma-4-31b-it:free" />
+        <input id="kOrModel" type="text" autocomplete="off" placeholder="google/gemini-2.5-flash" />
       </label>
       <div class="two">
         <button class="btn" id="oTest">🔎 စစ်ဆေးမည်</button>

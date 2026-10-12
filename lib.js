@@ -389,7 +389,8 @@ async function geminiTranslateOnly(segs, onStatus) {
 }
 
 /* ---------- OpenRouter (works from Myanmar without a VPN) ---------- */
-export const OR_DEFAULT_MODELS = ['google/gemma-4-31b-it:free', 'nvidia/nemotron-3-ultra-550b-a55b:free', 'google/gemma-4-26b-a4b-it:free'];
+// Gemini models have by far the best Burmese; the free models give wrong translations, so they are not used by default
+export const OR_DEFAULT_MODELS = ['google/gemini-2.5-flash', 'google/gemini-3.8-flash'];
 const OR_URL = 'https://openrouter.ai/api/v1';
 async function orCall(prompt, key, model) {
   const r = await fetch(OR_URL + '/chat/completions', {
@@ -402,7 +403,7 @@ async function orCall(prompt, key, model) {
   if (!r.ok || j?.error) {
     const st = r.ok ? (j.error.code || 500) : r.status;
     const e = new Error(st === 401 ? 'OpenRouter Key မမှန်ပါ' :
-      st === 402 ? 'OpenRouter credit မလောက်ပါ' :
+      st === 402 ? 'OpenRouter credit မလောက်ပါ — openrouter.ai/credits မှာ အနည်းဆုံး $5 ထည့်ပါ' :
       st === 429 ? 'OpenRouter သုံးခွင့် ပြည့်နေပါတယ် — ခဏနေမှ ပြန်စမ်းပါ' :
       `OpenRouter ${st}: ${String(m).slice(0, 120)}`);
     e.status = st; throw e;
