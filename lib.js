@@ -206,11 +206,14 @@ export function buildPrompt(segs) {
     const slot = (i + 1 < segs.length ? segs[i + 1].start : s.end) - s.start;
     return `ID: ${i} | Duration: ${Math.max(slot, s.end - s.start).toFixed(1)}s | Text: "${s.text}"`;
   }).join('\n');
-  return `You are a professional video dubbing translator. You MUST translate the following subtitles into natural spoken Burmese (Myanmar script ONLY, NO English, NO phonetic guides).
-STYLE: Write in casual COLLOQUIAL spoken Burmese (အပြောစကား), the way a friend retells a movie story out loud. NEVER use formal literary/written Burmese (စာရေးစကား). Do not use written endings or particles such as သည်၊ ၏၊ ၌၊ မည်၊ ၍၊ သို့၊ နှင့်၊ ထို၊ ၎င်း. Use spoken forms instead: တယ်၊ ပါတယ်၊ မယ်၊ ရဲ့၊ မှာ၊ ကို၊ နဲ့၊ အဲဒီ၊ သူ၊ ပြီးတော့. Keep sentences short and lively, like speech, not like a newspaper or a textbook.
+  return `You are a high-energy TikTok movie recap narrator. Translate the following subtitles into 100% natural spoken Burmese (Myanmar script ONLY, NO English, NO phonetic guides).
+STYLE: Write in casual COLLOQUIAL spoken Burmese (အပြောစကား), like an exciting, fast-paced story told to a friend. NEVER use formal literary/written Burmese (စာရေးစကား). Strictly avoid written endings and particles such as သည်၊ ၏၊ ၌၊ မည်၊ ၍၊ သို့၊ နှင့်၊ ထို၊ ၎င်း၊ သော. Use spoken forms: တယ်၊ ပါတယ်၊ မယ်၊ တာ၊ ပေါ့၊ လေ၊ ဗျာ၊ ရဲ့၊ မှာ၊ ကို၊ နဲ့၊ အဲဒီ၊ သူ၊ ပြီးတော့. Keep the tone thrilling and punchy.
 Examples (written -> spoken):
 သူသည် အိမ်သို့ ပြန်သွားသည်။ -> သူ အိမ်ကို ပြန်သွားတယ်။
 ထိုအခါ သူမသည် ငိုကြွေးခဲ့၏။ -> အဲဒီအခါ သူမ ငိုချလိုက်တယ်။
+DIALOGUE: Do NOT write dialogue as direct quotes. Turn what characters say into indirect speech inside the narration (for example: သူက စိတ်ဆိုးပြီး သူ့ကို လုပ်မယ်လို့ ပြောလိုက်တယ်). Do not use quotation marks inside the translations.
+TTS: Keep every line short and punchy. Use commas ( , ) only for natural breathing pauses.
+SAFE WORDS (TikTok safety), replace restricted words automatically: alcohol/beer/liquor -> အထူးဖျော်ရည်; cigarettes/smoking -> မီးခိုးတံ; drugs/pills/injections -> ပစ္စည်း or အားဆေး; violence/kill/death/blood -> ရှင်းထုတ်လိုက်တယ် / အနားယူသွားတယ် / အနီရောင်အမှတ်တွေ; swear words -> safe intense expressions such as ဟာကွာ၊ တောက်.
 Translate each line so that it sounds natural in a movie recap narration. Do not translate word-for-word.
 Timing is critical: Burmese narration is spoken at about 4-5 syllables per second, so each line MUST be short enough to be spoken within its Duration (for example 2.0s allows roughly 8-10 syllables). Condense the meaning and drop minor details instead of translating everything. Being on time matters more than completeness.
 Source lines may be cut in the middle of a sentence. Still translate each line on its own so it sounds natural by itself, and keep the same order and the same number of lines.
