@@ -559,10 +559,11 @@ async function autoTranslate() {
     state.busy = false;
     if (t.length === state.segs.length) { state.burmese = t; go(3); toast('ဘာသာပြန်ပြီးပါပြီ'); return true; }
     state.burmese = state.segs.map((_, i) => t[i] || '');
-    state.showSrc = true; go(2); toast(`အရေအတွက် မကိုက်ပါ (${t.length}/${state.segs.length}) — စစ်ပြီး ပြင်ပါ`); return true;
+    state.showSrc = true; state.srcNote = `Gemini ပြန်တဲ့ စာကြောင်းအရေအတွက် မကိုက်ပါ (${t.length}/${state.segs.length})။ အောက်က JSON ကို စစ်ပြီး Next နှိပ်ပါ၊ ဒါမှမဟုတ် ✨ ခလုပ်နဲ့ ပြန်စမ်းပါ။`; go(2); return true;
   } catch (e) {
-    state.busy = false; state.showSrc = true; go(2);
-    toast(e.message === 'Failed to fetch' ? 'ဘာသာပြန် မရပါ — ကိုယ်တိုင် ဆက်လုပ်ပါ' : e.message); return true;
+    state.busy = false; state.showSrc = true;
+    state.srcNote = 'ဘာသာပြန် မအောင်မြင်ပါ — ' + (e.message === 'Failed to fetch' ? 'အင်တာနက် ချိတ်ဆက်မရပါ' : e.message) + '\nအောက်က ✨ ခလုပ်နဲ့ ပြန်စမ်းနိုင်ပါတယ်။';
+    go(2); return true;
   }
 }
 
@@ -595,6 +596,7 @@ async function transcribeFlow() {
 function step2() {
   view.innerHTML = `
     <div class="row"><h2>မူရင်းစာသားကို စစ်ဆေးပါ</h2><button class="ghost" id="back">Back</button></div>
+    ${state.srcNote ? `<div class="err" id="srcNote"></div>` : ''}
     <p class="muted">စာကြောင်းတစ်ကြောင်းလျှင် အချိန်တစ်ခု ကိုက်ထားသည်။ စာကြောင်းအရေအတွက် မပြောင်းပါနှင့်။ (${state.segs.length} lines)</p>
     <textarea id="src">${state.segs.map(s => s.text).join('\n').replace(/</g, '&lt;')}</textarea>
     ${L.cfg.geminiKey ? `<button id="auto" class="btn primary">✨ Gemini နဲ့ အလိုအလျောက် ဘာသာပြန်မည်</button>
@@ -609,6 +611,7 @@ function step2() {
       </label>
       <button id="next" class="btn primary">ဘာသာပြန်အတည်ပြုမည် (Next)</button>
     </div>`;
+  if (state.srcNote) { $('#srcNote').textContent = state.srcNote; state.srcNote = ''; }
   if (state.burmese.length) $('#json').value = JSON.stringify({ translations: state.burmese }, null, 1);
   $('#src').oninput = () => {
     const l = $('#src').value.split('\n').map(x => x.trim());
