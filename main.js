@@ -28,6 +28,13 @@ function setProg(frac, text) {
   $('#pnum').textContent = Math.round(frac * 100) + '%';
   if (text) $('#ptxt').textContent = text;
 }
+const esc = t => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+// drop extra blank lines at the end (a stray Enter) so the line count still matches
+const trimTail = (lines, n) => { while (lines.length > n && lines[lines.length - 1] === '') lines.pop(); return lines; };
+function clearResult() {
+  if (state.result && state.result.url) URL.revokeObjectURL(state.result.url);   // free the old video from memory
+  state.result = null;
+}
 const showErr = (e) => { const d = document.createElement('div'); d.className = 'err'; d.textContent = e.message || String(e); view.appendChild(d); };
 const download = (blob, name) => { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); };
 
@@ -540,18 +547,9 @@ function bindPreview() {
     $('#' + id + 'P').onclick = () => set(state[key] + step);
   };
   bindPM('blurS', 'blurS', 5, 100, 5);
-  const bindPM2 = (id, key, min, max, step) => {
-    const set = x => {
-      state[key] = Math.max(min, Math.min(max, Math.round(x / step) * step));
-      $('#' + id).value = state[key]; $('#' + id + 'V').textContent = state[key] + '%'; apply();
-    };
-    $('#' + id).oninput = e => set(+e.target.value);
-    $('#' + id + 'M').onclick = () => set(state[key] - step);
-    $('#' + id + 'P').onclick = () => set(state[key] + step);
-  };
-  bindPM2('fxZoom', 'fxZoom', 100, 250, 10);
-  bindPM2('wmSize', 'wmSize', 2, 10, 1);
-  bindPM2('logoSize', 'logoSize', 5, 40, 1);
+  bindPM('fxZoom', 'fxZoom', 100, 250, 10);
+  bindPM('wmSize', 'wmSize', 2, 10, 1);
+  bindPM('logoSize', 'logoSize', 5, 40, 1);
   bindPM('blurO', 'blurO', 20, 100, 5);
 
   /* subtitles */
@@ -614,11 +612,11 @@ function step1() {
     <h2>Video တင်ပါ</h2>
     <label class="drop ${state.file ? 'has' : ''}" for="f">
       <input id="f" type="file" accept="video/*" hidden />
-      <b>${state.file ? state.file.name : 'နှိပ်၍ Video File ရွေးချယ်ပါ'}</b>
+      <b>${state.file ? esc(state.file.name) : 'နှိပ်၍ Video File ရွေးချယ်ပါ'}</b>
       <span class="muted small">${state.file ? (state.file.size / 1048576).toFixed(1) + ' MB' : 'MP4, MOV, WEBM, MKV · ၁၀ မိနစ်အထိ'}</span>
     </label>
     ${state.file ? previewBlock() : ''}
-    <label>မူရင်းစကားပြောဘာသာ"
+    <label>မူရင်းစကားပြောဘာသာ
       <select id="lang">
         ${[['zh', 'Chinese 中文'], ['en', 'English'], ['ja', 'Japanese'], ['ko', 'Korean'], ['hi', 'Hindi'], ['auto', 'Auto detect']]
           .map(([v, t]) => `<option value="${v}" ${v === state.lang ? 'selected' : ''}>${t}</option>`).join('')}
@@ -640,9 +638,10 @@ async function transcribeFlow() {
   try {
     setProg(0.02, 'Engine ပြင်ဆင်နေသည်');
     await L.getFFmpeg();
-    state.videoDur = await L.videoDuration(state.file);
+    state.videoDur = await L.videoDuration(state.file).catch(() => 0);   // browser can't decode some codecs; ffmpeg still can
     setProg(0.05, 'အသံ ဆွဲထုတ်နေသည်');
     const wav = await L.extractAudio(state.file, p => setProg(0.05 + p * 0.2, 'အသံ ဆွဲထုတ်နေသည်'));
+    if (!state.videoDur) state.videoDur = Math.max(0, (wav.size - 44) / 32000);   // 16 kHz mono 16-bit wav
     const names = { uploading: 'Server သို့ ပို့နေပါသည်', queued: 'တန်းစီစောင့်နေသည်', processing: 'စာသားထုတ်ယူနေပါသည်' };
     let tick = 0.3;
     state.origSegs = null;
@@ -662,7 +661,7 @@ function step2() {
   view.innerHTML = `
     <div class="row"><h2>မူရင်းစာသားကို စစ်ဆေးပါ</h2><button class="ghost" id="back">Back</button></div>
     <p class="muted">စာကြောင်းတစ်ကြောင်းလျှင် အချိန်တစ်ခု ကိုက်ထားသည်။ စာကြောင်းအရေအတွက် မပြောင်းပါနှင့်။ (${state.segs.length} lines)</p>
-    <textarea id="src">${state.segs.map(s => s.text).join('\n').replace(/</g, '&lt;')}</textarea>
+    <textarea id="src">${esc(state.segs.map(s => s.text).join('\n'))}</textarea>
     <div class="chips" id="pStyle" style="margin:0 0 8px"><button type="button" class="chip" data-s="recap">🔥 Recap (လှုပ်ရှား)</button><button type="button" class="chip" data-s="chat">💬 ရိုးရိုးစကားပြော</button></div>
     <button id="copy" class="btn block">📋 Copy Full Prompt</button>
     <div class="panel">
@@ -676,11 +675,11 @@ function step2() {
     </div>`;
   if (state.burmese.length) $('#json').value = JSON.stringify({ translations: state.burmese }, null, 1);
   $('#src').oninput = () => {
-    const l = $('#src').value.split('\n').map(x => x.trim());
+    const l = trimTail($('#src').value.split('\n').map(x => x.trim()), state.segs.length);
     if (l.length === state.segs.length) l.forEach((t, i) => { state.segs[i].text = t; });
   };
   const syncSrc = () => {
-    const lines = $('#src').value.split('\n').map(x => x.trim());
+    const lines = trimTail($('#src').value.split('\n').map(x => x.trim()), state.segs.length);
     if (lines.length !== state.segs.length) { toast(`စာကြောင်း ${lines.length} / ${state.segs.length} မကိုက်ပါ`); return false; }
     lines.forEach((t, i) => { state.segs[i].text = t; });
     return true;
@@ -717,7 +716,7 @@ function step3() {
   view.innerHTML = `
     <div class="row"><h2>မြန်မာဘာသာပြန်ကို စစ်ဆေးပါ</h2><button class="ghost" id="back">Back</button></div>
     <p class="muted">တစ်ကြောင်းလျှင် စာတစ်ကြောင်း။ (${state.segs.length} lines)</p>
-    <textarea id="mm" style="min-height:300px">${state.burmese.join('\n').replace(/</g, '&lt;')}</textarea>
+    <textarea id="mm" style="min-height:300px">${esc(state.burmese.join('\n'))}</textarea>
     <div class="row" style="margin-top:20px"><b>အသံရွေးချယ်ပါ</b><span class="muted small">${L.PERSONAS.length} Voice Personas</span></div>
     <div class="voices">${voices}</div>
     <div class="panel">
@@ -746,7 +745,7 @@ function step3() {
     <button id="next" class="btn primary">အသံထုတ်ပြီး Video ပေါင်းမည်</button>`;
 
   const read = () => {
-    const lines = $('#mm').value.split('\n').map(x => x.trim());
+    const lines = trimTail($('#mm').value.split('\n').map(x => x.trim()), state.segs.length);
     return lines;
   };
   $('#mm').oninput = () => { state.burmese = read(); };
@@ -782,7 +781,7 @@ function step3() {
     b.textContent = '…';
     try {
       const ab = await L.tts('မင်္ဂလာပါ၊ ဒီအသံနဲ့ ဇာတ်ကြောင်းကို ပြောပြပေးပါမယ်။', p, state.pitch, state.rate);
-      previewAudio?.pause();
+      if (previewAudio) { previewAudio.pause(); URL.revokeObjectURL(previewAudio.src); }
       previewAudio = new Audio(URL.createObjectURL(new Blob([ab], { type: 'audio/mpeg' })));
       previewAudio.play();
     } catch (e) { toast(e.message.slice(0, 80)); }
@@ -793,7 +792,7 @@ function step3() {
     if (state.burmese.length !== state.segs.length) {
       toast(`စာကြောင်း ${state.burmese.length} / ${state.segs.length} မကိုက်ပါ`); return;
     }
-    state.result = null;
+    clearResult();
     go(4);
   };
 }
@@ -833,7 +832,7 @@ async function step4() {
     $('#retry').onclick = () => step4();
     $('#repick').onchange = async ev => {
       const nf = ev.target.files[0]; if (!nf) return;
-      try { await L.forgetInput(); state.file = nf; state.videoDur = await L.videoDuration(nf); } catch (e2) { toast(e2.message); return; }
+      try { await L.forgetInput(); state.file = nf; state.videoDur = await L.videoDuration(nf).catch(() => state.videoDur); } catch (e2) { toast(e2.message); return; }
       step4();
     };
     $('#back').onclick = () => go(3);
@@ -858,7 +857,7 @@ function showResult() {
     <h2>ရလဒ်များ (Results)</h2>
     <video src="${state.result.url}" controls playsinline></video>
     ${statBlock()}
-    ${state.diag && /fxFailed:true|false\n[^]/.test(state.diag) && /fxFailed:true|failed|Error|error/i.test(state.diag) ? `<details style="margin:10px 0"><summary class="muted small">🛠 Effect log (အမှားရှာရန်)</summary><pre id="diagTxt" style="white-space:pre-wrap;font-size:11px;max-height:220px;overflow:auto">${state.diag.replace(/</g, '&lt;')}</pre><button class="btn block" id="diagCp" type="button">📋 Log ကူးမည်</button></details>` : ''}
+    ${state.diag && /fxFailed:true|false\n[^]/.test(state.diag) && /fxFailed:true|failed|Error|error/i.test(state.diag) ? `<details style="margin:10px 0"><summary class="muted small">🛠 Effect log (အမှားရှာရန်)</summary><pre id="diagTxt" style="white-space:pre-wrap;font-size:11px;max-height:220px;overflow:auto">${esc(state.diag)}</pre><button class="btn block" id="diagCp" type="button">📋 Log ကူးမည်</button></details>` : ''}
     <button id="dl" class="btn primary">⬇ Video Download (.mp4)</button>
     <button id="srt" class="btn block">Download Subtitles (.srt)</button>
     <div class="row" style="margin-top:14px">
@@ -874,8 +873,8 @@ function showResult() {
     try { await navigator.clipboard.writeText(t); toast('Prompt ကူးပြီးပါပြီ — Gemini မှာ paste လုပ်ပါ'); } catch { toast('ကူးမရပါ'); }
   });
   $('#toStep2')?.addEventListener('click', () => { state.showSrc = true; go(2); });
-  $('#back').onclick = () => { state.result = null; go(3); };
-  $('#again').onclick = () => { Object.assign(state, { showSrc: false, file: null, segs: [], origSegs: null, burmese: [], result: null }); go(1); };
+  $('#back').onclick = () => { clearResult(); go(3); };
+  $('#again').onclick = () => { clearResult(); Object.assign(state, { showSrc: false, file: null, segs: [], origSegs: null, burmese: [] }); go(1); };
 }
 
 /* ---------------- start ---------------- */
