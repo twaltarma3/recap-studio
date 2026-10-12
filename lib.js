@@ -8,7 +8,8 @@ const WORKER_URL = 'https://recap-proxy.twaltarma3.workers.dev';
 
 export const cfg = {
   get workerUrl() { return WORKER_URL; },
-  get aaiKey() { return (localStorage.getItem('aaiKey') || '').trim(); }
+  get aaiKey() { return (localStorage.getItem('aaiKey') || '').trim(); },
+  get geminiKey() { return (localStorage.getItem('geminiKey') || '').trim(); }
 };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
@@ -306,6 +307,57 @@ export function parseTranslations(raw) {
   try { obj = JSON.parse(s.slice(a, b + 1)); } catch { throw new Error('JSON ပုံစံ မမှန်ပါ'); }
   if (!Array.isArray(obj.translations)) throw new Error('"translations" array မတွေ့ပါ');
   return obj.translations.map(x => String(x ?? '').replace(/\s*\n\s*/g, ' ').trim());
+}
+
+/* ---------- Gemini (called straight from the phone with the user's own key) ---------- */
+const GEMINI_MODELS = ['gemini-flash-latest', 'gemini-2.5-flash'];
+async function geminiCall(prompt, key, model) {
+  const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
+    body: JSON.stringify({
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      generationConfig: { temperature: 0.7, responseMimeType: 'application/json', maxOutputTokens: 32768 }
+    })
+  });
+  if (!r.ok) {
+    let m = ''; try { m = (await r.json()).error?.message || ''; } catch {}
+    const e = new Error(r.status === 400 && /API key/i.test(m) ? 'Gemini Key မမှန်ပါ' :
+      r.status === 403 ? 'Gemini Key အသုံးပြုခွင့်မရှိပါ' :
+      r.status === 429 ? 'Gemini သုံးခွင့် ပြည့်နေပါတယ် — ခဏနေမှ ပြန်စမ်းပါ' :
+      `Gemini ${r.status}: ${m.slice(0, 120)}`);
+    e.status = r.status; throw e;
+  }
+  const j = await r.json();
+  const t = (j.candidates?.[0]?.content?.parts || []).map(p => p.text || '').join('');
+  if (!t) throw new Error('Gemini က ပြန်စာ မပေးပါ');
+  return t;
+}
+// returns an array of Burmese lines, one per segment (retries once on a count mismatch / busy server)
+export async function geminiTranslate(segs, onStatus) {
+  const key = cfg.geminiKey;
+  if (!key) throw new Error('API Key Settings ထဲမှာ Gemini Key ကို အရင်ထည့်ပါ');
+  const prompt = buildPrompt(segs);
+  let best = null, lastErr;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    for (const model of GEMINI_MODELS) {
+      try {
+        onStatus?.(attempt ? 'ပြန်ကြိုးစားနေသည်' : 'ဘာသာပြန်နေသည်');
+        const arr = parseTranslations(await geminiCall(prompt, key, model));
+        if (!best || Math.abs(arr.length - segs.length) < Math.abs(best.length - segs.length)) best = arr;
+        if (arr.length === segs.length) return arr;
+        throw new Error('count');
+      } catch (e) {
+        lastErr = e;
+        if (e.status === 400 || e.status === 403) throw e;       // bad key: no point retrying
+        if (e.status === 404) continue;                           // model name not available -> next model
+        if (e.status === 429 || e.status >= 500) await sleep(2500);
+        break;
+      }
+    }
+  }
+  if (best) return best;                                          // caller shows the count mismatch
+  throw lastErr || new Error('ဘာသာပြန်မရပါ');
 }
 
 /* ---------- TTS ---------- */

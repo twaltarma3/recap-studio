@@ -208,6 +208,23 @@ function pageKeys() {
 
     <div class="kbox">
       <div class="krow">
+        <b>Gemini API Key<br><span class="muted small" style="font-weight:400">(အလိုအလျောက် ဘာသာပြန်ရန် — မထည့်လည်းရ)</span></b>
+        <div class="badges"><span class="badge" id="gemBadge"></span></div>
+      </div>
+      <p style="margin:8px 0 10px"><a class="link small" href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Get Free Key ↗</a></p>
+      <div class="keyfield">
+        <input id="kGem" type="password" autocomplete="off" placeholder="Gemini API Key" />
+        <button class="icon" id="gDel" title="ဖျက်မည်">🗑</button>
+        <button class="icon" id="gEye" title="ပြမည်">👁</button>
+      </div>
+      <div class="two">
+        <button class="btn" id="gTest">🔎 စစ်ဆေးမည်</button>
+        <button class="btn primary" id="gSave">သိမ်းမည်</button>
+      </div>
+    </div>
+
+    <div class="kbox">
+      <div class="krow">
         <b>Device Video Engine<br><span class="muted small" style="font-weight:400">(FFmpeg WASM ~31MB)</span></b>
         <span class="badge" id="ffBadge">…</span>
       </div>
@@ -247,6 +264,30 @@ function pageKeys() {
     } catch (e) { toast(e.message === 'Failed to fetch' ? 'Worker ကို ချိတ်ဆက်မရပါ' : e.message); }
   };
   upd();
+
+  /* Gemini card */
+  $('#kGem').value = localStorage.getItem('geminiKey') || '';
+  const gupd = () => {
+    const k = localStorage.getItem('geminiKey') || '';
+    const dirty = $('#kGem').value.trim() !== k, b = $('#gemBadge');
+    b.textContent = dirty ? 'Unsaved' : k ? 'Active' : 'Optional';
+    b.className = 'badge' + (!dirty && k ? ' ok' : '');
+  };
+  $('#kGem').oninput = gupd;
+  $('#gEye').onclick = () => { const i = $('#kGem'); i.type = i.type === 'password' ? 'text' : 'password'; };
+  $('#gDel').onclick = () => { $('#kGem').value = ''; localStorage.removeItem('geminiKey'); gupd(); toast('Key ဖျက်ပြီးပါပြီ'); };
+  $('#gSave').onclick = () => { localStorage.setItem('geminiKey', $('#kGem').value.trim()); gupd(); toast('သိမ်းပြီးပါပြီ'); };
+  $('#gTest').onclick = async () => {
+    localStorage.setItem('geminiKey', $('#kGem').value.trim()); gupd();
+    if (!L.cfg.geminiKey) { toast('Gemini Key ကို အရင်ထည့်ပါ'); return; }
+    try {
+      const r = await fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=1', { headers: { 'x-goog-api-key': L.cfg.geminiKey } });
+      if (r.status === 400 || r.status === 403) throw new Error('Key မမှန်ပါ');
+      if (!r.ok) throw new Error('Server ပြန်ကြားချက်: ' + r.status);
+      toast('✅ Key မှန်ပါတယ်');
+    } catch (e) { toast(e.message === 'Failed to fetch' ? 'အင်တာနက် ချိတ်ဆက်မရပါ' : e.message); }
+  };
+  gupd();
 
   /* FFmpeg card */
   const ffRefresh = async () => {
@@ -533,6 +574,8 @@ function step2() {
     <div class="row"><h2>မူရင်းစာသားကို စစ်ဆေးပါ</h2><button class="ghost" id="back">Back</button></div>
     <p class="muted">စာကြောင်းတစ်ကြောင်းလျှင် အချိန်တစ်ခု ကိုက်ထားသည်။ စာကြောင်းအရေအတွက် မပြောင်းပါနှင့်။ (${state.segs.length} lines)</p>
     <textarea id="src">${state.segs.map(s => s.text).join('\n').replace(/</g, '&lt;')}</textarea>
+    ${L.cfg.geminiKey ? `<button id="auto" class="btn primary">✨ Gemini နဲ့ အလိုအလျောက် ဘာသာပြန်မည်</button>
+    <div id="autoMsg" class="muted small" style="margin-top:8px"></div>` : `<p class="muted small" style="margin-top:12px">💡 API Key Settings မှာ Gemini Key ထည့်ထားရင် Copy/Paste မလုပ်ဘဲ အလိုအလျောက် ဘာသာပြန်ပေးပါမယ်။</p>`}
     <button id="copy" class="btn block">📋 Copy Full Prompt</button>
     <div class="panel">
       <b>🤖 Gemini App ဖြင့် ဘာသာပြန်ရန် (Free)</b>
@@ -560,6 +603,20 @@ function step2() {
     const text = L.buildPrompt(state.segs);
     try { await navigator.clipboard.writeText(text); toast('Prompt ကူးပြီးပါပြီ'); }
     catch { $('#json').value = text; toast('ကူးမရပါ — အောက်ကနေ ရွေးကူးပါ'); }
+  };
+  if ($('#auto')) $('#auto').onclick = async () => {
+    if (!syncSrc()) return;
+    const btn = $('#auto'); btn.disabled = true;
+    try {
+      const t = await L.geminiTranslate(state.segs, s => { $('#autoMsg').textContent = s + '…'; });
+      if (t.length !== state.segs.length) {
+        $('#json').value = JSON.stringify({ translations: t }, null, 1);
+        toast(`အရေအတွက် မကိုက်ပါ (${t.length}/${state.segs.length}) — အောက်က JSON ကို စစ်ပြီး Next နှိပ်ပါ`);
+      } else {
+        state.burmese = t; go(3); toast('ဘာသာပြန်ပြီးပါပြီ');
+      }
+    } catch (e) { toast(e.message === 'Failed to fetch' ? 'အင်တာနက် ချိတ်ဆက်မရပါ' : e.message); }
+    finally { if ($('#auto')) { btn.disabled = false; $('#autoMsg').textContent = ''; } }
   };
   $('#next').onclick = () => {
     try {
