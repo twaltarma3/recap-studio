@@ -617,16 +617,6 @@ function step1() {
       <b>${state.file ? state.file.name : 'နှိပ်၍ Video File ရွေးချယ်ပါ'}</b>
       <span class="muted small">${state.file ? (state.file.size / 1048576).toFixed(1) + ' MB' : 'MP4, MOV, WEBM, MKV · ၁၀ မိနစ်အထိ'}</span>
     </label>
-    <div style="margin:12px 0 0">
-      <div class="muted small" style="text-align:center;margin-bottom:8px">— သို့မဟုတ် လင့်ကူးထည့်ပါ —</div>
-      <div style="display:flex;gap:8px;align-items:center">
-        <input id="vUrl" type="url" inputmode="url" placeholder="https://…" style="flex:1;margin:0;min-width:0" />
-        <button id="vPaste" type="button" class="btn" style="margin:0;flex:none;min-height:48px">📋 Paste</button>
-        <button id="vGet" type="button" class="btn primary" style="margin:0;flex:none;min-height:48px">Load</button>
-      </div>
-      <div id="vBar" class="bar" hidden><i id="vBarI" style="display:block;height:100%;width:0;background:linear-gradient(135deg,#8470ff,#4a37e0);border-radius:999px"></i></div>
-      <p id="vSt" class="muted small" style="margin:6px 0 0">တိုက်ရိုက် .mp4 လင့် နဲ့ TikTok လင့် (စမ်းသပ်ဆဲ) ကို ထောက်ပံ့ပါတယ်</p>
-    </div>
     ${state.file ? previewBlock() : ''}
     <label>မူရင်းစကားပြောဘာသာ"
       <select id="lang">
@@ -636,43 +626,6 @@ function step1() {
     </label>
     <div style="position:sticky;bottom:0;z-index:4;margin:12px -6px 0;padding:10px 6px;background:linear-gradient(180deg,rgba(20,20,23,0),#141417 35%)"><button id="next" class="btn primary" style="margin:0" ${state.file ? '' : 'disabled'}>စာသားထုတ်မည် (Next)</button></div>`;
   $('#f').onchange = e => { state.file = e.target.files[0] || null; state.segs = []; state.origSegs = null; L.forgetInput(); step1(); };
-  $('#vPaste').onclick = async () => {
-    try { $('#vUrl').value = (await navigator.clipboard.readText()).trim(); } catch { toast('Paste မရပါ — အကွက်ကို ဖိပြီး paste လုပ်ပါ'); }
-  };
-  $('#vGet').onclick = async () => {
-    const u = $('#vUrl').value.trim(), st = $('#vSt'), btn = $('#vGet'), bar = $('#vBar'), bi = $('#vBarI');
-    if (!/^https?:\/\//i.test(u)) { st.textContent = 'လင့်ကို http:// သို့ https:// နဲ့ စပြီး ထည့်ပါ'; return; }
-    btn.disabled = true; bar.hidden = false; bi.style.width = '3%'; st.textContent = '⏳ ဆွဲနေသည်…';
-    try {
-      let src = u, tt = false;
-      if (/(^|\.)tiktok\.com\//i.test(u)) {
-        tt = true; st.textContent = '⏳ TikTok လင့် ရှာနေသည်…';
-        const j = await (await fetch('https://www.tikwm.com/api/?hd=1&url=' + encodeURIComponent(u))).json();
-        src = j && j.data && (j.data.hdplay || j.data.play);
-        if (!src) throw new Error('TikTok video ရှာမတွေ့ပါ');
-        if (src.startsWith('/')) src = 'https://www.tikwm.com' + src;
-      } else if (/(youtube\.com|youtu\.be)/i.test(u)) throw new Error('YouTube လင့်က browser ကနေ တိုက်ရိုက်မရပါ');
-      const r = await fetch(src);
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      const total = +r.headers.get('content-length') || 0, rd = r.body.getReader(), parts = []; let got = 0;
-      for (;;) {
-        const { done, value } = await rd.read(); if (done) break;
-        parts.push(value); got += value.length;
-        bi.style.width = (total ? Math.max(3, got / total * 100) : 50) + '%';
-        st.textContent = `⏳ ဆွဲနေသည်… ${(got / 1048576).toFixed(1)}${total ? ' / ' + (total / 1048576).toFixed(1) : ''} MB`;
-      }
-      const type = (r.headers.get('content-type') || '').split(';')[0];
-      if (type && !/^video\/|octet-stream/i.test(type)) throw new Error('video မဟုတ်ပါ (' + type + ')');
-      let name = tt ? 'tiktok.mp4' : decodeURIComponent((u.split('?')[0].split('/').pop() || 'video')).slice(0, 60);
-      if (!/\.(mp4|mov|webm|mkv|m4v)$/i.test(name)) name += '.mp4';
-      state.file = new File(parts, name, { type: type && type.startsWith('video/') ? type : 'video/mp4' });
-      state.segs = []; state.origSegs = null; L.forgetInput(); step1();
-    } catch (e) {
-      bar.hidden = true;
-      st.textContent = '❌ ဆွဲမရပါ — ' + (e.message === 'Failed to fetch' ? 'ဒီ website က တိုက်ရိုက်ဆွဲခွင့်မပေးပါ။ ဖုန်းထဲ ဒေါင်းပြီး အပေါ်က ရွေးပါ' : e.message);
-      btn.disabled = false;
-    }
-  };
   $('#lang').onchange = e => { state.lang = e.target.value; };
   if (state.file) bindPreview();
   $('#next').onclick = () => {
