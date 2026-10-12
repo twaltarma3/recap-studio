@@ -559,6 +559,16 @@ async function transcribeFlow() {
     state.origSegs = null;
     state.segs = await L.transcribe(wav, state.lang, st => { tick = Math.min(tick + 0.04, 0.95); setProg(tick, names[st] || st); });
     state.burmese = []; state.busy = false;
+    if (L.cfg.geminiKey && state.segs.length) {          // Gemini key set -> translate straight away
+      state.busy = true; setProg(0.96, 'ဘာသာပြန်နေသည်');
+      try {
+        const t = await L.geminiTranslate(state.segs, s => setProg(0.97, s));
+        state.busy = false;
+        if (t.length === state.segs.length) { state.burmese = t; go(3); toast('ဘာသာပြန်ပြီးပါပြီ'); return; }
+        state.burmese = state.segs.map((_, i) => t[i] || '');
+        go(2); toast(`အရေအတွက် မကိုက်ပါ (${t.length}/${state.segs.length}) — စစ်ပြီး ပြင်ပါ`); return;
+      } catch (e) { state.busy = false; go(2); toast(e.message === 'Failed to fetch' ? 'ဘာသာပြန် မရပါ — ကိုယ်တိုင် ဆက်လုပ်ပါ' : e.message); return; }
+    }
     go(2);
   } catch (e) {
     view.innerHTML = `<h2>အမှားရှိနေပါသည်</h2>`; showErr(e);
