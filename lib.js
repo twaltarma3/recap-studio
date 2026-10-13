@@ -511,8 +511,10 @@ function ttsUrl() {
     ttsUrlAt = Date.now();
     ttsUrlP = fetch(cfg.workerUrl + '/tts-url').then(async r => {
       if (!r.ok) throw new Error('tts-url ' + r.status);
-      const j = await r.json(); if (!j.url) throw new Error('tts-url empty');
-      return j.url;
+      const j = await r.json();
+      const urls = Array.isArray(j.urls) && j.urls.length ? j.urls : j.url ? [j.url] : [];
+      if (!urls.length) throw new Error('tts-url empty');
+      return urls;
     }).catch(e => { ttsUrlP = null; throw e; });
   }
   return ttsUrlP;
@@ -521,9 +523,20 @@ const xesc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '
 const sgn = n => (n >= 0 ? '+' : '') + Math.round(n);
 const rid = () => [...crypto.getRandomValues(new Uint8Array(16))].map(b => b.toString(16).padStart(2, '0')).join('');
 
+let ttsGoodUrl = 0;   // which Edge TTS address worked last
 async function ttsDirect(text, voice, pitch, rate) {
-  let base;
-  try { base = await ttsUrl(); } catch (e) { e.connect = true; throw e; }  // old Worker without /tts-url
+  let urls;
+  try { urls = await ttsUrl(); } catch (e) { e.connect = true; throw e; }  // old Worker without /tts-url
+  const order = [ttsGoodUrl, ...urls.keys()].filter((v, i, a) => a.indexOf(v) === i && v < urls.length);
+  let last;
+  for (const k of order) {
+    try { const ab = await ttsSocket(urls[k], text, voice, pitch, rate); ttsGoodUrl = k; return ab; }
+    catch (e) { last = e; if (!e.connect) throw e; }   // connected but no audio: another address will not help
+  }
+  throw last;
+}
+
+function ttsSocket(base, text, voice, pitch, rate) {
   const id = rid();
   return new Promise((resolve, reject) => {
     let ws, got = false, done = false;
@@ -574,13 +587,14 @@ export async function tts(text, persona, pitchOffset = 0, rateOffset = 0, tries 
   const rate = Math.max(-50, Math.min(100, persona.rate + rateOffset));
   let last;
   for (let k = 0; k < tries; k++) {
+    let phoneErr = null;
     if (ttsInfo.direct !== 'bad') {
       try {
         const ab = await ttsDirect(text, voice, pitch, rate);
         ttsInfo.direct = 'ok'; ttsInfo.last = 'phone';
         return ab;
       } catch (e) {
-        last = e;
+        phoneErr = e;
         // the phone could not even connect (browser / network blocks it): use the Worker from now on
         if (e.connect && ttsInfo.direct === 'unknown') ttsInfo.direct = 'bad';
       }
@@ -590,7 +604,7 @@ export async function tts(text, persona, pitchOffset = 0, rateOffset = 0, tries 
       ttsInfo.last = 'worker';
       return ab;
     } catch (e) {
-      last = ttsInfo.direct === 'bad' || !last ? e : new Error(last.message + ' · ' + e.message);
+      last = phoneErr ? new Error(phoneErr.message + ' · ' + e.message) : e;
       if (onRetry) onRetry(last);
       await sleep(Math.min(5000, 700 * (k + 1) ** 1.5));
     }

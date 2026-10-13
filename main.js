@@ -404,6 +404,7 @@ function pageKeys() {
     const b = $('#ttsTest'), out = $('#ttsOut'), badge = $('#ttsBadge');
     b.disabled = true; out.hidden = false; out.className = 'small muted'; out.textContent = 'စမ်းနေပါတယ်…';
     const t0 = performance.now();
+    L.ttsInfo.direct = 'unknown';   // the check always tries the phone path again
     try {
       const ab = await L.tts('မင်္ဂလာပါ၊ အသံစမ်းသပ်နေပါတယ်။', L.PERSONAS[0], 0, 0, 1);
       const sec = ((performance.now() - t0) / 1000).toFixed(1);
