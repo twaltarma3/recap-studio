@@ -501,20 +501,123 @@ export function parseTranslations(raw) {
 }
 
 /* ---------- TTS ---------- */
-export async function tts(text, persona, pitchOffset = 0, rateOffset = 0, tries = 6, onRetry = null) {
+// Microsoft often returns *no audio* to datacenter addresses (like the Worker's Cloudflare IP).
+// So the phone first talks to Edge TTS itself, using a signed address the Worker hands out
+// (the Worker keeps the token); if that path fails, the old Worker /tts route is used.
+export const ttsInfo = { direct: 'unknown', last: '' };  // direct: 'unknown' | 'ok' | 'bad'
+let ttsUrlP = null, ttsUrlAt = 0;
+function ttsUrl() {
+  if (!ttsUrlP || Date.now() - ttsUrlAt > 120000) {
+    ttsUrlAt = Date.now();
+    ttsUrlP = fetch(cfg.workerUrl + '/tts-url').then(async r => {
+      if (!r.ok) throw new Error('tts-url ' + r.status);
+      const j = await r.json();
+      const urls = Array.isArray(j.urls) && j.urls.length ? j.urls : j.url ? [j.url] : [];
+      if (!urls.length) throw new Error('tts-url empty');
+      return urls;
+    }).catch(e => { ttsUrlP = null; throw e; });
+  }
+  return ttsUrlP;
+}
+const xesc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
+const sgn = n => (n >= 0 ? '+' : '') + Math.round(n);
+const rid = () => [...crypto.getRandomValues(new Uint8Array(16))].map(b => b.toString(16).padStart(2, '0')).join('');
+
+let ttsGoodUrl = 0;   // which Edge TTS address worked last
+async function ttsDirect(text, voice, pitch, rate) {
+  let urls;
+  try { urls = await ttsUrl(); } catch (e) { e.connect = true; throw e; }  // old Worker without /tts-url
+  const order = [ttsGoodUrl, ...urls.keys()].filter((v, i, a) => a.indexOf(v) === i && v < urls.length);
   let last;
+  for (const k of order) {
+    try { const ab = await ttsSocket(urls[k], text, voice, pitch, rate); ttsGoodUrl = k; return ab; }
+    catch (e) { last = e; if (!e.connect) throw e; }   // connected but no audio: another address will not help
+  }
+  throw last;
+}
+
+function ttsSocket(base, text, voice, pitch, rate) {
+  const id = rid();
+  return new Promise((resolve, reject) => {
+    let ws, got = false, done = false;
+    const chunks = [];
+    const end = err => {
+      if (done) return; done = true; clearTimeout(timer);
+      try { ws.close(); } catch {}
+      const bytes = chunks.reduce((n, c) => n + c.byteLength, 0);
+      if (!err && bytes >= 200) return resolve(new Blob(chunks).arrayBuffer());
+      const e = new Error(err || `phone TTS: audio ${bytes} bytes`); e.connect = !got; reject(e);
+    };
+    const timer = setTimeout(() => end('phone TTS timed out'), 20000);
+    try { ws = new WebSocket(base + '&ConnectionId=' + id); } catch (e) { return end('phone TTS: ' + e.message); }
+    ws.binaryType = 'arraybuffer';
+    ws.onopen = () => {
+      const ts = new Date().toString();
+      ws.send(`X-Timestamp:${ts}\r\nContent-Type:application/json; charset=utf-8\r\nPath:speech.config\r\n\r\n{"context":{"synthesis":{"audio":{"metadataoptions":{"sentenceBoundaryEnabled":"false","wordBoundaryEnabled":"false"},"outputFormat":"audio-24khz-48kbitrate-mono-mp3"}}}}`);
+      ws.send(`X-RequestId:${id}\r\nContent-Type:application/ssml+xml\r\nX-Timestamp:${ts}Z\r\nPath:ssml\r\n\r\n<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='my-MM'><voice name='${voice}'><prosody pitch='${sgn(pitch)}Hz' rate='${sgn(rate)}%' volume='+0%'>${xesc(text)}</prosody></voice></speak>`);
+    };
+    ws.onmessage = ev => {
+      got = true;
+      const d = ev.data;
+      if (typeof d === 'string') { if (d.includes('Path:turn.end')) end(); return; }
+      if (!(d instanceof ArrayBuffer) || d.byteLength < 2) return;
+      const hl = new DataView(d).getUint16(0);
+      const head = new TextDecoder().decode(d.slice(2, 2 + hl));
+      if (head.includes('Path:audio')) chunks.push(d.slice(2 + hl));
+    };
+    ws.onerror = () => end('phone TTS: connection refused');
+    ws.onclose = () => end(got ? null : 'phone TTS: connection closed');
+  });
+}
+
+async function ttsWorker(text, voice, pitch, rate) {
+  const r = await fetch(cfg.workerUrl + '/tts', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ text, voice, pitch, rate })
+  });
+  if (!r.ok) throw new Error(`TTS ${r.status}: ${await r.text()}`);
+  const ab = await r.arrayBuffer();
+  if (ab.byteLength < 200) throw new Error(`TTS audio မရပါ (${ab.byteLength} bytes)`);
+  return ab;
+}
+
+// characters that make Microsoft finish the request without speaking: control / zero-width chars, lone surrogates
+export const ttsClean = t => String(t || '')
+  .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F\u200B-\u200F\u2028-\u202E\u2060-\u206F\uFEFF\uFFF0-\uFFFF]/g, ' ')
+  .replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, ' ')
+  .replace(/\s+/g, ' ').trim();
+export const speakable = t => /[\p{L}\p{N}]/u.test(ttsClean(t));
+const isNoAudio = e => /No audio|audio 0|audio မရ|audio \d+ bytes/i.test(String(e && e.message));
+
+export async function tts(text, persona, pitchOffset = 0, rateOffset = 0, tries = 6, onRetry = null) {
+  text = ttsClean(text);
+  const voice = persona.voice, pitch = persona.pitch + pitchOffset;
+  const rate = Math.max(-50, Math.min(100, persona.rate + rateOffset));
+  let last, noAudio = 0;
   for (let k = 0; k < tries; k++) {
+    let phoneErr = null;
+    if (ttsInfo.direct !== 'bad') {
+      try {
+        const ab = await ttsDirect(text, voice, pitch, rate);
+        ttsInfo.direct = 'ok'; ttsInfo.last = 'phone';
+        return ab;
+      } catch (e) {
+        phoneErr = e;
+        // the phone could not even connect (browser / network blocks it): use the Worker from now on
+        if (e.connect && ttsInfo.direct === 'unknown') ttsInfo.direct = 'bad';
+      }
+    }
     try {
-      const r = await fetch(cfg.workerUrl + '/tts', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ text, voice: persona.voice, pitch: persona.pitch + pitchOffset, rate: Math.max(-50, Math.min(100, persona.rate + rateOffset)) })
-      });
-      if (!r.ok) throw new Error(`TTS ${r.status}: ${await r.text()}`);
-      const ab = await r.arrayBuffer();
-      if (ab.byteLength < 200) throw new Error('TTS audio မရပါ');
+      const ab = await ttsWorker(text, voice, pitch, rate);
+      ttsInfo.last = 'worker';
       return ab;
-    } catch (e) { last = e; if (onRetry) onRetry(e); await sleep(Math.min(5000, 700 * (k + 1) ** 1.5)); }
+    } catch (e) {
+      last = phoneErr ? new Error(phoneErr.message + ' · ' + e.message) : e;
+      if (isNoAudio(e) && ++noAudio >= 3) break;     // Microsoft keeps refusing this text: let the caller try it in pieces
+      if (onRetry) onRetry(last);
+      await sleep(Math.min(5000, 700 * (k + 1) ** 1.5));
+    }
   }
   throw last;
 }
@@ -522,14 +625,33 @@ export async function tts(text, persona, pitchOffset = 0, rateOffset = 0, tries 
 // clips already made in this session: re-rendering with the same text / voice / pitch / speed skips the network
 const TTS_MAX = 1500;
 const ttsMemo = new Map();
-async function ttsCached(text, persona, pitch, rate, onRetry) {
+async function ttsCached(text, persona, pitch, rate, onRetry, tries = 6) {
   const key = [persona.voice, persona.pitch + pitch, Math.max(-50, Math.min(100, persona.rate + rate)), text].join('|');
   const hit = ttsMemo.get(key);
   if (hit) return hit.slice(0);                    // always hand out a copy: ffmpeg.writeFile transfers (empties) the buffer
-  const ab = await tts(text, persona, pitch, rate, 6, onRetry);
+  const ab = await tts(text, persona, pitch, rate, tries, onRetry);
   ttsMemo.set(key, ab.slice(0));
   if (ttsMemo.size > TTS_MAX) ttsMemo.delete(ttsMemo.keys().next().value);
   return ab;
+}
+
+// last resort for a line Microsoft will not speak: say it in smaller pieces and join the mp3 data
+async function ttsPieces(text, persona, pitch, rate) {
+  const parts = ttsClean(text).split(/(?<=[။၊,.!?;:])\s*|\s+(?=\S{2,})/).filter(speakable);
+  const pieces = [], cap = Math.min(60, Math.ceil(ttsClean(text).length / 2));   // always really smaller than the line
+  for (const p of parts) {
+    const last = pieces[pieces.length - 1];
+    if (last && (last + ' ' + p).length <= cap) pieces[pieces.length - 1] = last + ' ' + p; else pieces.push(p);
+  }
+  if (pieces.length < 2) throw new Error('no smaller pieces');
+  const out = [];
+  for (const p of pieces) {
+    try { out.push(new Uint8Array(await ttsCached(p, persona, pitch, rate, null, 3))); } catch (e) { if (!isNoAudio(e)) throw e; }
+  }
+  if (!out.length) throw new Error('No audio for any piece');
+  const all = new Uint8Array(out.reduce((n, a) => n + a.length, 0));
+  let o = 0; for (const a of out) { all.set(a, o); o += a.length; }
+  return all.buffer;
 }
 
 /* ---------- render ---------- */
@@ -908,23 +1030,38 @@ export async function renderDub({ file, videoDur, segs, burmese, persona, pitch,
   const lap = k => { const t = performance.now(); timing[k] = (timing[k] || 0) + (t - tMark) / 1000; tMark = t; };
   let inName = null, temp = false;
   try {
-    // 1) TTS (5 in parallel; drops to 3 as soon as any request has to be retried) — 0..50%
+    // 1) TTS (3 in parallel; drops to 2 as soon as any request has to be retried) — 0..50%
+    // A line Microsoft will not speak is tried in smaller pieces, then left silent (listed on the result page);
+    // too many of those, or any other error (network), stops the render.
     const raw = new Array(n).fill(null);
-    const todo = [...Array(n).keys()].filter(i => burmese[i]);
+    const todo = [...Array(n).keys()].filter(i => burmese[i] && speakable(burmese[i]));
     const total = todo.length || 1;
-    let done = 0, failed = false, lanes = 5;
-    const slowDown = () => { lanes = 3; };
+    const skipped = [];
+    const maxSkip = Math.max(2, Math.floor(total * 0.1));
+    let done = 0, failed = false, lanes = 3;
+    const slowDown = () => { lanes = 2; };
     const run = async lane => {
       while (todo.length && !failed && lane < lanes) {   // one line failed for good -> the other workers stop too
         const i = todo.shift();
         try { raw[i] = await ttsCached(burmese[i], persona, pitch, rate, slowDown); }
-        catch (e) { failed = true; throw e; }
+        catch (e) {
+          if (!isNoAudio(e)) { failed = true; throw e; }
+          try { raw[i] = await ttsPieces(burmese[i], persona, pitch, rate); }
+          catch (e2) {
+            if (!isNoAudio(e2) && !/no smaller pieces/.test(e2.message)) { failed = true; throw e2; }
+            skipped.push(i);
+            if (skipped.length > maxSkip) {
+              failed = true;
+              throw new Error(`TTS: စာကြောင်း ${skipped.length} ကြောင်း အသံမထွက်ပါ (ID: ${skipped.sort((a, b) => a - b).join(', ')}) — ` + e.message);
+            }
+          }
+        }
         done++;
         onProgress((done / total) * 0.5, `မြန်မာအသံ ထုတ်နေပါတယ် (${done}/${total})`);
       }
     };
     onProgress(0, `မြန်မာအသံ ထုတ်နေပါတယ် (0/${todo.length})`);
-    await Promise.all([0, 1, 2, 3, 4].map(run));
+    await Promise.all([0, 1, 2].map(run));
   lap('tts');
 
     // 2) fit each clip into its time slot — 50..75%
@@ -1102,7 +1239,7 @@ export async function renderDub({ file, videoDur, segs, burmese, persona, pitch,
     lap('save');
     setFFProgress(null);
     onProgress(1, 'ပြီးပါပြီ 🎉');
-    return { video: new Blob([out.slice().buffer], { type: 'video/mp4' }), placed, fellBack, fxFailed, fontFailed, diag, geoOk: !!geo, ovlOk: ovl, subsOk: !!subs, stats: dubStats(placed, maxTempo), timing, tries, src, engine: engineInfo() };
+    return { video: new Blob([out.slice().buffer], { type: 'video/mp4' }), placed, fellBack, fxFailed, fontFailed, diag, geoOk: !!geo, ovlOk: ovl, subsOk: !!subs, stats: dubStats(placed, maxTempo), timing, tries, src, engine: engineInfo(), skipped: skipped.sort((a, b) => a - b) };
   } catch (e) {
     // failed part-way: free the leftover work files so a retry doesn't run out of memory
     try { f.off('log', onLog); } catch {}
