@@ -12,6 +12,31 @@ export const cfg = {
 };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
+/* ---------- access code + daily limit (checked by the Worker) ---------- */
+// The Worker counts one use per video per day; /auth/start hands back a ticket that /tts needs.
+let ticket = '';
+const lsGet = k => { try { return localStorage.getItem(k) || ''; } catch { return ''; } };
+export const access = {
+  get code() { return lsGet('accessCode'); },
+  set code(v) { try { v ? localStorage.setItem('accessCode', v) : localStorage.removeItem('accessCode'); } catch {} },
+  get adminPass() { return lsGet('adminPass'); },
+  set adminPass(v) { try { v ? localStorage.setItem('adminPass', v) : localStorage.removeItem('adminPass'); } catch {} }
+};
+async function accessPost(path, body, headers = {}) {
+  const r = await fetch(cfg.workerUrl + path, { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: JSON.stringify(body) });
+  let j = {}; try { j = await r.json(); } catch {}
+  return { status: r.status, ...j };
+}
+// {open:true} = no access codes on this Worker; {error:'bad_code'}; else {name, limit, used, left}
+export const accessCheck = code => accessPost('/auth/check', { code: code ?? access.code });
+// uses one of today's videos (same job again = free); returns {ticket, left, ...} or {error:'limit'|'bad_code'}
+export async function accessStart(job) {
+  const r = await accessPost('/auth/start', { code: access.code, job });
+  if (r.ticket) ticket = r.ticket;
+  return r;
+}
+export const adminCall = body => accessPost('/admin/codes', body, { authorization: 'Bearer ' + access.adminPass });
+
 /* ---------- voices (Edge TTS only has 2 Burmese voices; personas vary pitch/rate) ---------- */
 const THIHA = 'my-MM-ThihaNeural', NILAR = 'my-MM-NilarNeural';
 export const PERSONAS = [
@@ -509,8 +534,8 @@ let ttsUrlP = null, ttsUrlAt = 0;
 function ttsUrl() {
   if (!ttsUrlP || Date.now() - ttsUrlAt > 120000) {
     ttsUrlAt = Date.now();
-    ttsUrlP = fetch(cfg.workerUrl + '/tts-url').then(async r => {
-      if (!r.ok) throw new Error('tts-url ' + r.status);
+    ttsUrlP = fetch(cfg.workerUrl + '/tts-url', { headers: ticket ? { 'x-ticket': ticket } : {} }).then(async r => {
+      if (!r.ok) { const e = new Error('tts-url ' + r.status); e.noTicket = r.status === 401; throw e; }
       const j = await r.json();
       const urls = Array.isArray(j.urls) && j.urls.length ? j.urls : j.url ? [j.url] : [];
       if (!urls.length) throw new Error('tts-url empty');
@@ -526,7 +551,7 @@ const rid = () => [...crypto.getRandomValues(new Uint8Array(16))].map(b => b.toS
 let ttsGoodUrl = 0;   // which Edge TTS address worked last
 async function ttsDirect(text, voice, pitch, rate) {
   let urls;
-  try { urls = await ttsUrl(); } catch (e) { e.connect = true; throw e; }  // old Worker without /tts-url
+  try { urls = await ttsUrl(); } catch (e) { e.connect = !e.noTicket; throw e; }  // old Worker without /tts-url (no ticket: just skip this time)
   const order = [ttsGoodUrl, ...urls.keys()].filter((v, i, a) => a.indexOf(v) === i && v < urls.length);
   let last;
   for (const k of order) {
@@ -573,7 +598,7 @@ function ttsSocket(base, text, voice, pitch, rate) {
 async function ttsWorker(text, voice, pitch, rate) {
   const r = await fetch(cfg.workerUrl + '/tts', {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', ...(ticket ? { 'x-ticket': ticket } : {}) },
     body: JSON.stringify({ text, voice, pitch, rate })
   });
   if (!r.ok) throw new Error(`TTS ${r.status}: ${await r.text()}`);
