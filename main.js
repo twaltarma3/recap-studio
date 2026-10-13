@@ -1,6 +1,7 @@
 import './style.css';
 import './theme.css';
 import * as L from './lib.js';
+import * as H from './history.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 const DEFAULTS = { pitch: 10, rate: 20, keepTalk: 0, keepGap: 0.3, offset: 0, maxTempo: 2.0, dubGain: 1.8 };
@@ -12,16 +13,29 @@ const state = {
   logoOn: false, logoData: null, logoPos: 'tr', logoSize: 14, tab: 'video',
   fxSubs: false, subS: 5, subY: 88, subC: '#ffffff', subO: '#000000', subFont: 'pt16', fontOk: false
 };
-const STEPS = ['Upload', 'Source Text', 'Burmese', 'Result'];
+const STEPS = ['ဗီဒီယိုတင်', 'မူရင်းစာသား', 'ဘာသာပြန်', 'ရလဒ်'];
 const view = $('#view');
 const selFont = () => (state.subFont === 'custom' && !state.fontOk) ? 'system' : state.subFont;
-let page = 'free'; // 'free' | 'premium' | 'keys' | 'guide'
+let page = 'free'; // 'free' | 'premium' | 'keys' | 'guide' | 'history'
 
 function toast(msg) {
   const t = $('#toast'); t.textContent = msg; t.classList.add('show');
   clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove('show'), 2200);
 }
-const bar = () => `<div class="bar"><i id="fill"></i></div><div class="pct"><span id="ptxt">…</span><b id="pnum">0%</b></div>`;
+const bar = () => `<div class="bar"><i id="fill"></i></div><div class="pct"><span id="ptxt">…</span><b id="pnum">0%</b></div>
+  <div class="ptime">⏱ ကြာချိန် <b id="ptime">0:00</b></div>`;
+const fmtDur = sec => {
+  sec = Math.max(0, Math.round(sec));
+  const h = Math.floor(sec / 3600), m = Math.floor(sec / 60) % 60, s = String(sec % 60).padStart(2, '0');
+  return h ? `${h}:${String(m).padStart(2, '0')}:${s}` : `${m}:${s}`;
+};
+// elapsed-time clock under the progress bar; returns a stop function that gives the seconds taken
+function startClock() {
+  const t0 = Date.now();
+  const tick = () => { const el = $('#ptime'); if (el) el.textContent = fmtDur((Date.now() - t0) / 1000); };
+  const iv = setInterval(tick, 1000); tick();
+  return () => { clearInterval(iv); return (Date.now() - t0) / 1000; };
+}
 function setProg(frac, text) {
   const f = $('#fill'); if (!f) return;
   f.style.width = Math.round(frac * 100) + '%';
@@ -50,6 +64,7 @@ function renderStepper() {
 }
 function go(step) { state.step = step; render(); window.scrollTo(0, 0); }
 function render() {
+  histUrls.forEach(u => URL.revokeObjectURL(u)); histUrls = [];      // leaving / redrawing History: free its videos
   const stp = $('#stepper');
   if (page === 'free') {
     stp.style.display = '';
@@ -57,7 +72,7 @@ function render() {
     [null, step1, step2, step3, step4][state.step]();
   } else {
     stp.style.display = 'none';
-    ({ premium: pagePremium, keys: pageKeys, guide: pageGuide }[page])();
+    ({ premium: pagePremium, keys: pageKeys, guide: pageGuide, history: pageHistory }[page])();
   }
   syncMenu();
 }
@@ -86,6 +101,7 @@ function buildMenu() {
       <button class="ditem" data-p="premium"><span>2</span><b>Premium Recap</b><small>မကြာမီ</small></button>
       <button class="ditem" data-p="keys"><span>3</span><b>API Key Settings</b><small>AssemblyAI Key · FFmpeg Engine</small></button>
       <button class="ditem" data-p="guide"><span>4</span><b>အသုံးပြုပုံ လမ်းညွှန်</b><small>အဆင့်လိုက် ရှင်းလင်းချက်</small></button>
+      <button class="ditem" data-p="history"><span>5</span><b>မှတ်တမ်း (History)</b><small>၂၄ နာရီအတွင်း ထုတ်ထားတဲ့ Video များ</small></button>
     </nav>`);
   burger.onclick = openDrawer;
   $('#scrim').onclick = closeDrawer;
@@ -157,8 +173,9 @@ function pageGuide() {
         <ol>
           <li>% bar ပြေးနေစဉ် <b>ဒီ tab ကို ဖွင့်ထားပါ၊ screen မပိတ်ပါနဲ့၊ refresh မလုပ်ပါနဲ့။</b></li>
           <li>ပြီးရင် Video ကို ကြည့်ပါ။ <b>Download</b> နဲ့ Video ကိုသိမ်းပါ၊ <b>.srt</b> နဲ့ စာတန်းထိုးဖိုင်ကိုလည်း သိမ်းလို့ရပါတယ်။</li>
-          <li><b>⚠ ရှည်လွန်းတဲ့ စာကြောင်း</b> ပေါ်ရင် — <b>တိုအောင်ခိုင်းမည့် Prompt ကူးမည်</b> ကိုနှိပ်ပြီး Gemini မှာ paste လုပ်ပါ။ ရလာတဲ့ JSON ကို <b>Source Text tab</b> မှာ ထည့်ပြီး Video ပြန်ထုတ်ပါ။</li>
+          <li><b>⚠ ရှည်လွန်းတဲ့ စာကြောင်း</b> ပေါ်ရင် — <b>တိုအောင်ခိုင်းမည့် Prompt ကူးမည်</b> ကိုနှိပ်ပြီး Gemini မှာ paste လုပ်ပါ။ ရလာတဲ့ JSON ကို <b>မူရင်းစာသား</b> အဆင့်မှာ ထည့်ပြီး Video ပြန်ထုတ်ပါ။</li>
           <li>ပြန်ပြင်ချင်ရင် အပေါ်က <b>1 / 2 / 3</b> အဆင့်ဘားကို နှိပ်ပြီး ပြန်သွားနိုင်ပါတယ်။</li>
+          <li>ထုတ်ပြီးသား Video တွေကို <b>☰ Menu → မှတ်တမ်း (History)</b> မှာ ၂၄ နာရီအတွင်း ပြန်ကြည့်၊ ပြန်ဒေါင်းလို့ ရပါတယ်။</li>
         </ol>`)}
 
       ${sec(6, 'အကြံပြုချက်များ', `
@@ -173,7 +190,7 @@ function pageGuide() {
       ${sec(7, 'ပြဿနာ ဖြေရှင်းနည်း', `
         <ul>
           <li><b>အသံမထွက်ရင် / "TTS audio မရပါ"</b> — API Key Settings မှာ <b>🔎 စစ်ဆေးမည်</b> နဲ့ Key နဲ့ ချိတ်ဆက်မှုကို စစ်ပါ။</li>
-          <li><b>"File could not be read"</b> — Video ကို Downloads/Movies ထဲကနေ ပြန်ရွေးပါ။ Result tab မှာ <b>🎞 Video ပြန်ရွေးပြီး ပြန်စမည်</b> ကိုနှိပ်ပါ။</li>
+          <li><b>"File could not be read"</b> — Video ကို Downloads/Movies ထဲကနေ ပြန်ရွေးပါ။ ရလဒ် အဆင့်မှာ <b>🎞 Video ပြန်ရွေးပြီး ပြန်စမည်</b> ကိုနှိပ်ပါ။</li>
           <li><b>စာတန်းထိုး Font မပေါ်ရင်</b> — Font dropdown အောက်က အခြေအနေစာကို ကြည့်ပါ။ ❌ ဆိုရင် တခြား Font ရွေးပါ။</li>
           <li><b>Video ထုတ်တာ အရမ်းကြာရင်</b> — Mirror၊ Blur၊ စာတန်းထိုး ကို ပိတ်လိုက်ပါ။</li>
           <li><b>Engine ဒေါင်းမရရင်</b> — API Key Settings မှာ <b>Cache ဖျက်မည်</b> ပြီး <b>Install</b> ပြန်နှိပ်ပါ။</li>
@@ -181,6 +198,74 @@ function pageGuide() {
     </div>
     <button class="btn primary" id="toFree">Free Recap သို့ သွားမည်</button>`;
   $('#toFree').onclick = () => openPage('free');
+}
+
+/* ---------------- History ---------------- */
+let histUrls = [];
+const ago = ms => {
+  const m = Math.floor(ms / 60000);
+  return m < 1 ? 'အခုလေးတင်' : m < 60 ? `${m} မိနစ်က` : `${Math.floor(m / 60)} နာရီက`;
+};
+const left = ms => {
+  const m = Math.max(1, Math.ceil(ms / 60000));
+  return m < 60 ? `${m} မိနစ်` : `${Math.floor(m / 60)} နာရီ`;
+};
+async function pageHistory() {
+  view.innerHTML = `
+    <h2>🗂 မှတ်တမ်း (History)</h2>
+    <p class="muted small">ဒီဖုန်းမှာ ထုတ်ခဲ့တဲ့ Video တွေကို ၂၄ နာရီ သိမ်းထားပေးပါတယ်။ ၂၄ နာရီကျော်ရင် အလိုအလျောက် ဖျက်ပါမယ်။ လိုချင်တာကို Download လုပ်ထားပါ။</p>
+    <div id="hlist"><p class="muted">ဖွင့်နေသည်…</p></div>`;
+  let items;
+  try { items = await H.histList(); }
+  catch { $('#hlist').innerHTML = '<div class="err">မှတ်တမ်း ဖွင့်မရပါ (ဒီ browser က သိမ်းခွင့် မပေးပါ)</div>'; return; }
+  if (page !== 'history') return;
+  const box = $('#hlist');
+  if (!items.length) {
+    box.innerHTML = `<div class="hempty">📭<p>မှတ်တမ်း မရှိသေးပါ</p><small class="muted">Video ထုတ်ပြီးတိုင်း ဒီမှာ အလိုအလျောက် ပေါ်လာပါမယ်။</small></div>
+      <button class="btn primary" id="toFree">Video ထုတ်ရန် သွားမည်</button>`;
+    $('#toFree').onclick = () => openPage('free');
+    return;
+  }
+  const now = Date.now();
+  box.innerHTML = items.map(it => `
+    <div class="hitem" data-id="${it.id}">
+      <div class="hhead">
+        <b class="hname">${esc(it.name)}</b>
+        <span class="badge">${(it.size / 1048576).toFixed(1)} MB</span>
+      </div>
+      <div class="muted small">🕒 ${ago(now - it.created)} · ${it.dur ? '🎞 ' + fmtDur(it.dur) + ' · ' : ''}${it.took ? '⏱ ထုတ်ချိန် ' + fmtDur(it.took) : ''}</div>
+      <div class="muted small">🗑 ${left(it.created + H.KEEP_MS - now)} နေရင် အလိုအလျောက် ဖျက်ပါမယ်</div>
+      <div class="hvid"></div>
+      <div class="hbtns">
+        <button class="btn" data-a="play">▶ ကြည့်</button>
+        <button class="btn primary" data-a="mp4">⬇ Video</button>
+        <button class="btn" data-a="srt" ${it.srt ? '' : 'disabled'}>⬇ .srt</button>
+        <button class="btn danger" data-a="del" aria-label="ဖျက်မည်">🗑</button>
+      </div>
+    </div>`).join('') + `<button class="btn block danger" id="hclear">🗑 မှတ်တမ်း အားလုံး ဖျက်မည်</button>`;
+  const byId = new Map(items.map(it => [it.id, it]));
+  box.querySelectorAll('.hitem button').forEach(b => b.onclick = async () => {
+    const card = b.closest('.hitem'), it = byId.get(+card.dataset.id);
+    const base = it.name.replace(/\.[^.]+$/, '');
+    if (b.dataset.a === 'play') {
+      const slot = card.querySelector('.hvid');
+      if (slot.firstChild) { slot.innerHTML = ''; b.textContent = '▶ ကြည့်'; return; }
+      const u = URL.createObjectURL(it.video); histUrls.push(u);
+      slot.innerHTML = `<video src="${u}" controls playsinline autoplay></video>`;
+      b.textContent = '✕ ပိတ်';
+    } else if (b.dataset.a === 'mp4') download(it.video, base + '_recap.mp4');
+    else if (b.dataset.a === 'srt') download(new Blob([it.srt], { type: 'text/plain' }), base + '_burmese.srt');
+    else if (b.dataset.a === 'del') {
+      if (!confirm('ဒီ Video ကို မှတ်တမ်းထဲက ဖျက်မလား?')) return;
+      try { await H.histDel(it.id); toast('ဖျက်ပြီးပါပြီ'); } catch { toast('ဖျက်မရပါ'); }
+      render();
+    }
+  });
+  $('#hclear').onclick = async () => {
+    if (!confirm('မှတ်တမ်း အားလုံးကို ဖျက်မလား?')) return;
+    try { await H.histClear(); toast('အားလုံး ဖျက်ပြီးပါပြီ'); } catch { toast('ဖျက်မရပါ'); }
+    render();
+  };
 }
 
 /* ---------------- Premium (placeholder) ---------------- */
@@ -640,7 +725,8 @@ function step1() {
 
 async function transcribeFlow() {
   state.step = 2; state.busy = true; renderStepper();
-  view.innerHTML = `<h2>စာသား ထုတ်နေသည်…</h2><p class="muted">Video ကို ဖွင့်မထားဘဲ ခဏစောင့်ပါ။</p>${bar()}`;
+  view.innerHTML = `<h2>စာသား ထုတ်နေပါတယ်…</h2><p class="muted">ခဏစောင့်ပေးပါ — ဒီ tab ကို ဖွင့်ထားပါ။</p>${bar()}`;
+  const stopClock = startClock();
   try {
     setProg(0.02, 'Engine ပြင်ဆင်နေသည်');
     await L.getFFmpeg();
@@ -653,11 +739,13 @@ async function transcribeFlow() {
     state.origSegs = null;
     state.segs = await L.transcribe(wav, state.lang, st => { tick = Math.min(tick + 0.04, 0.95); setProg(tick, names[st] || st); });
     state.burmese = []; state.busy = false;
+    stopClock();
     go(2);
   } catch (e) {
+    stopClock();
     view.innerHTML = `<h2>အမှားရှိနေပါသည်</h2>`; showErr(e);
     state.busy = false; renderStepper();
-    view.insertAdjacentHTML('beforeend', `<button class="btn primary" id="back">Upload သို့ ပြန်သွားမည်</button>`);
+    view.insertAdjacentHTML('beforeend', `<button class="btn primary" id="back">ဗီဒီယိုတင် အဆင့်သို့ ပြန်သွားမည်</button>`);
     $('#back').onclick = () => go(1);
   }
 }
@@ -665,7 +753,7 @@ async function transcribeFlow() {
 /* ---------------- Step 2 ---------------- */
 function step2() {
   view.innerHTML = `
-    <div class="row"><h2>မူရင်းစာသားကို စစ်ဆေးပါ</h2><button class="ghost" id="back">Back</button></div>
+    <div class="row"><h2>မူရင်းစာသားကို စစ်ဆေးပါ</h2><button class="ghost" id="back">‹ နောက်သို့</button></div>
     <p class="muted">စာကြောင်းတစ်ကြောင်းလျှင် အချိန်တစ်ခု ကိုက်ထားသည်။ စာကြောင်းအရေအတွက် မပြောင်းပါနှင့်။ (${state.segs.length} lines)</p>
     <textarea id="src">${esc(state.segs.map(s => s.text).join('\n'))}</textarea>
     <div class="chips" id="pStyle" style="margin:0 0 8px"><button type="button" class="chip" data-s="recap">🔥 Recap (လှုပ်ရှား)</button><button type="button" class="chip" data-s="chat">💬 ရိုးရိုးစကားပြော</button></div>
@@ -703,7 +791,7 @@ function step2() {
   $('#next').onclick = () => {
     try {
       const t = L.parseTranslations($('#json').value);
-      if (t.length !== state.segs.length) toast(`အရေအတွက် မကိုက်ပါ (${t.length}/${state.segs.length}) — Burmese tab မှာ ပြင်ပါ`);
+      if (t.length !== state.segs.length) toast(`အရေအတွက် မကိုက်ပါ (${t.length}/${state.segs.length}) — ဘာသာပြန် အဆင့်မှာ ပြင်ပါ`);
       state.burmese = state.segs.map((_, i) => t[i] || '');
       go(3);
     } catch (e) { toast(e.message); }
@@ -720,7 +808,7 @@ function step3() {
       <button data-prev="${p.id}">▶ Preview</button>
     </div>`).join('');
   view.innerHTML = `
-    <div class="row"><h2>မြန်မာဘာသာပြန်ကို စစ်ဆေးပါ</h2><button class="ghost" id="back">Back</button></div>
+    <div class="row"><h2>မြန်မာဘာသာပြန်ကို စစ်ဆေးပါ</h2><button class="ghost" id="back">‹ နောက်သို့</button></div>
     <p class="muted">တစ်ကြောင်းလျှင် စာတစ်ကြောင်း။ (${state.segs.length} lines)</p>
     <textarea id="mm" style="min-height:300px">${esc(state.burmese.join('\n'))}</textarea>
     <div class="row" style="margin-top:20px"><b>အသံရွေးချယ်ပါ</b><span class="muted small">${L.PERSONAS.length} Voice Personas</span></div>
@@ -807,9 +895,10 @@ function step3() {
 async function step4() {
   if (state.result) return showResult();
   state.busy = true; renderStepper();
-  view.innerHTML = `<h2>Video ပေါင်းနေသည်…</h2>
-    <p class="muted">ဒီ tab ကို ဖွင့်ထားပါ၊ screen မပိတ်ပါနှင့်။</p>${bar()}`;
+  view.innerHTML = `<h2>ဗီဒီယိုနှင့် အသုံးပြုထားသော အရာများကို ပေါင်းစပ်နေပါတယ်</h2>
+    <p class="muted">ခဏစောင့်ပေးပါ — ဒီ tab ကို ဖွင့်ထားပါ၊ screen မပိတ်ပါနဲ့။</p>${bar()}`;
   let wake; try { wake = await navigator.wakeLock?.request('screen'); } catch {}
+  const stopClock = startClock();
   try {
     const persona = L.PERSONAS.find(p => p.id === state.personaId);
     const { video, placed, fellBack, fxFailed, fontFailed, diag, geoOk, ovlOk, subsOk, stats } = await L.renderDub({
@@ -825,8 +914,11 @@ async function step4() {
       offset: state.offset, maxTempo: state.maxTempo, dubGain: state.dubGain, onProgress: setProg
     });
     state.diag = `geo:${geoOk} subs:${subsOk} overlay:${ovlOk} fxFailed:${fxFailed}\n${diag || ''}`;
-    state.result = { video, url: URL.createObjectURL(video), srt: L.buildSrt(state.burmese, placed), stats };
+    const took = stopClock();
+    state.result = { video, url: URL.createObjectURL(video), srt: L.buildSrt(state.burmese, placed), stats, took };
     showResult();
+    H.histAdd({ name: state.file.name, video, srt: state.result.srt, size: video.size, dur: state.videoDur, took })
+      .catch(() => toast('မှတ်တမ်းထဲ သိမ်းဖို့ ဖုန်းထဲ နေရာမလောက်ပါ — Video ကို Download လုပ်ထားပါ'));
     if (fontFailed) toast('Font ဖွင့်မရလို့ ဖုန်း Font နဲ့ စာတန်းထိုး ထည့်ထားပါတယ်');
     else if (fxFailed) toast('Effect (Mirror/Blur/စာတန်းထိုး) အချို့ ထည့်မရလို့ ရတာလောက်ပဲ ထုတ်ထားပါတယ်');
     else if (fellBack) toast('မူရင်းအသံ ရောစပ်မရလို့ မြန်မာအသံချည်းပဲ ထည့်ထားပါတယ်');
@@ -834,7 +926,7 @@ async function step4() {
     view.innerHTML = `<h2>အမှားရှိနေပါသည်</h2>`; showErr(e);
     view.insertAdjacentHTML('beforeend', `<button class="btn primary" id="retry">ပြန်စမည်</button>
       <label class="btn block" for="repick" style="display:block;text-align:center;cursor:pointer">🎞 Video ပြန်ရွေးပြီး ပြန်စမည်<input id="repick" type="file" accept="video/*" hidden /></label>
-      <button class="btn block" id="back">Burmese tab သို့ ပြန်သွားမည်</button>`);
+      <button class="btn block" id="back">ဘာသာပြန် အဆင့်သို့ ပြန်သွားမည်</button>`);
     $('#retry').onclick = () => step4();
     $('#repick').onchange = async ev => {
       const nf = ev.target.files[0]; if (!nf) return;
@@ -842,7 +934,7 @@ async function step4() {
       step4();
     };
     $('#back').onclick = () => go(3);
-  } finally { wake?.release?.(); state.busy = false; renderStepper(); }
+  } finally { stopClock(); wake?.release?.(); state.busy = false; renderStepper(); }
 }
 
 function statBlock() {
@@ -854,7 +946,7 @@ function statBlock() {
   if (long.length) h += `<div class="panel"><b>⚠ ရှည်လွန်းတဲ့ စာကြောင်း ${long.length} ကြောင်း</b>
     <p class="muted small">ID: ${long.map(x => x.i).join(', ')}<br>အသံကို အမြန်ဆုံးချုံ့လည်း အချိန်မဆန့်ပါ။ ဒီစာကြောင်းတွေကို Gemini နဲ့ တိုအောင် ပြန်ခိုင်းပါ။</p>
     <button id="shorten" class="btn block">📋 တိုအောင်ခိုင်းမည့် Prompt ကူးမည်</button>
-    <button id="toStep2" class="btn block">Source Text tab သို့ သွားပြီး JSON ထည့်မည်</button></div>`;
+    <button id="toStep2" class="btn block">မူရင်းစာသား အဆင့်သို့ သွားပြီး JSON ထည့်မည်</button></div>`;
   return h;
 }
 
@@ -862,6 +954,7 @@ function showResult() {
   view.innerHTML = `
     <h2>ရလဒ်များ (Results)</h2>
     <video src="${state.result.url}" controls playsinline></video>
+    ${state.result.took ? `<p class="muted small">⏱ ထုတ်ချိန် ${fmtDur(state.result.took)} · 🗂 မှတ်တမ်းထဲမှာ ၂၄ နာရီ သိမ်းထားပါတယ်</p>` : ''}
     ${statBlock()}
     ${state.diag && /fxFailed:true|false\n[^]/.test(state.diag) && /fxFailed:true|failed|Error|error/i.test(state.diag) ? `<details style="margin:10px 0"><summary class="muted small">🛠 Effect log (အမှားရှာရန်)</summary><pre id="diagTxt" style="white-space:pre-wrap;font-size:11px;max-height:220px;overflow:auto">${esc(state.diag)}</pre><button class="btn block" id="diagCp" type="button">📋 Log ကူးမည်</button></details>` : ''}
     <button id="dl" class="btn primary">⬇ Video Download (.mp4)</button>

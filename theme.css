@@ -266,3 +266,24 @@ body .guide .tip b,body .guide .warn b{color:inherit}
 /* Burmese UI font: Padauk (rounder, clearer) — Inter stays for English / numbers */
 body,button,input,select,textarea{font-family:'Inter','Padauk','Noto Sans Myanmar',system-ui,sans-serif}
 body{line-height:1.75}
+
+/* elapsed time under the progress bar */
+.ptime{margin-top:10px;text-align:center;font-size:14px;color:#a3a3b5}
+.ptime b{font-variant-numeric:tabular-nums;font-size:16px;margin-left:4px}
+
+/* stepper: number on top, Burmese label underneath, all four fit on a phone */
+body .stepper{gap:4px;justify-content:space-between;padding:10px 8px}
+body .stepper span{flex:1 1 0;flex-direction:column;gap:3px;font-size:12px;line-height:1.4;text-align:center;white-space:nowrap;min-width:0}
+body .stepper span b{font-size:12px}
+
+/* history page */
+.hitem{margin-top:12px;padding:14px;border-radius:18px;background:linear-gradient(180deg,#202025,#18181c);border:1px solid #2e2e37;box-shadow:0 4px 0 #0a0a0b, 0 10px 18px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.06)}
+.hhead{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:4px}
+.hname{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.hhead .badge{flex:none}
+.hvid video{margin-top:10px}
+.hbtns{display:grid;grid-template-columns:1fr 1fr 1fr 52px;gap:8px;margin-top:10px}
+.hbtns .btn{margin:0;width:100%;padding:11px 6px;font-size:14px}
+.hempty{text-align:center;padding:28px 10px;font-size:40px}
+.hempty p{font-size:16px;margin:6px 0 2px;color:#f1f1f7}
+.hempty small{font-size:13px}
