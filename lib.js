@@ -582,10 +582,19 @@ async function ttsWorker(text, voice, pitch, rate) {
   return ab;
 }
 
+// characters that make Microsoft finish the request without speaking: control / zero-width chars, lone surrogates
+export const ttsClean = t => String(t || '')
+  .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F\u200B-\u200F\u2028-\u202E\u2060-\u206F\uFEFF\uFFF0-\uFFFF]/g, ' ')
+  .replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, ' ')
+  .replace(/\s+/g, ' ').trim();
+export const speakable = t => /[\p{L}\p{N}]/u.test(ttsClean(t));
+const isNoAudio = e => /No audio|audio 0|audio မရ|audio \d+ bytes/i.test(String(e && e.message));
+
 export async function tts(text, persona, pitchOffset = 0, rateOffset = 0, tries = 6, onRetry = null) {
+  text = ttsClean(text);
   const voice = persona.voice, pitch = persona.pitch + pitchOffset;
   const rate = Math.max(-50, Math.min(100, persona.rate + rateOffset));
-  let last;
+  let last, noAudio = 0;
   for (let k = 0; k < tries; k++) {
     let phoneErr = null;
     if (ttsInfo.direct !== 'bad') {
@@ -605,6 +614,7 @@ export async function tts(text, persona, pitchOffset = 0, rateOffset = 0, tries 
       return ab;
     } catch (e) {
       last = phoneErr ? new Error(phoneErr.message + ' · ' + e.message) : e;
+      if (isNoAudio(e) && ++noAudio >= 3) break;     // Microsoft keeps refusing this text: let the caller try it in pieces
       if (onRetry) onRetry(last);
       await sleep(Math.min(5000, 700 * (k + 1) ** 1.5));
     }
@@ -615,14 +625,33 @@ export async function tts(text, persona, pitchOffset = 0, rateOffset = 0, tries 
 // clips already made in this session: re-rendering with the same text / voice / pitch / speed skips the network
 const TTS_MAX = 1500;
 const ttsMemo = new Map();
-async function ttsCached(text, persona, pitch, rate, onRetry) {
+async function ttsCached(text, persona, pitch, rate, onRetry, tries = 6) {
   const key = [persona.voice, persona.pitch + pitch, Math.max(-50, Math.min(100, persona.rate + rate)), text].join('|');
   const hit = ttsMemo.get(key);
   if (hit) return hit.slice(0);                    // always hand out a copy: ffmpeg.writeFile transfers (empties) the buffer
-  const ab = await tts(text, persona, pitch, rate, 6, onRetry);
+  const ab = await tts(text, persona, pitch, rate, tries, onRetry);
   ttsMemo.set(key, ab.slice(0));
   if (ttsMemo.size > TTS_MAX) ttsMemo.delete(ttsMemo.keys().next().value);
   return ab;
+}
+
+// last resort for a line Microsoft will not speak: say it in smaller pieces and join the mp3 data
+async function ttsPieces(text, persona, pitch, rate) {
+  const parts = ttsClean(text).split(/(?<=[။၊,.!?;:])\s*|\s+(?=\S{2,})/).filter(speakable);
+  const pieces = [], cap = Math.min(60, Math.ceil(ttsClean(text).length / 2));   // always really smaller than the line
+  for (const p of parts) {
+    const last = pieces[pieces.length - 1];
+    if (last && (last + ' ' + p).length <= cap) pieces[pieces.length - 1] = last + ' ' + p; else pieces.push(p);
+  }
+  if (pieces.length < 2) throw new Error('no smaller pieces');
+  const out = [];
+  for (const p of pieces) {
+    try { out.push(new Uint8Array(await ttsCached(p, persona, pitch, rate, null, 3))); } catch (e) { if (!isNoAudio(e)) throw e; }
+  }
+  if (!out.length) throw new Error('No audio for any piece');
+  const all = new Uint8Array(out.reduce((n, a) => n + a.length, 0));
+  let o = 0; for (const a of out) { all.set(a, o); o += a.length; }
+  return all.buffer;
 }
 
 /* ---------- render ---------- */
@@ -1001,23 +1030,38 @@ export async function renderDub({ file, videoDur, segs, burmese, persona, pitch,
   const lap = k => { const t = performance.now(); timing[k] = (timing[k] || 0) + (t - tMark) / 1000; tMark = t; };
   let inName = null, temp = false;
   try {
-    // 1) TTS (5 in parallel; drops to 3 as soon as any request has to be retried) — 0..50%
+    // 1) TTS (3 in parallel; drops to 2 as soon as any request has to be retried) — 0..50%
+    // A line Microsoft will not speak is tried in smaller pieces, then left silent (listed on the result page);
+    // too many of those, or any other error (network), stops the render.
     const raw = new Array(n).fill(null);
-    const todo = [...Array(n).keys()].filter(i => burmese[i]);
+    const todo = [...Array(n).keys()].filter(i => burmese[i] && speakable(burmese[i]));
     const total = todo.length || 1;
-    let done = 0, failed = false, lanes = 5;
-    const slowDown = () => { lanes = 3; };
+    const skipped = [];
+    const maxSkip = Math.max(2, Math.floor(total * 0.1));
+    let done = 0, failed = false, lanes = 3;
+    const slowDown = () => { lanes = 2; };
     const run = async lane => {
       while (todo.length && !failed && lane < lanes) {   // one line failed for good -> the other workers stop too
         const i = todo.shift();
         try { raw[i] = await ttsCached(burmese[i], persona, pitch, rate, slowDown); }
-        catch (e) { failed = true; throw e; }
+        catch (e) {
+          if (!isNoAudio(e)) { failed = true; throw e; }
+          try { raw[i] = await ttsPieces(burmese[i], persona, pitch, rate); }
+          catch (e2) {
+            if (!isNoAudio(e2) && !/no smaller pieces/.test(e2.message)) { failed = true; throw e2; }
+            skipped.push(i);
+            if (skipped.length > maxSkip) {
+              failed = true;
+              throw new Error(`TTS: စာကြောင်း ${skipped.length} ကြောင်း အသံမထွက်ပါ (ID: ${skipped.sort((a, b) => a - b).join(', ')}) — ` + e.message);
+            }
+          }
+        }
         done++;
         onProgress((done / total) * 0.5, `မြန်မာအသံ ထုတ်နေပါတယ် (${done}/${total})`);
       }
     };
     onProgress(0, `မြန်မာအသံ ထုတ်နေပါတယ် (0/${todo.length})`);
-    await Promise.all([0, 1, 2, 3, 4].map(run));
+    await Promise.all([0, 1, 2].map(run));
   lap('tts');
 
     // 2) fit each clip into its time slot — 50..75%
@@ -1195,7 +1239,7 @@ export async function renderDub({ file, videoDur, segs, burmese, persona, pitch,
     lap('save');
     setFFProgress(null);
     onProgress(1, 'ပြီးပါပြီ 🎉');
-    return { video: new Blob([out.slice().buffer], { type: 'video/mp4' }), placed, fellBack, fxFailed, fontFailed, diag, geoOk: !!geo, ovlOk: ovl, subsOk: !!subs, stats: dubStats(placed, maxTempo), timing, tries, src, engine: engineInfo() };
+    return { video: new Blob([out.slice().buffer], { type: 'video/mp4' }), placed, fellBack, fxFailed, fontFailed, diag, geoOk: !!geo, ovlOk: ovl, subsOk: !!subs, stats: dubStats(placed, maxTempo), timing, tries, src, engine: engineInfo(), skipped: skipped.sort((a, b) => a - b) };
   } catch (e) {
     // failed part-way: free the leftover work files so a retry doesn't run out of memory
     try { f.off('log', onLog); } catch {}

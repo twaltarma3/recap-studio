@@ -1058,7 +1058,7 @@ async function step4() {
   let mtRetry = false;
   try {
     const persona = L.PERSONAS.find(p => p.id === state.personaId);
-    const { video, placed, fellBack, fxFailed, fontFailed, diag, geoOk, ovlOk, subsOk, stats, timing, tries, src, engine } = await L.renderDub({
+    const { video, placed, fellBack, fxFailed, fontFailed, diag, geoOk, ovlOk, subsOk, stats, timing, tries, src, engine, skipped } = await L.renderDub({
       file: state.file, videoDur: state.videoDur, segs: state.segs, burmese: state.burmese,
       persona, pitch: state.pitch, rate: state.rate,
       fx: {
@@ -1072,7 +1072,7 @@ async function step4() {
     });
     state.diag = `geo:${geoOk} subs:${subsOk} overlay:${ovlOk} fxFailed:${fxFailed}\n${diag || ''}`;
     const took = stopClock();
-    state.result = { video, url: URL.createObjectURL(video), srt: L.buildSrt(state.burmese, placed), stats, took, timing, tries, src, engine };
+    state.result = { video, url: URL.createObjectURL(video), srt: L.buildSrt(state.burmese, placed), stats, took, timing, tries, src, engine, skipped };
     showResult();
     H.histAdd({ name: state.file.name, video, srt: state.result.srt, size: video.size, dur: state.videoDur, took })
       .catch(() => toast('မှတ်တမ်းထဲ သိမ်းဖို့ ဖုန်းထဲ နေရာမလောက်ပါ — Video ကို Download လုပ်ထားပါ'));
@@ -1082,7 +1082,9 @@ async function step4() {
   } catch (e) {
     if (e && e.mtStall) { mtRetry = true; return; }      // multi-core got stuck: run again on the normal engine (see finally)
     view.innerHTML = `<h2>အမှားရှိနေပါသည်</h2>`; showErr(e);
-    errTip(/TTS|fetch|network|connection/i.test(String(e && e.message))
+    errTip(/No audio|အသံမထွက်/i.test(String(e && e.message))
+      ? '⚠ <b>Microsoft က မြန်မာအသံ ထုတ်မပေးပါ။</b> အသံအများကြီး ဆက်တိုက်တောင်းရင် ခဏပိတ်ထားတတ်ပါတယ်။ ၁၀–၁၅ မိနစ်လောက် နားပြီး <b>ပြန်စမည်</b> ကိုနှိပ်ပါ (ရပြီးသား အသံတွေကို ပြန်မတောင်းတော့ပါဘူး)။ Error မှာပါတဲ့ ID စာကြောင်းတွေမှာ သင်္ကေတ / အင်္ဂလိပ်စာ ပါရင် မြန်မာလို ပြင်ရေးကြည့်ပါ။'
+      : /TTS|fetch|network|connection/i.test(String(e && e.message))
       ? '⚠ <b>မြန်မာအသံ ထုတ်တဲ့ server နဲ့ ချိတ်ဆက်မှု ပြတ်သွားပါတယ်။</b> Wi-Fi / Internet ကောင်းမကောင်း အရင်စစ်ပြီး <b>ပြန်စမည်</b> ကိုနှိပ်ပါ။ ပြင်ထားတဲ့ စာသားနဲ့ Setting တွေ မပျောက်ပါဘူး။'
       : '⚠ Wi-Fi / Internet ကောင်းမကောင်း အရင်စစ်ပြီး <b>ပြန်စမည်</b> ကိုနှိပ်ပါ။ ဆက်ဖြစ်နေရင် Effect တချို့ (Blur၊ စာတန်းထိုး၊ Logo) ကို ပိတ်ပြီး စမ်းကြည့်ပါ။');
     view.insertAdjacentHTML('beforeend', `<button class="btn primary" id="retry">ပြန်စမည်</button>
@@ -1107,6 +1109,9 @@ function statBlock() {
   let h = st.lateCount
     ? `<p class="muted small">⏱ နောက်ကျတဲ့ စာကြောင်း ${st.lateCount} ကြောင်း (အများဆုံး ${st.maxDrift.toFixed(1)} စက္ကန့်)</p>`
     : '<p class="muted small">✅ မြန်မာသံ အချိန်ကိုက်ညီပါတယ်</p>';
+  const sk = state.result.skipped || [];
+  if (sk.length) h += `<div class="warn">⚠ <b>အသံမထွက်တဲ့ စာကြောင်း ${sk.length} ကြောင်း</b> (ID: ${sk.join(', ')})<br>
+    Microsoft က ဒီစာကြောင်းတွေကို အသံမထုတ်ပေးလို့ အသံမပါဘဲ ထားခဲ့ပါတယ်။ သင်္ကေတ / အင်္ဂလိပ်စာ / ကိန်းဂဏန်း တွေကို မြန်မာလို ပြင်ရေးပြီး ပြန်ထုတ်ကြည့်ပါ။</div>`;
   if (long.length) h += `<div class="panel"><b>⚠ ရှည်လွန်းတဲ့ စာကြောင်း ${long.length} ကြောင်း</b>
     <p class="muted small">ID: ${long.map(x => x.i).join(', ')}<br>အသံကို အမြန်ဆုံးချုံ့လည်း အချိန်မဆန့်ပါ။ ဒီစာကြောင်းတွေကို Gemini နဲ့ တိုအောင် ပြန်ခိုင်းပါ။</p>
     <button id="shorten" class="btn block">📋 တိုအောင်ခိုင်းမည့် Prompt ကူးမည်</button>
