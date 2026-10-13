@@ -368,6 +368,19 @@ export async function tts(text, persona, pitchOffset = 0, rateOffset = 0, tries 
   throw last;
 }
 
+// clips already made in this session: re-rendering with the same text / voice / pitch / speed skips the network
+const TTS_MAX = 1500;
+const ttsMemo = new Map();
+async function ttsCached(text, persona, pitch, rate) {
+  const key = [persona.voice, persona.pitch + pitch, Math.max(-50, Math.min(100, persona.rate + rate)), text].join('|');
+  const hit = ttsMemo.get(key);
+  if (hit) return hit.slice(0);                    // always hand out a copy: ffmpeg.writeFile transfers (empties) the buffer
+  const ab = await tts(text, persona, pitch, rate);
+  ttsMemo.set(key, ab.slice(0));
+  if (ttsMemo.size > TTS_MAX) ttsMemo.delete(ttsMemo.keys().next().value);
+  return ab;
+}
+
 /* ---------- render ---------- */
 const SR = 24000, GAP = 0.05;
 
@@ -430,7 +443,12 @@ const RATIOS = { '9:16': 9 / 16, '3:4': 3 / 4, '16:9': 16 / 9, '1:1': 1 };
 export function outGeometry(sz, fx) {
   const W = even(sz.w), H = even(sz.h);
   const r = fx && RATIOS[fx.ratio];
-  if (!r) return { W, H, OW: W, OH: H, ratio: false };
+  if (!r) {
+    // "fast" option: shrink a large original-ratio video to 1280 on the long side (same size the ratio presets use)
+    const k = fx && fx.fast ? Math.min(1, 1280 / Math.max(W, H)) : 1;
+    if (k < 1) return { W, H, OW: even(W * k), OH: even(H * k), ratio: false, scaled: true };
+    return { W, H, OW: W, OH: H, ratio: false };
+  }
   const long = Math.min(Math.max(W, H), 1280);
   const OW = r <= 1 ? even(long * r) : even(long), OH = r <= 1 ? even(long) : even(long / r);
   return { W, H, OW, OH, ratio: true };
@@ -442,10 +460,11 @@ function buildFx(fx, subs, g, ovl = 0) {
   const mirror = !!(fx && fx.mirror), blur = !!(fx && fx.blur);
   const zoom = Math.max(1, Math.min(3, (+(fx && fx.zoom) || 100) / 100));
   const geo = !!(g && g.ratio), doZoom = zoom > 1.001 && g;
-  if (!mirror && !blur && !subs && !geo && !doZoom && !ovl) return '';
+  if (!mirror && !blur && !subs && !geo && !doZoom && !ovl) return '';   // nothing to re-encode: keep the fast stream copy
   const gr = [];
   let cur = '[0:v]', n = 0;
   const lbl = () => `[t${n++}]`;
+  if (!geo && g && g.scaled) { const o = lbl(); gr.push(`${cur}scale=${g.OW}:${g.OH}${o}`); cur = o; }
   if (geo) {
     const o = lbl();
     if (fx.fit === 'pad') {
@@ -733,7 +752,7 @@ export async function renderDub({ file, videoDur, segs, burmese, persona, pitch,
     const run = async () => {
       while (todo.length && !failed) {          // one line failed for good -> the other workers stop too
         const i = todo.shift();
-        try { raw[i] = await tts(burmese[i], persona, pitch, rate); }
+        try { raw[i] = await ttsCached(burmese[i], persona, pitch, rate); }
         catch (e) { failed = true; throw e; }
         done++;
         onProgress((done / total) * 0.5, `အသံထုတ်နေသည် ${done}/${total}`);
@@ -800,7 +819,7 @@ export async function renderDub({ file, videoDur, segs, burmese, persona, pitch,
     const wantMix = keepTalk > 0 || keepGap > 0;
     let geo = null;
     if (fx) {
-      const needGeo = fx.ratio && fx.ratio !== 'orig' || +fx.zoom > 100 || (fx.subs && fx.subs.on) || (fx.wm && fx.wm.on) || (fx.logo && fx.logo.on);
+      const needGeo = fx.ratio && fx.ratio !== 'orig' || +fx.zoom > 100 || (fx.subs && fx.subs.on) || (fx.wm && fx.wm.on) || (fx.logo && fx.logo.on) || (fx.fast && (fx.mirror || fx.blur));
       if (needGeo) {
         let sz = null;
         try { sz = await videoSize(file); } catch {}

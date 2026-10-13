@@ -8,7 +8,7 @@ const state = {
   step: 1, showSrc: false, file: null, videoDur: 0, lang: 'auto', segs: [], sourceLines: [],
   burmese: [], personaId: 'TH', ...DEFAULTS, result: null, busy: false, origSegs: null,
   fxMirror: false, fxBlur: false, blurH: 15, blurY: 100, blurS: 50, blurO: 100, previewUrl: null, previewFor: null,
-  pStyle: 'recap', fxRatio: 'orig', fxFit: 'crop', fxZoom: 100, wmOn: false, wmText: '', wmPos: 'br', wmSize: 4,
+  pStyle: 'recap', fxRatio: 'orig', fxFit: 'crop', fxZoom: 100, fxFast: false, wmOn: false, wmText: '', wmPos: 'br', wmSize: 4,
   logoOn: false, logoData: null, logoPos: 'tr', logoSize: 14, tab: 'video',
   fxSubs: false, subS: 5, subY: 88, subC: '#ffffff', subO: '#000000', subFont: 'pt16', fontOk: false
 };
@@ -364,6 +364,11 @@ function previewBlock() {
         <div class="row" style="margin-top:14px"><b>🔍 Zoom</b><span id="fxZoomV">${state.fxZoom}%</span></div>
         ${pmRow('fxZoom', 100, 250, 10, state.fxZoom)}
       <label style="display:flex;align-items:center;gap:10px;font-weight:600;margin-top:12px">
+        <input id="fxFast" type="checkbox" style="${chk}" ${state.fxFast ? 'checked' : ''} />
+        ⚡ မြန်မြန်ထုတ် (720p)
+      </label>
+      <p class="muted small" style="margin:4px 0 0">Effect တစ်ခုခု ဖွင့်ထားရင် Video ကို 720p နဲ့ ထုတ်လို့ ပိုမြန်ပါတယ်။ Effect မဖွင့်ရင် မူရင်းအတိုင်းပါ။</p>
+      <label style="display:flex;align-items:center;gap:10px;font-weight:600;margin-top:12px">
         <input id="fxMirror" type="checkbox" style="${chk}" ${state.fxMirror ? 'checked' : ''} />
         ↔ Mirror (ဘယ်ညာ လှန်မည်)
       </label>
@@ -533,6 +538,7 @@ function bindPreview() {
     try { state.logoData = await fileToLogo(f); $('#logoPick').firstChild.textContent = '🖼 Logo ပြောင်းမည် '; apply(); }
     catch (err) { toast(err.message); }
   };
+  $('#fxFast').onchange = e => { state.fxFast = e.target.checked; };
   $('#fxMirror').onchange = e => { state.fxMirror = e.target.checked; apply(); };
   $('#fxBlur').onchange = e => { state.fxBlur = e.target.checked; $('#blurBox').hidden = !state.fxBlur; apply(); };
   $('#blurH').oninput = e => { state.blurH = +e.target.value; $('#bhv').textContent = e.target.value + '%'; apply(); };
@@ -810,7 +816,7 @@ async function step4() {
       file: state.file, videoDur: state.videoDur, segs: state.segs, burmese: state.burmese,
       persona, pitch: state.pitch, rate: state.rate,
       fx: {
-        ratio: state.fxRatio, fit: state.fxFit, zoom: state.fxZoom,
+        ratio: state.fxRatio, fit: state.fxFit, zoom: state.fxZoom, fast: state.fxFast,
         wm: { on: state.wmOn, text: state.wmText, pos: state.wmPos, size: state.wmSize },
         logo: { on: state.logoOn, data: state.logoData, pos: state.logoPos, size: state.logoSize },
         mirror: state.fxMirror, blur: state.fxBlur, blurH: state.blurH, blurY: state.blurY, blurS: state.blurS, blurO: state.blurO,
