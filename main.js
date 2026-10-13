@@ -779,6 +779,7 @@ function bindLinkBox() {
     if (!link) { toast('Link ကို အရင်ထည့်ပါ'); inp.focus(); return; }
     if (!L.isTikTok(link)) { toast(/youtu/i.test(link) ? 'YouTube link ကို မကြာမီ ထည့်ပေးပါမယ် — အခု TikTok ပဲ ရပါသေးတယ်' : 'TikTok link မဟုတ်ပါ'); return; }
     linkBusy = true; state.busy = true; renderStepper();
+    $('#lnkErr').hidden = true;
     const btns = [$('#lnkLoad'), $('#lnkPaste'), $('#f')]; btns.forEach(b => { if (b) b.disabled = true; }); inp.disabled = true;
     $('#lnkProg').hidden = false;
     const setP = (frac, bytes) => {
@@ -797,7 +798,10 @@ function bindLinkBox() {
       linkBusy = false; state.busy = false; renderStepper();
       btns.forEach(b => { if (b) b.disabled = false; }); inp.disabled = false;
       $('#lnkProg').hidden = true;
-      toast(String((e && e.message) || e).slice(0, 120));
+      const box = $('#lnkErr');
+      box.textContent = String((e && e.message) || e);
+      if (e && e.detail) box.insertAdjacentHTML('beforeend', `<small style="display:block;margin-top:6px;opacity:.75;word-break:break-all">${esc(e.detail)}</small>`);
+      box.hidden = false;
     }
   };
 }
@@ -817,6 +821,7 @@ function step1() {
         <button type="button" class="btn" id="lnkPaste" aria-label="Paste">📋</button>
         <button type="button" class="btn primary" id="lnkLoad">🔗 Load</button>
       </div>
+      <div id="lnkErr" class="err" hidden></div>
       <div id="lnkProg" hidden><div class="bar"><i id="lnkFill"></i></div><div class="pct"><span id="lnkTxt">ဒေါင်းနေပါတယ်…</span><b id="lnkNum">0%</b></div></div>
       <p class="muted small" style="margin:6px 2px 0">ရနိုင်တာ: <b>TikTok</b> · YouTube (မကြာမီ)</p>
     </div>

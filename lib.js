@@ -228,7 +228,11 @@ export async function loadTikTok(link, onProg) {
   catch { throw new Error('Server နဲ့ ချိတ်ဆက်မရပါ — Wi-Fi / Internet စစ်ပါ၊ VPN ချိတ်ထားရင် ဖြုတ်ပါ'); }
   if (!r.ok) {
     let e = null; try { e = await r.clone().json(); } catch {}
-    if (e && DL_ERR[e.error]) throw new Error(DL_ERR[e.error]);
+    if (e && DL_ERR[e.error]) {
+      const err = new Error(DL_ERR[e.error]);
+      err.detail = e.detail || '';                 // what the download service said (shown small, for troubleshooting)
+      throw err;
+    }
     if (r.status === 404) throw new Error('Worker မှာ TikTok download မပါသေးပါ — Worker ကို update လုပ်ပါ');
     throw new Error(`Video ဒေါင်းမရပါ (${r.status}) — ခဏနေ ပြန်ကြိုးစားပါ`);
   }
