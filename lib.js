@@ -819,31 +819,36 @@ async function makeSubTrack(f, { file, videoDur, burmese, placed, fx }) {
 
   cv.width = W; cv.height = bandH;
   const names = [];
+  // each line gets its own canvas so the PNG encodes (the slow part on phones) can run 4 at a time
   const draw = async (name, lines) => {
-    ctx.clearRect(0, 0, W, bandH);
+    const c = document.createElement('canvas'); c.width = W; c.height = bandH;
+    const x = c.getContext('2d');
     if (lines) {
-      ctx.font = font; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
-      ctx.lineWidth = Math.max(2, px * 0.16); ctx.strokeStyle = s.outline; ctx.fillStyle = s.color;
+      x.font = font; x.textAlign = 'center'; x.textBaseline = 'middle'; x.lineJoin = 'round';
+      x.lineWidth = Math.max(2, px * 0.16); x.strokeStyle = s.outline; x.fillStyle = s.color;
       const L = lines.slice(0, maxL);
       const top = (bandH - L.length * lh) / 2 + lh / 2;
-      L.forEach((t, j) => { const yy = top + j * lh; ctx.strokeText(t, W / 2, yy); ctx.fillText(t, W / 2, yy); });
+      L.forEach((t, j) => { const yy = top + j * lh; x.strokeText(t, W / 2, yy); x.fillText(t, W / 2, yy); });
     }
-    const blob = await new Promise(r => cv.toBlob(r, 'image/png'));
+    const blob = await new Promise(r => c.toBlob(r, 'image/png'));
     await f.writeFile(name, new Uint8Array(await blob.arrayBuffer()));
     names.push(name);
   };
 
-  await draw('sub_blank.png', null);
+  const jobs = [['sub_blank.png', null]];
   let t = 0, list = '';
   const add = (name, d) => { if (d > 0.001) list += `file '${name}'\nduration ${d.toFixed(3)}\n`; };
   for (const it of items) {
     const st = Math.max(it.start, t);
     if (st > t) add('sub_blank.png', st - t);
     const name = `sub_${it.i}.png`;
-    await draw(name, it.lines);
+    jobs.push([name, it.lines]);
     add(name, it.end - st);
     t = Math.max(t, it.end);
   }
+  let next = 0;
+  const worker = async () => { while (next < jobs.length) { const [n, l] = jobs[next++]; await draw(n, l); } };
+  await Promise.all([worker(), worker(), worker(), worker()]);
   add('sub_blank.png', Math.max(videoDur - t, 0) + 5);
   list += `file 'sub_blank.png'\n`;
   await f.writeFile('subs.txt', new TextEncoder().encode(list));
@@ -950,7 +955,8 @@ export async function renderDub({ file, videoDur, segs, burmese, persona, pitch,
       const tempo = Math.min(tb.len / slot, maxTempo);
       if (tempo > 1.03) {
         await f.writeFile('s.mp3', new Uint8Array(raw[i]));
-        const code = await ffRun(f, ['-i', 's.mp3', '-filter:a', tempoChain(tempo), '-ar', String(SR), '-ac', '1', 's.wav']);
+        // one thread is plenty for a short clip; on the multi-core build many quick runs with automatic threads could hang
+        const code = await ffRun(f, [...mtArgs(), ...mtIn(1), '-i', 's.mp3', '-filter:a', tempoChain(tempo), '-ar', String(SR), '-ac', '1', ...mtIn(1), 's.wav']);
         if (code === 0) {
           const wav = await f.readFile('s.wav');
           buf = await ctx.decodeAudioData(wav.slice().buffer);
@@ -989,6 +995,7 @@ export async function renderDub({ file, videoDur, segs, burmese, persona, pitch,
       catch { throw new Error('Video ဖိုင်ကို ပြန်ဖတ်မရပါ — "Video ပြန်ရွေးပြီး ပြန်စမည်" ကိုနှိပ်ပါ'); }
     }
     await f.writeFile('mix.wav', wavBytes);
+    lap('input');
     let ffLabel = 'ဗီဒီယိုဖိုင်ကို ပြင်ဆင်နေပါတယ်';
     setFFProgress(p => onProgress(0.85 + p * 0.15, p > 0.97 ? 'နောက်ဆုံးအဆင့် — ဗီဒီယိုဖိုင် သိမ်းနေပါတယ်' : ffLabel));
     const wantMix = keepTalk > 0 || keepGap > 0;
@@ -1013,10 +1020,12 @@ export async function renderDub({ file, videoDur, segs, burmese, persona, pitch,
     if (geo && fx && ((fx.wm && fx.wm.on) || (fx.logo && fx.logo.on))) {
       onProgress(0.855, 'Watermark / Logo ထည့်ဖို့ ပြင်ဆင်နေပါတယ်');
       try { ovl = !!(await makeOverlay(f, fx, geo)); } catch { ovl = false; }
+      lap('overlay');
     }
     if (fx && fx.subs && fx.subs.on) {
       onProgress(0.86, 'မြန်မာစာတန်းထိုးတွေ ရေးဆွဲနေပါတယ်');
       try { subs = await makeSubTrack(f, { file, videoDur, burmese, placed, fx }); } catch { subs = null; }
+      lap('subs');
     }
     const ovlIdx = ovl ? (subs ? 3 : 2) : 0;
     // "30 fps" option: only lower the frame rate when the source is faster (60 fps); 24/25/30 fps stay as they are

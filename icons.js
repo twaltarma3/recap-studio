@@ -68,7 +68,7 @@ const MAP = {
   '🎞': 'film', '🗑': 'trash', '☰': 'menu', '🔎': 'search', '🔍': 'zoom', '💡': 'bulb', '📋': 'clipboard',
   '🗣': 'mic', '⚙': 'gear', '💬': 'chat', '🎬': 'clapper', '🔒': 'lock', '🔓': 'unlock', '🌫': 'fog',
   '📲': 'phone', '🚀': 'gauge', '🔊': 'volume', '📊': 'chart', '🗂': 'folder', '🖼': 'image', '🎚': 'sliders',
-  '📖': 'book', '📭': 'inbox', '🕒': 'clock', '👁': 'eye', '✨': 'sparkles', '📐': 'ratio', '✂': 'scissors',
+  '📖': 'book', '📭': 'inbox', '📥': 'inbox', '🕒': 'clock', '👁': 'eye', '✨': 'sparkles', '📐': 'ratio', '✂': 'scissors',
   '💧': 'drop', '🎨': 'palette', '🔠': 'type', '📁': 'folderUp', '🏷': 'tag', '⭕': 'badge', '▶': 'play',
   '⏸': 'pause', '⏳': 'hourglass', '🔥': 'flame', '🤖': 'bot', '🧩': 'layers', '💾': 'save', '📹': 'video',
   '🔁': 'repeat', '🛠': 'wrench', '↔': 'flip', '⇅': 'vmove', '↕': 'vmove', '↺': 'reset', '↗': 'ext', '🔗': 'link'
