@@ -1,5 +1,8 @@
 import './style.css';
 import './theme.css';
+import './mobile.css';
+import './design.css';
+import { startIcons } from './icons.js';
 import * as L from './lib.js';
 import * as H from './history.js';
 
@@ -99,17 +102,37 @@ function buildMenu() {
     <div id="scrim"></div>
     <nav id="drawer">
       <div class="dhead"><b>Menu</b><button class="ghost" id="dclose">✕</button></div>
-      <button class="ditem" data-p="free"><span>1</span><b>Free Recap</b><small>Gemini နဲ့ ကိုယ်တိုင် ဘာသာပြန်</small></button>
-      <button class="ditem" data-p="premium"><span>2</span><b>Premium Recap</b><small>မကြာမီ</small></button>
-      <button class="ditem" data-p="keys"><span>3</span><b>API Key Settings</b><small>AssemblyAI Key · FFmpeg Engine</small></button>
-      <button class="ditem" data-p="guide"><span>4</span><b>အသုံးပြုပုံ လမ်းညွှန်</b><small>အဆင့်လိုက် ရှင်းလင်းချက်</small></button>
-      <button class="ditem" data-p="history"><span>5</span><b>မှတ်တမ်း (History)</b><small>နောက်ဆုံး ထုတ်ထားတဲ့ Video ၂ ခု</small></button>
+      <button class="ditem" data-p="free"><span>🎬</span><b>Free Recap</b><small>Gemini နဲ့ ကိုယ်တိုင် ဘာသာပြန်</small></button>
+      <button class="ditem" data-p="premium"><span>✨</span><b>Premium Recap</b><small>မကြာမီ</small></button>
+      <button class="ditem" data-p="keys"><span>⚙</span><b>API Key Settings</b><small>AssemblyAI Key · FFmpeg Engine</small></button>
+      <button class="ditem" data-p="guide"><span>📖</span><b>အသုံးပြုပုံ လမ်းညွှန်</b><small>အဆင့်လိုက် ရှင်းလင်းချက်</small></button>
+      <button class="ditem" data-p="history"><span>🗂</span><b>မှတ်တမ်း (History)</b><small>နောက်ဆုံး ထုတ်ထားတဲ့ Video ၂ ခု</small></button>
     </nav>`);
   burger.onclick = openDrawer;
   $('#scrim').onclick = closeDrawer;
   $('#dclose').onclick = closeDrawer;
   document.querySelectorAll('.ditem').forEach(b => { b.onclick = () => openPage(b.dataset.p); });
+  setupInstall();
   $('#openSettings').onclick = () => openPage('keys');
+}
+
+/* ---------------- install as an app (home screen, full screen) ---------------- */
+let installEvt = null;
+function setupInstall() {
+  const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+  if (standalone) return;                                     // already running as the installed app
+  $('#drawer').insertAdjacentHTML('beforeend', `
+    <button class="ditem dinstall" id="installApp" hidden><span>📲</span><b>App အဖြစ် ထည့်မည်</b><small>Home screen မှာ icon နဲ့ အပြည့် ဖွင့်ရန်</small></button>`);
+  const btn = $('#installApp');
+  const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvt = e; btn.hidden = false; });
+  addEventListener('appinstalled', () => { btn.hidden = true; installEvt = null; toast('✅ App ထည့်ပြီးပါပြီ — Home screen က icon နဲ့ ဖွင့်ပါ'); });
+  if (ios) btn.hidden = false;                                // Safari has no install prompt: show the steps instead
+  btn.onclick = async () => {
+    closeDrawer();
+    if (installEvt) { installEvt.prompt(); try { await installEvt.userChoice; } catch {} installEvt = null; btn.hidden = true; return; }
+    toast(ios ? 'Safari ရဲ့ Share (⬆) → "Add to Home Screen" ကို နှိပ်ပါ' : 'Browser menu (⋮) → "Add to Home screen / Install app" ကို နှိပ်ပါ');
+  };
 }
 
 /* ---------------- Usage guide ---------------- */
@@ -130,6 +153,7 @@ function pageGuide() {
         <div class="tip">💡 Key တွေကို ဒီဖုန်း browser ထဲမှာပဲ သိမ်းပါတယ်။ Browser data ဖျက်ရင် ပြန်ထည့်ရပါမယ်။</div>`, true)}
 
       ${sec(2, 'Video တင်ပါ', `
+        <div class="tip" style="margin:0 0 10px">📲 <b>App လို အပြည့်ဖွင့်ချင်ရင်</b> — ☰ Menu → <b>App အဖြစ် ထည့်မည်</b> (ဒါမှမဟုတ် Chrome ⋮ → Add to Home screen)။ Home screen က icon နဲ့ ဖွင့်ရင် browser bar မပါဘဲ ပွင့်ပါတယ်။</div>
         <ol>
           <li><b>Video File ရွေးချယ်ပါ</b> ကိုနှိပ်ပြီး Video ရွေးပါ။ (MP4၊ MOV၊ WEBM၊ MKV — ၁၀ မိနစ်အထိ)</li>
           <li><b>မူရင်းစကားပြောဘာသာ</b> ကို ရွေးပါ။ (ဥပမာ Chinese)</li>
@@ -569,7 +593,7 @@ function previewBlock() {
           <input id="logoOn" type="checkbox" style="${chk}" ${state.logoOn ? 'checked' : ''} /> ⭕ Logo (စက်ဝိုင်း)
         </label>
         <div id="logoBox" ${state.logoOn ? '' : 'hidden'}>
-          <label class="btn" style="display:block;margin:8px 0 0;text-align:center;cursor:pointer" id="logoPick">🖼 ${state.logoData ? 'Logo ပြောင်းမည်' : 'Logo ပုံ ရွေးမည်'}
+          <label class="btn" style="display:block;margin:8px 0 0;text-align:center;cursor:pointer" id="logoPick"><span id="logoPickTxt">🖼 ${state.logoData ? 'Logo ပြောင်းမည်' : 'Logo ပုံ ရွေးမည်'}</span>
             <input id="logoUp" type="file" accept="image/*" hidden /></label>
           <div class="row" style="margin-top:12px"><b>နေရာ</b></div>
           <div class="chips" data-pos="logoPos">${posChips()}</div>
@@ -661,7 +685,7 @@ function bindPreview() {
   $('#logoOn').onchange = e => { state.logoOn = e.target.checked; $('#logoBox').hidden = !state.logoOn; apply(); };
   $('#logoUp').onchange = async e => {
     const f = e.target.files[0]; if (!f) return;
-    try { state.logoData = await fileToLogo(f); $('#logoPick').firstChild.textContent = '🖼 Logo ပြောင်းမည် '; apply(); }
+    try { state.logoData = await fileToLogo(f); $('#logoPickTxt').textContent = '🖼 Logo ပြောင်းမည်'; apply(); }
     catch (err) { toast(err.message); }
   };
   $('#fxFast').onchange = e => { state.fxFast = e.target.checked; };
@@ -1051,6 +1075,7 @@ function showResult() {
 }
 
 /* ---------------- start ---------------- */
+startIcons();
 buildMenu();
 if (!L.cfg.aaiKey) page = 'keys';
 render();
