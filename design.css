@@ -1,0 +1,151 @@
+/* "Midnight Violet" design layer (loaded after theme.css and mobile.css; colours, surfaces, icons only).
+   Deep ink background with a soft violet glow, glassy cards, violet→indigo primary, warm gold
+   highlights, one line-icon set. Remove the import in main.js to go back to the previous look. */
+:root{
+  --bg:#0a0912; --surface:#13121c; --surface-2:#1a1926; --surface-3:#222131;
+  --stroke:rgba(255,255,255,.07); --stroke-2:rgba(255,255,255,.12);
+  --text:#f3f2f9; --muted:#a19eb9; --dim:#77748f;
+  --violet:#8b5cf6; --indigo:#6366f1; --violet-soft:rgba(139,92,246,.14); --violet-glow:rgba(124,58,237,.38);
+  --grad:linear-gradient(135deg,#9b6dff 0%,#7c5cff 45%,#5b5bf0 100%);
+  --gold:#f5c451; --green:#34d399; --red:#f87171; --amber:#fbbf24;
+  --ink:var(--text); --acc:var(--violet); --acc-soft:var(--violet-soft);
+}
+
+/* ---------- page ---------- */
+html,body{background:var(--bg) !important;color:var(--text)}
+body{
+  background:
+    radial-gradient(900px 520px at 85% -120px,rgba(124,58,237,.30),transparent 62%),
+    radial-gradient(700px 420px at -10% 10%,rgba(99,102,241,.16),transparent 60%),
+    var(--bg) !important;
+  background-attachment:fixed !important;
+}
+body h1,body h2,body b,body label,body summary{color:var(--text)}
+body .muted,body .small,body small{color:var(--muted)}
+body a.link,body .link{color:#b9a4ff}
+::selection{background:rgba(139,92,246,.4)}
+
+/* ---------- icons ---------- */
+.ic{width:1.15em;height:1.15em;vertical-align:-.2em;flex:none;display:inline-block}
+.icwrap{display:contents}
+h2 .ic,b .ic,label .ic,summary .ic,.row .ic,.trow .ic,.krow .ic{color:#b39dff}
+.btn.primary .ic,.chip.on .ic,.tabs button.on .ic{color:#fff}
+.warn .ic{color:var(--amber)} .tip .ic{color:var(--green)} .err .ic{color:var(--red)}
+
+/* ---------- header: frosted glass ---------- */
+body .top{
+  background:rgba(13,12,22,.72) !important;
+  -webkit-backdrop-filter:saturate(160%) blur(18px);backdrop-filter:saturate(160%) blur(18px);
+  border-bottom:1px solid var(--stroke);
+  box-shadow:0 1px 0 rgba(139,92,246,.25), 0 10px 30px rgba(0,0,0,.35) !important;
+}
+body .top h1{display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:.2px;text-shadow:none}
+body .top h1::before{
+  content:'';flex:none;width:30px;height:30px;border-radius:9px;
+  background:url(/icons/icon-192.png) center/cover;box-shadow:0 4px 14px var(--violet-glow);
+}
+body .top .ghost,body .burger{
+  background:var(--surface-2) !important;border:1px solid var(--stroke) !important;border-radius:12px !important;
+  box-shadow:none !important;color:var(--text) !important;
+}
+body .burger i{background:var(--text)}
+
+/* ---------- step bar ---------- */
+body .stepper{border-bottom:1px solid var(--stroke)}
+body .stepper span{color:var(--dim)}
+body .stepper b{background:var(--surface-2) !important;border:1px solid var(--stroke-2) !important;color:var(--muted) !important;box-shadow:none !important}
+body .stepper .done b{background:var(--violet-soft) !important;color:#c9b8ff !important;border-color:rgba(139,92,246,.35) !important}
+body .stepper .on{color:#fff}
+body .stepper .on b{background:var(--grad) !important;color:#fff !important;border-color:transparent !important;box-shadow:0 0 0 4px rgba(139,92,246,.18), 0 6px 16px var(--violet-glow) !important}
+body .stepper span.link{color:#c9b8ff}
+
+/* ---------- cards ---------- */
+body .panel,body .kbox,.guide details,.hitem,body #pvSticky{
+  background:linear-gradient(180deg,rgba(255,255,255,.035),rgba(255,255,255,.015)),var(--surface) !important;
+  border:1px solid var(--stroke) !important;border-radius:20px;
+  box-shadow:0 12px 32px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.04) !important;
+}
+body #pvSticky{border-radius:18px !important}
+
+/* ---------- buttons ---------- */
+body .btn,body .ghost,body .icon{
+  background:var(--surface-2) !important;border:1px solid var(--stroke-2) !important;color:var(--text) !important;
+  box-shadow:none !important;text-shadow:none !important;border-radius:14px;transition:transform .12s,filter .12s,background .2s;
+}
+body .btn:active:not(:disabled),body .ghost:active:not(:disabled){transform:scale(.98)}
+body .btn.primary{
+  background:var(--grad) !important;border:0 !important;color:#fff !important;font-weight:700;
+  box-shadow:0 10px 26px var(--violet-glow), inset 0 1px 0 rgba(255,255,255,.25) !important;
+}
+body .btn.primary:disabled{filter:grayscale(.6) brightness(.7);box-shadow:none !important}
+body .btn.danger{background:rgba(248,113,113,.10) !important;color:#fca5a5 !important;border:1px solid rgba(248,113,113,.25) !important}
+
+/* ---------- inputs ---------- */
+body textarea,body select,body .keyfield,
+body input:not([type=checkbox]):not([type=range]):not([type=color]):not([type=file]){
+  background:#0e0d16 !important;border:1px solid var(--stroke-2) !important;color:var(--text) !important;
+  box-shadow:inset 0 1px 3px rgba(0,0,0,.4) !important;border-radius:14px;
+}
+body textarea:focus,body select:focus,body input:not([type=checkbox]):not([type=range]):focus{
+  outline:none;border-color:rgba(139,92,246,.6) !important;box-shadow:0 0 0 4px rgba(139,92,246,.18) !important;
+}
+body .keyfield input{background:transparent !important;border:0 !important;box-shadow:none !important}
+body input[type=range]{accent-color:var(--violet);filter:none}
+body select option{background:var(--surface);color:var(--text)}
+
+/* ---------- upload ---------- */
+body .drop{
+  background:linear-gradient(180deg,rgba(139,92,246,.08),rgba(139,92,246,.03)),var(--surface) !important;
+  border:1.5px dashed rgba(139,92,246,.45) !important;box-shadow:none !important;
+}
+body .drop.has{border-style:solid !important;border-color:rgba(139,92,246,.7) !important;background:linear-gradient(180deg,rgba(139,92,246,.16),rgba(99,102,241,.06)),var(--surface) !important}
+body .drop::before{background-color:var(--violet-soft) !important;box-shadow:0 8px 22px rgba(124,58,237,.25) !important}
+
+/* ---------- tabs, segmented pickers, chips ---------- */
+.tabs,#ratioChips,#fitChips,.chips[data-pos],#pStyle{background:#0e0d16 !important;border:1px solid var(--stroke) !important}
+.tabs button,.chip{color:var(--muted) !important;background:transparent !important;border:0 !important}
+.tabs button.on,.chip.on,#ratioChips .chip.on,#fitChips .chip.on,.chips[data-pos] .chip.on,#pStyle .chip.on{
+  background:var(--grad) !important;color:#fff !important;box-shadow:0 6px 16px rgba(124,58,237,.35) !important;
+}
+.chips:not([data-pos]):not(#ratioChips):not(#fitChips):not(#pStyle) .chip{background:var(--surface-2) !important;border:1px solid var(--stroke) !important}
+
+/* ---------- switches ---------- */
+#view input[type=checkbox]{background:var(--surface-3) !important;border-color:var(--stroke-2) !important}
+#view input[type=checkbox]:checked{background:var(--grad) !important;border-color:transparent !important;box-shadow:0 0 14px rgba(124,58,237,.45) !important}
+
+/* ---------- voice cards ---------- */
+body .voice{background:var(--surface) !important;border:1px solid var(--stroke) !important;box-shadow:none !important;color:var(--text) !important}
+body .voice.sel{border:1.5px solid rgba(139,92,246,.8) !important;background:linear-gradient(180deg,rgba(139,92,246,.18),rgba(99,102,241,.06)),var(--surface) !important;box-shadow:0 10px 26px rgba(124,58,237,.25) !important}
+body .voice button{background:var(--surface-3) !important;border:1px solid var(--stroke-2) !important;color:var(--text) !important;box-shadow:none !important}
+body .av{box-shadow:0 6px 16px rgba(0,0,0,.35) !important}
+body .av.m{background:linear-gradient(145deg,#60a5fa,#4f46e5) !important}
+body .av.f{background:linear-gradient(145deg,#f472b6,#db2777) !important}
+
+/* ---------- progress ---------- */
+body .bar{background:var(--surface-2) !important;box-shadow:inset 0 1px 2px rgba(0,0,0,.5) !important;height:10px}
+body .bar i{background:linear-gradient(90deg,#7c5cff,#a78bfa,#f0abfc) !important;box-shadow:0 0 14px rgba(167,139,250,.6) !important}
+.ptime b{color:var(--text)}
+.tbar{background:var(--surface-2)}
+.tbar i{background:var(--grad)}
+
+/* ---------- badges & messages ---------- */
+body .badge{background:rgba(255,255,255,.06) !important;border:1px solid var(--stroke) !important;color:var(--muted) !important;box-shadow:none !important}
+body .badge.ok{background:rgba(52,211,153,.12) !important;color:#6ee7b7 !important;border-color:rgba(52,211,153,.3) !important}
+body .badge.req{background:rgba(248,113,113,.12) !important;color:#fca5a5 !important;border-color:rgba(248,113,113,.3) !important}
+body .err{background:rgba(248,113,113,.10) !important;border:1px solid rgba(248,113,113,.25);color:#fecaca !important}
+.tip,body .guide .tip{background:rgba(52,211,153,.08) !important;border:1px solid rgba(52,211,153,.22) !important;color:#bbf7d0 !important}
+.warn,body .guide .warn{background:rgba(251,191,36,.08) !important;border:1px solid rgba(251,191,36,.24) !important;color:#fde68a !important}
+body #toast{background:rgba(26,25,38,.92) !important;border:1px solid var(--stroke-2);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);box-shadow:0 12px 30px rgba(0,0,0,.5) !important}
+
+/* ---------- menu drawer ---------- */
+body #drawer{background:linear-gradient(180deg,#100f19,#0b0a12) !important;border-right:1px solid var(--stroke)}
+body #drawer.open{box-shadow:20px 0 50px rgba(0,0,0,.6) !important}
+body .ditem{background:var(--surface) !important;border:1px solid var(--stroke) !important;box-shadow:none !important}
+body .ditem span{background:var(--violet-soft) !important;color:#c9b8ff !important;border:0 !important;box-shadow:none !important;font-size:18px}
+body .ditem small{color:var(--muted) !important}
+body .ditem.on{background:linear-gradient(135deg,rgba(139,92,246,.28),rgba(99,102,241,.14)),var(--surface) !important;border-color:rgba(139,92,246,.55) !important}
+body .ditem.on span{background:var(--grad) !important;color:#fff !important}
+
+/* ---------- guide ---------- */
+.guide .n{background:var(--grad) !important;color:#fff !important;box-shadow:0 4px 12px var(--violet-glow) !important}
+.guide .gbody{color:#d9d7e8}

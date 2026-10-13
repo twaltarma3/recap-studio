@@ -65,9 +65,9 @@ body .drop.has::before{
 #view input[type=checkbox]:checked{background:linear-gradient(135deg,#8470ff,#4a37e0);border-color:#6b56ff}
 #view input[type=checkbox]:checked::before{transform:translateX(18px);background:#fff}
 #view input[type=checkbox]:disabled{opacity:.45;cursor:not-allowed}
-/* switch rows read better with the label text first: keep DOM order, flip visually */
-#view label:has(> input[type=checkbox]){justify-content:space-between;flex-direction:row-reverse;gap:12px;min-height:44px}
-#view .mtrow{flex-direction:row-reverse;justify-content:space-between}
+/* switch rows: icon + text on the left, switch pushed to the right (DOM order unchanged) */
+#view label:has(> input[type=checkbox]),#view .mtrow{flex-direction:row;justify-content:flex-start;gap:8px;min-height:44px}
+#view label:has(> input[type=checkbox]) > input[type=checkbox],#view .mtrow > input[type=checkbox]{order:2;margin-left:auto !important}
 
 /* ---------- ratio / fit / position pickers as one segmented bar ---------- */
 #ratioChips,#fitChips,.chips[data-pos],#pStyle{

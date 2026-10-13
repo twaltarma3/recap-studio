@@ -1,6 +1,8 @@
 import './style.css';
 import './theme.css';
 import './mobile.css';
+import './design.css';
+import { startIcons } from './icons.js';
 import * as L from './lib.js';
 import * as H from './history.js';
 
@@ -100,11 +102,11 @@ function buildMenu() {
     <div id="scrim"></div>
     <nav id="drawer">
       <div class="dhead"><b>Menu</b><button class="ghost" id="dclose">✕</button></div>
-      <button class="ditem" data-p="free"><span>1</span><b>Free Recap</b><small>Gemini နဲ့ ကိုယ်တိုင် ဘာသာပြန်</small></button>
-      <button class="ditem" data-p="premium"><span>2</span><b>Premium Recap</b><small>မကြာမီ</small></button>
-      <button class="ditem" data-p="keys"><span>3</span><b>API Key Settings</b><small>AssemblyAI Key · FFmpeg Engine</small></button>
-      <button class="ditem" data-p="guide"><span>4</span><b>အသုံးပြုပုံ လမ်းညွှန်</b><small>အဆင့်လိုက် ရှင်းလင်းချက်</small></button>
-      <button class="ditem" data-p="history"><span>5</span><b>မှတ်တမ်း (History)</b><small>နောက်ဆုံး ထုတ်ထားတဲ့ Video ၂ ခု</small></button>
+      <button class="ditem" data-p="free"><span>🎬</span><b>Free Recap</b><small>Gemini နဲ့ ကိုယ်တိုင် ဘာသာပြန်</small></button>
+      <button class="ditem" data-p="premium"><span>✨</span><b>Premium Recap</b><small>မကြာမီ</small></button>
+      <button class="ditem" data-p="keys"><span>⚙</span><b>API Key Settings</b><small>AssemblyAI Key · FFmpeg Engine</small></button>
+      <button class="ditem" data-p="guide"><span>📖</span><b>အသုံးပြုပုံ လမ်းညွှန်</b><small>အဆင့်လိုက် ရှင်းလင်းချက်</small></button>
+      <button class="ditem" data-p="history"><span>🗂</span><b>မှတ်တမ်း (History)</b><small>နောက်ဆုံး ထုတ်ထားတဲ့ Video ၂ ခု</small></button>
     </nav>`);
   burger.onclick = openDrawer;
   $('#scrim').onclick = closeDrawer;
@@ -591,7 +593,7 @@ function previewBlock() {
           <input id="logoOn" type="checkbox" style="${chk}" ${state.logoOn ? 'checked' : ''} /> ⭕ Logo (စက်ဝိုင်း)
         </label>
         <div id="logoBox" ${state.logoOn ? '' : 'hidden'}>
-          <label class="btn" style="display:block;margin:8px 0 0;text-align:center;cursor:pointer" id="logoPick">🖼 ${state.logoData ? 'Logo ပြောင်းမည်' : 'Logo ပုံ ရွေးမည်'}
+          <label class="btn" style="display:block;margin:8px 0 0;text-align:center;cursor:pointer" id="logoPick"><span id="logoPickTxt">🖼 ${state.logoData ? 'Logo ပြောင်းမည်' : 'Logo ပုံ ရွေးမည်'}</span>
             <input id="logoUp" type="file" accept="image/*" hidden /></label>
           <div class="row" style="margin-top:12px"><b>နေရာ</b></div>
           <div class="chips" data-pos="logoPos">${posChips()}</div>
@@ -683,7 +685,7 @@ function bindPreview() {
   $('#logoOn').onchange = e => { state.logoOn = e.target.checked; $('#logoBox').hidden = !state.logoOn; apply(); };
   $('#logoUp').onchange = async e => {
     const f = e.target.files[0]; if (!f) return;
-    try { state.logoData = await fileToLogo(f); $('#logoPick').firstChild.textContent = '🖼 Logo ပြောင်းမည် '; apply(); }
+    try { state.logoData = await fileToLogo(f); $('#logoPickTxt').textContent = '🖼 Logo ပြောင်းမည်'; apply(); }
     catch (err) { toast(err.message); }
   };
   $('#fxFast').onchange = e => { state.fxFast = e.target.checked; };
@@ -1073,6 +1075,7 @@ function showResult() {
 }
 
 /* ---------------- start ---------------- */
+startIcons();
 buildMenu();
 if (!L.cfg.aaiKey) page = 'keys';
 render();
