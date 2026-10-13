@@ -216,17 +216,14 @@ const DL_ERR = {
   not_tiktok: 'TikTok link မဟုတ်ပါ — tiktok.com link ကို ထည့်ပါ',
   not_found: 'Video ကို ရှာမတွေ့ပါ — link မှန်လား၊ Private / ဖျက်ထားတဲ့ video လား စစ်ပါ',
   too_big: 'Video အရမ်းကြီးလွန်းပါတယ် (300MB ထက်ကျော်)',
-  download_failed: 'Video ဒေါင်းမရပါ — ခဏနေ ပြန်ကြိုးစားပါ',
-  not_youtube: 'YouTube video link မဟုတ်ပါ — youtube.com/watch?v=… ဒါမှမဟုတ် youtu.be/… link ကို ထည့်ပါ',
-  too_long: 'Video က ၃၀ မိနစ်ထက် ရှည်လွန်းပါတယ်'
+  download_failed: 'Video ဒေါင်းမရပါ — ခဏနေ ပြန်ကြိုးစားပါ'
 };
 // pulls the first http(s) link out of whatever was pasted (TikTok's share text has words around it)
 export const findLink = t => ((String(t || '').match(/https?:\/\/[^\s"'<>]+/i) || [])[0] || '').replace(/[)\].,!?]+$/, '');
 export const isTikTok = u => { try { return /(^|\.)tiktok\.com$/i.test(new URL(u).hostname); } catch { return false; } };
-export const isYouTube = u => { try { return /(^|\.)(youtube\.com|youtu\.be|youtube-nocookie\.com)$/i.test(new URL(u).hostname); } catch { return false; } };
 
 // streams a video response into a File, reporting progress
-async function readVideo(r, link, onProg, prefix = 'tiktok') {
+async function readVideo(r, link, onProg) {
   const total = +r.headers.get('content-length') || 0;
   const reader = r.body.getReader(), parts = [];
   let got = 0;
@@ -237,10 +234,10 @@ async function readVideo(r, link, onProg, prefix = 'tiktok') {
     onProg && onProg(total ? got / total : 0, got);
   }
   if (got < 1000) throw new Error('Video ဒေါင်းမရပါ — ခဏနေ ပြန်ကြိုးစားပါ');
-  const id = (link.match(/[?&]v=([\w-]{11})/) || link.match(/video\/(\d+)/) || link.match(/\/([\w-]{5,})\/?(?:\?|$)/) || [])[1] || Date.now();
+  const id = (link.match(/video\/(\d+)/) || link.match(/\/([A-Za-z0-9]{5,})\/?(?:\?|$)/) || [])[1] || Date.now();
   let title = '';
   try { title = decodeURIComponent(r.headers.get('x-video-title') || ''); } catch {}
-  return { file: new File(parts, `${prefix}_${id}.mp4`, { type: 'video/mp4' }), title, duration: +r.headers.get('x-video-duration') || 0, quality: r.headers.get('x-video-quality') || '' };
+  return { file: new File(parts, `tiktok_${id}.mp4`, { type: 'video/mp4' }), title, duration: +r.headers.get('x-video-duration') || 0 };
 }
 
 // backup: the phone asks tikwm itself (the phone's own daily limit, not the Worker's shared one),
@@ -264,20 +261,13 @@ async function viaPhoneTikwm(link, onProg) {
   throw new Error('phone tikwm: ' + last);
 }
 
-// TikTok or YouTube link -> { file, title, duration, quality }
-export async function loadVideoLink(link, onProg) {
-  const yt = isYouTube(link);
+export async function loadTikTok(link, onProg) {
   let r;
-  try { r = await fetch(`${cfg.workerUrl}/dl/${yt ? 'youtube' : 'tiktok'}?url=${encodeURIComponent(link)}`); }
+  try { r = await fetch(`${cfg.workerUrl}/dl/tiktok?url=${encodeURIComponent(link)}`); }
   catch { throw new Error('Server နဲ့ ချိတ်ဆက်မရပါ — Wi-Fi / Internet စစ်ပါ၊ VPN ချိတ်ထားရင် ဖြုတ်ပါ'); }
-  if (r.ok) return readVideo(r, link, onProg, yt ? 'youtube' : 'tiktok');
+  if (r.ok) return readVideo(r, link, onProg);
   let e = null; try { e = await r.clone().json(); } catch {}
-  if (yt && e && e.error === 'not_found') {
-    const err = new Error('YouTube က ဒီ Video ကို ပေးမဒေါင်းပါ (Server တွေကို ပိတ်ထားတတ်ပါတယ်) — ခဏနေ ပြန်ကြိုးစားပါ၊ ဒါမှမဟုတ် Video ဖိုင်ကို ဖုန်းထဲ အရင်ဒေါင်းပြီး တင်ပါ');
-    err.detail = e.detail || '';
-    throw err;
-  }
-  if (!yt && e && e.error === 'not_found') {
+  if (e && e.error === 'not_found') {
     try { return await viaPhoneTikwm(link, onProg); }                 // last try before giving up
     catch (pe) { e.detail = [e.detail, String(pe.message || pe)].filter(Boolean).join(' | '); }
   }
@@ -286,7 +276,7 @@ export async function loadVideoLink(link, onProg) {
     err.detail = e.detail || '';                   // what the download services said (shown small, for troubleshooting)
     throw err;
   }
-  if (r.status === 404) throw new Error(`Worker မှာ ${yt ? 'YouTube' : 'TikTok'} download မပါသေးပါ — Worker ကို update လုပ်ပါ`);
+  if (r.status === 404) throw new Error('Worker မှာ TikTok download မပါသေးပါ — Worker ကို update လုပ်ပါ');
   throw new Error(`Video ဒေါင်းမရပါ (${r.status}) — ခဏနေ ပြန်ကြိုးစားပါ`);
 }
 
