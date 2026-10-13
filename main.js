@@ -1,5 +1,6 @@
 import './style.css';
 import './theme.css';
+import './mobile.css';
 import * as L from './lib.js';
 import * as H from './history.js';
 
@@ -109,7 +110,27 @@ function buildMenu() {
   $('#scrim').onclick = closeDrawer;
   $('#dclose').onclick = closeDrawer;
   document.querySelectorAll('.ditem').forEach(b => { b.onclick = () => openPage(b.dataset.p); });
+  setupInstall();
   $('#openSettings').onclick = () => openPage('keys');
+}
+
+/* ---------------- install as an app (home screen, full screen) ---------------- */
+let installEvt = null;
+function setupInstall() {
+  const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+  if (standalone) return;                                     // already running as the installed app
+  $('#drawer').insertAdjacentHTML('beforeend', `
+    <button class="ditem dinstall" id="installApp" hidden><span>📲</span><b>App အဖြစ် ထည့်မည်</b><small>Home screen မှာ icon နဲ့ အပြည့် ဖွင့်ရန်</small></button>`);
+  const btn = $('#installApp');
+  const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvt = e; btn.hidden = false; });
+  addEventListener('appinstalled', () => { btn.hidden = true; installEvt = null; toast('✅ App ထည့်ပြီးပါပြီ — Home screen က icon နဲ့ ဖွင့်ပါ'); });
+  if (ios) btn.hidden = false;                                // Safari has no install prompt: show the steps instead
+  btn.onclick = async () => {
+    closeDrawer();
+    if (installEvt) { installEvt.prompt(); try { await installEvt.userChoice; } catch {} installEvt = null; btn.hidden = true; return; }
+    toast(ios ? 'Safari ရဲ့ Share (⬆) → "Add to Home Screen" ကို နှိပ်ပါ' : 'Browser menu (⋮) → "Add to Home screen / Install app" ကို နှိပ်ပါ');
+  };
 }
 
 /* ---------------- Usage guide ---------------- */
@@ -130,6 +151,7 @@ function pageGuide() {
         <div class="tip">💡 Key တွေကို ဒီဖုန်း browser ထဲမှာပဲ သိမ်းပါတယ်။ Browser data ဖျက်ရင် ပြန်ထည့်ရပါမယ်။</div>`, true)}
 
       ${sec(2, 'Video တင်ပါ', `
+        <div class="tip" style="margin:0 0 10px">📲 <b>App လို အပြည့်ဖွင့်ချင်ရင်</b> — ☰ Menu → <b>App အဖြစ် ထည့်မည်</b> (ဒါမှမဟုတ် Chrome ⋮ → Add to Home screen)။ Home screen က icon နဲ့ ဖွင့်ရင် browser bar မပါဘဲ ပွင့်ပါတယ်။</div>
         <ol>
           <li><b>Video File ရွေးချယ်ပါ</b> ကိုနှိပ်ပြီး Video ရွေးပါ။ (MP4၊ MOV၊ WEBM၊ MKV — ၁၀ မိနစ်အထိ)</li>
           <li><b>မူရင်းစကားပြောဘာသာ</b> ကို ရွေးပါ။ (ဥပမာ Chinese)</li>

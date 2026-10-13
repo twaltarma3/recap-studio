@@ -1,0 +1,93 @@
+/* App-style layout layer (loaded last). Phone-first: fewer nested boxes, content closer to the
+   screen edges, switches instead of checkboxes, segmented ratio picker, safe areas for the
+   installed (standalone) app. Colours stay those of theme.css. Remove the import to roll back. */
+
+/* ---------- header: slimmer, sits under the phone's status bar in the installed app ---------- */
+body .top{
+  padding:calc(8px + env(safe-area-inset-top)) 12px 8px;
+  box-shadow:0 6px 18px rgba(30,20,120,.35), inset 0 -2px 0 var(--gold);
+}
+body .top h1{font-size:16px}
+body .burger{width:40px;height:40px}
+body .top .ghost#openSettings{
+  width:40px;height:40px;padding:0;font-size:0;display:grid;place-items:center;flex:none;
+}
+#openSettings::before{content:'⚙';font-size:20px;line-height:1}
+
+/* ---------- page: one surface instead of card-inside-card ---------- */
+main{padding:10px 12px calc(16px + env(safe-area-inset-bottom));max-width:680px}
+#view,body .card,#view.card{
+  background:transparent;border:0;box-shadow:none;border-radius:0;padding:6px 2px 0;margin-top:8px;
+}
+body h2{font-size:21px;margin-bottom:4px}
+#view > .row:first-child{align-items:flex-start;gap:10px}
+#view > .row:first-child .ghost{flex:none;white-space:nowrap}
+
+/* ---------- step bar: flat strip under the header ---------- */
+body .stepper{
+  background:transparent;border:0;box-shadow:none;padding:4px 0 2px;border-radius:0;
+  border-bottom:1px solid #26262c;
+}
+body .stepper b{width:26px;height:26px}
+
+/* ---------- panels keep a single, softer card ---------- */
+body .panel,body .kbox,.guide details,.hitem{
+  border-radius:20px;box-shadow:0 2px 0 #0a0a0b, 0 8px 16px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.05);
+}
+.panel.fx{padding:14px 12px}
+#pvSticky{margin-left:-4px !important;margin-right:-4px !important;background:#17171a !important}
+
+/* ---------- upload area ---------- */
+body .drop{
+  border-radius:22px;padding:22px 14px;gap:6px;
+  background:linear-gradient(180deg,#1b1a26,#141417);
+}
+body .drop::before{
+  content:'';display:block;width:52px;height:52px;margin:0 auto 6px;border-radius:16px;
+  background:#25213f url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23c4baff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 15V4M7 9l5-5 5 5'/%3E%3Cpath d='M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3'/%3E%3C/svg%3E") center/26px no-repeat;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.08);
+}
+body .drop.has::before{
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23c4baff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='5' width='18' height='14' rx='2'/%3E%3Cpath d='M10 9.5v5l4.5-2.5z'/%3E%3C/svg%3E");
+}
+
+/* ---------- checkboxes become switches (same inputs, same events) ---------- */
+#view input[type=checkbox]{
+  -webkit-appearance:none;appearance:none;flex:none;cursor:pointer;position:relative;
+  width:46px !important;height:28px !important;margin:0 !important;padding:0 !important;
+  border-radius:99px;border:1px solid #3a3a43;background:#25252b;
+  box-shadow:inset 0 2px 4px rgba(0,0,0,.45);transition:background .2s,border-color .2s;
+}
+#view input[type=checkbox]::before{
+  content:'';position:absolute;top:2px;left:2px;width:22px;height:22px;border-radius:50%;
+  background:linear-gradient(180deg,#f4f4f8,#c9c9d6);box-shadow:0 2px 4px rgba(0,0,0,.45);transition:transform .2s;
+}
+#view input[type=checkbox]:checked{background:linear-gradient(135deg,#8470ff,#4a37e0);border-color:#6b56ff}
+#view input[type=checkbox]:checked::before{transform:translateX(18px);background:#fff}
+#view input[type=checkbox]:disabled{opacity:.45;cursor:not-allowed}
+/* switch rows read better with the label text first: keep DOM order, flip visually */
+#view label:has(> input[type=checkbox]){justify-content:space-between;flex-direction:row-reverse;gap:12px;min-height:44px}
+#view .mtrow{flex-direction:row-reverse;justify-content:space-between}
+
+/* ---------- ratio / fit / position pickers as one segmented bar ---------- */
+#ratioChips,#fitChips,.chips[data-pos],#pStyle{
+  display:flex;flex-wrap:nowrap;gap:4px;padding:4px;border-radius:14px;background:#0e0e11;border:1px solid #26262c;
+}
+#ratioChips .chip,#fitChips .chip,.chips[data-pos] .chip,#pStyle .chip{
+  flex:1 1 0;min-width:0;padding:9px 4px;min-height:40px;border:0;border-radius:11px;background:transparent;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:14px;
+}
+#ratioChips .chip.on,#fitChips .chip.on,.chips[data-pos] .chip.on,#pStyle .chip.on{background:linear-gradient(135deg,#8470ff,#4a37e0)}
+
+/* sticky "Next" bar: fade into the page colour instead of a separate band */
+#view > div[style*="sticky"]{background:linear-gradient(180deg,rgba(12,12,13,0),#0c0c0d 40%) !important;margin-left:-14px !important;margin-right:-14px !important;padding-left:14px !important;padding-right:14px !important}
+
+/* ---------- bigger tap targets ---------- */
+body .btn{min-height:50px}
+.tabs button{min-height:46px}
+
+/* ---------- installed app: no rubber-band under the header, no blue tap flash ---------- */
+html{-webkit-tap-highlight-color:transparent}
+@media (display-mode: standalone){
+  body .top{position:sticky;top:0}
+}
