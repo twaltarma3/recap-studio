@@ -408,7 +408,7 @@ function pageKeys() {
       const ab = await L.tts('မင်္ဂလာပါ၊ အသံစမ်းသပ်နေပါတယ်။', L.PERSONAS[0], 0, 0, 1);
       const sec = ((performance.now() - t0) / 1000).toFixed(1);
       badge.textContent = 'OK'; badge.className = 'badge ok';
-      out.className = 'tip'; out.textContent = `✅ အသံရပါတယ် (${(ab.byteLength / 1024).toFixed(0)} KB · ${sec} စက္ကန့်)`;
+      out.className = 'tip'; out.textContent = `✅ အသံရပါတယ် (${(ab.byteLength / 1024).toFixed(0)} KB · ${sec} စက္ကန့် · ${L.ttsInfo.last === 'phone' ? 'ဖုန်းကနေ တိုက်ရိုက်' : 'Worker ကနေ'})`;
       try { new Audio(URL.createObjectURL(new Blob([ab], { type: 'audio/mpeg' }))).play().catch(() => {}); } catch {}
     } catch (e) {
       badge.textContent = 'Error'; badge.className = 'badge req';

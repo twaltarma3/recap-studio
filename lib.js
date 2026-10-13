@@ -501,20 +501,99 @@ export function parseTranslations(raw) {
 }
 
 /* ---------- TTS ---------- */
+// Microsoft often returns *no audio* to datacenter addresses (like the Worker's Cloudflare IP).
+// So the phone first talks to Edge TTS itself, using a signed address the Worker hands out
+// (the Worker keeps the token); if that path fails, the old Worker /tts route is used.
+export const ttsInfo = { direct: 'unknown', last: '' };  // direct: 'unknown' | 'ok' | 'bad'
+let ttsUrlP = null, ttsUrlAt = 0;
+function ttsUrl() {
+  if (!ttsUrlP || Date.now() - ttsUrlAt > 120000) {
+    ttsUrlAt = Date.now();
+    ttsUrlP = fetch(cfg.workerUrl + '/tts-url').then(async r => {
+      if (!r.ok) throw new Error('tts-url ' + r.status);
+      const j = await r.json(); if (!j.url) throw new Error('tts-url empty');
+      return j.url;
+    }).catch(e => { ttsUrlP = null; throw e; });
+  }
+  return ttsUrlP;
+}
+const xesc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
+const sgn = n => (n >= 0 ? '+' : '') + Math.round(n);
+const rid = () => [...crypto.getRandomValues(new Uint8Array(16))].map(b => b.toString(16).padStart(2, '0')).join('');
+
+async function ttsDirect(text, voice, pitch, rate) {
+  let base;
+  try { base = await ttsUrl(); } catch (e) { e.connect = true; throw e; }  // old Worker without /tts-url
+  const id = rid();
+  return new Promise((resolve, reject) => {
+    let ws, got = false, done = false;
+    const chunks = [];
+    const end = err => {
+      if (done) return; done = true; clearTimeout(timer);
+      try { ws.close(); } catch {}
+      const bytes = chunks.reduce((n, c) => n + c.byteLength, 0);
+      if (!err && bytes >= 200) return resolve(new Blob(chunks).arrayBuffer());
+      const e = new Error(err || `phone TTS: audio ${bytes} bytes`); e.connect = !got; reject(e);
+    };
+    const timer = setTimeout(() => end('phone TTS timed out'), 20000);
+    try { ws = new WebSocket(base + '&ConnectionId=' + id); } catch (e) { return end('phone TTS: ' + e.message); }
+    ws.binaryType = 'arraybuffer';
+    ws.onopen = () => {
+      const ts = new Date().toString();
+      ws.send(`X-Timestamp:${ts}\r\nContent-Type:application/json; charset=utf-8\r\nPath:speech.config\r\n\r\n{"context":{"synthesis":{"audio":{"metadataoptions":{"sentenceBoundaryEnabled":"false","wordBoundaryEnabled":"false"},"outputFormat":"audio-24khz-48kbitrate-mono-mp3"}}}}`);
+      ws.send(`X-RequestId:${id}\r\nContent-Type:application/ssml+xml\r\nX-Timestamp:${ts}Z\r\nPath:ssml\r\n\r\n<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='my-MM'><voice name='${voice}'><prosody pitch='${sgn(pitch)}Hz' rate='${sgn(rate)}%' volume='+0%'>${xesc(text)}</prosody></voice></speak>`);
+    };
+    ws.onmessage = ev => {
+      got = true;
+      const d = ev.data;
+      if (typeof d === 'string') { if (d.includes('Path:turn.end')) end(); return; }
+      if (!(d instanceof ArrayBuffer) || d.byteLength < 2) return;
+      const hl = new DataView(d).getUint16(0);
+      const head = new TextDecoder().decode(d.slice(2, 2 + hl));
+      if (head.includes('Path:audio')) chunks.push(d.slice(2 + hl));
+    };
+    ws.onerror = () => end('phone TTS: connection refused');
+    ws.onclose = () => end(got ? null : 'phone TTS: connection closed');
+  });
+}
+
+async function ttsWorker(text, voice, pitch, rate) {
+  const r = await fetch(cfg.workerUrl + '/tts', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ text, voice, pitch, rate })
+  });
+  if (!r.ok) throw new Error(`TTS ${r.status}: ${await r.text()}`);
+  const ab = await r.arrayBuffer();
+  if (ab.byteLength < 200) throw new Error(`TTS audio မရပါ (${ab.byteLength} bytes)`);
+  return ab;
+}
+
 export async function tts(text, persona, pitchOffset = 0, rateOffset = 0, tries = 6, onRetry = null) {
+  const voice = persona.voice, pitch = persona.pitch + pitchOffset;
+  const rate = Math.max(-50, Math.min(100, persona.rate + rateOffset));
   let last;
   for (let k = 0; k < tries; k++) {
+    if (ttsInfo.direct !== 'bad') {
+      try {
+        const ab = await ttsDirect(text, voice, pitch, rate);
+        ttsInfo.direct = 'ok'; ttsInfo.last = 'phone';
+        return ab;
+      } catch (e) {
+        last = e;
+        // the phone could not even connect (browser / network blocks it): use the Worker from now on
+        if (e.connect && ttsInfo.direct === 'unknown') ttsInfo.direct = 'bad';
+      }
+    }
     try {
-      const r = await fetch(cfg.workerUrl + '/tts', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ text, voice: persona.voice, pitch: persona.pitch + pitchOffset, rate: Math.max(-50, Math.min(100, persona.rate + rateOffset)) })
-      });
-      if (!r.ok) throw new Error(`TTS ${r.status}: ${await r.text()}`);
-      const ab = await r.arrayBuffer();
-      if (ab.byteLength < 200) throw new Error(`TTS audio မရပါ (${ab.byteLength} bytes)`);
+      const ab = await ttsWorker(text, voice, pitch, rate);
+      ttsInfo.last = 'worker';
       return ab;
-    } catch (e) { last = e; if (onRetry) onRetry(e); await sleep(Math.min(5000, 700 * (k + 1) ** 1.5)); }
+    } catch (e) {
+      last = ttsInfo.direct === 'bad' || !last ? e : new Error(last.message + ' · ' + e.message);
+      if (onRetry) onRetry(last);
+      await sleep(Math.min(5000, 700 * (k + 1) ** 1.5));
+    }
   }
   throw last;
 }
