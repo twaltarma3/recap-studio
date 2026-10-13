@@ -755,10 +755,11 @@ export async function renderDub({ file, videoDur, segs, burmese, persona, pitch,
         try { raw[i] = await ttsCached(burmese[i], persona, pitch, rate); }
         catch (e) { failed = true; throw e; }
         done++;
-        onProgress((done / total) * 0.5, `အသံထုတ်နေသည် ${done}/${total}`);
+        onProgress((done / total) * 0.5, `မြန်မာအသံ ထုတ်နေပါတယ် (${done}/${total})`);
       }
     };
-    await Promise.all([run(), run(), run()]);
+    onProgress(0, `မြန်မာအသံ ထုတ်နေပါတယ် (0/${todo.length})`);
+  await Promise.all([run(), run(), run()]);
 
     // 2) fit each clip into its time slot — 50..75%
     setFFProgress(null);
@@ -766,7 +767,7 @@ export async function renderDub({ file, videoDur, segs, burmese, persona, pitch,
     const clips = [];
     let cursor = 0;
     for (let i = 0; i < n; i++) {
-      onProgress(0.5 + (i / n) * 0.25, `အချိန်ကိုက်နေသည် ${i + 1}/${n}`);
+      onProgress(0.5 + (i / n) * 0.25, `အသံကို ဗီဒီယိုအချိန်နဲ့ ကိုက်အောင် ညှိနေပါတယ် (${i + 1}/${n})`);
       if (!raw[i]) continue;
       let buf = await ctx.decodeAudioData(raw[i].slice(0));
       let tb = trimBounds(buf);
@@ -793,7 +794,7 @@ export async function renderDub({ file, videoDur, segs, burmese, persona, pitch,
     }
 
     // 3) mix all clips into one track — 75..85%
-    onProgress(0.76, 'အသံတွဲနေသည်');
+    onProgress(0.76, 'အသံတွေကို တစ်ဆက်တည်း ပေါင်းနေပါတယ်');
     for (const c of clips) {
       const src = ctx.createBufferSource();
       src.buffer = c.buf;
@@ -802,7 +803,7 @@ export async function renderDub({ file, videoDur, segs, burmese, persona, pitch,
     }
     const mixed = await ctx.startRendering();
     const wavBytes = encodeWav(mixed);
-    onProgress(0.85, 'Video နဲ့ ပေါင်းနေသည်');
+    onProgress(0.85, 'ဗီဒီယိုဖိုင်ကို ပြင်ဆင်နေပါတယ်');
 
     // 4) mux with video — 85..100%
     inName = keptInput;
@@ -815,7 +816,8 @@ export async function renderDub({ file, videoDur, segs, burmese, persona, pitch,
       catch { throw new Error('Video ဖိုင်ကို ပြန်ဖတ်မရပါ — "Video ပြန်ရွေးပြီး ပြန်စမည်" ကိုနှိပ်ပါ'); }
     }
     await f.writeFile('mix.wav', wavBytes);
-    setFFProgress(p => onProgress(0.85 + p * 0.15, 'Video ပေါင်းနေသည်'));
+    let ffLabel = 'ဗီဒီယိုဖိုင်ကို ပြင်ဆင်နေပါတယ်';
+    setFFProgress(p => onProgress(0.85 + p * 0.15, p > 0.97 ? 'နောက်ဆုံးအဆင့် — ဗီဒီယိုဖိုင် သိမ်းနေပါတယ်' : ffLabel));
     const wantMix = keepTalk > 0 || keepGap > 0;
     let geo = null;
     if (fx) {
@@ -836,11 +838,11 @@ export async function renderDub({ file, videoDur, segs, burmese, persona, pitch,
     }
     let subs = null, ovl = false;
     if (geo && fx && ((fx.wm && fx.wm.on) || (fx.logo && fx.logo.on))) {
-      onProgress(0.855, 'Watermark / Logo ဆွဲနေသည်');
+      onProgress(0.855, 'Watermark / Logo ထည့်ဖို့ ပြင်ဆင်နေပါတယ်');
       try { ovl = !!(await makeOverlay(f, fx, geo)); } catch { ovl = false; }
     }
     if (fx && fx.subs && fx.subs.on) {
-      onProgress(0.86, 'စာတန်းထိုး ပုံ ဆွဲနေသည်');
+      onProgress(0.86, 'မြန်မာစာတန်းထိုးတွေ ရေးဆွဲနေပါတယ်');
       try { subs = await makeSubTrack(f, { file, videoDur, burmese, placed, fx }); } catch { subs = null; }
     }
     const ovlIdx = ovl ? (subs ? 3 : 2) : 0;
@@ -877,9 +879,23 @@ export async function renderDub({ file, videoDur, segs, burmese, persona, pitch,
     if (subs && ovl) { const f2 = buildFx(fx, subs, geo, 0); plans.push(build(f2, true, false)); }       // without watermark / logo
     if ((subs || ovl) && buildFx(fx, null, geo, 0)) plans.push(build(buildFx(fx, null, geo, 0), false, false));
     if (fxFilter) plans.push(build('', false));
+    // progress text: say what this pass is putting together
+    const fxNames = [];
+    if (geo && geo.ratio) fxNames.push('အချိုး');
+    if (fx && +fx.zoom > 100) fxNames.push('Zoom');
+    if (fx && fx.mirror) fxNames.push('Mirror');
+    if (fx && fx.blur) fxNames.push('Blur');
+    if (subs) fxNames.push('စာတန်းထိုး');
+    if (ovl) fxNames.push('Watermark/Logo');
+    let tries = 0;
     let code = -1, usedMix = false, fxFailed = false, diag = '';
     outer: for (let p = 0; p < plans.length; p++) {
       for (const a of plans[p]) {
+        const vfOn = a.args.includes('[v]');
+        ffLabel = tries++ ? 'ပထမနည်း မရလို့ တခြားနည်းနဲ့ ပြန်ကြိုးစားနေပါတယ်'
+          : vfOn && fxNames.length ? `ဗီဒီယိုကို ${fxNames.join('၊ ')} နဲ့ ပြန်ထုတ်ပြီး အသံပေါင်းနေပါတယ်`
+          : a.mix ? 'မြန်မာအသံ၊ မူရင်းအသံနဲ့ ဗီဒီယို ပေါင်းနေပါတယ်' : 'မြန်မာအသံနဲ့ ဗီဒီယို ပေါင်းနေပါတယ်';
+        onProgress(0.86, ffLabel);
         flog.length = 0; flog.push(`#plan ${p + 1} ${a.mix ? 'mix' : 'nomix'}`);
         code = await f.exec(a.args);
         if (code !== 0 && !diag) diag = flog.filter(x => x.length < 300).slice(-14).join('\n');
@@ -896,7 +912,7 @@ export async function renderDub({ file, videoDur, segs, burmese, persona, pitch,
     const out = await f.readFile('out.mp4');
     for (const x of [temp ? inName : null, 'mix.wav', 'out.mp4', ovl ? 'ovl.png' : null, ...(subs ? subs.files : [])]) { if (x) { try { await f.deleteFile(x); } catch {} } }
     setFFProgress(null);
-    onProgress(1, 'ပြီးပါပြီ');
+    onProgress(1, 'ပြီးပါပြီ 🎉');
     return { video: new Blob([out.slice().buffer], { type: 'video/mp4' }), placed, fellBack, fxFailed, fontFailed, diag, geoOk: !!geo, ovlOk: ovl, subsOk: !!subs, stats: dubStats(placed, maxTempo) };
   } catch (e) {
     // failed part-way: free the leftover work files so a retry doesn't run out of memory
