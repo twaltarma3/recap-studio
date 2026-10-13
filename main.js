@@ -345,6 +345,15 @@ function pageKeys() {
 
     <div class="kbox">
       <div class="krow">
+        <b>🔊 မြန်မာအသံ (TTS) စစ်ဆေးရန်<br><span class="muted small" style="font-weight:400">Video မထုတ်ဘဲ အသံတစ်ကြောင်း စမ်းထုတ်ကြည့်ရန်</span></b>
+        <span class="badge" id="ttsBadge">—</span>
+      </div>
+      <button class="btn block" id="ttsTest">🔎 မြန်မာအသံ စစ်ဆေးမည်</button>
+      <div id="ttsOut" class="small" style="margin-top:10px" hidden></div>
+    </div>
+
+    <div class="kbox">
+      <div class="krow">
         <b>Device Video Engine<br><span class="muted small" style="font-weight:400">(FFmpeg WASM ~31MB)</span></b>
         <span class="badge" id="ffBadge">…</span>
       </div>
@@ -389,6 +398,25 @@ function pageKeys() {
     } catch (e) { toast(e.message === 'Failed to fetch' ? 'Worker ကို ချိတ်ဆက်မရပါ' : e.message); }
   };
   upd();
+
+  /* TTS check: one short line straight through the Worker, showing the full error if it fails */
+  $('#ttsTest').onclick = async () => {
+    const b = $('#ttsTest'), out = $('#ttsOut'), badge = $('#ttsBadge');
+    b.disabled = true; out.hidden = false; out.className = 'small muted'; out.textContent = 'စမ်းနေပါတယ်…';
+    const t0 = performance.now();
+    try {
+      const ab = await L.tts('မင်္ဂလာပါ၊ အသံစမ်းသပ်နေပါတယ်။', L.PERSONAS[0], 0, 0, 1);
+      const sec = ((performance.now() - t0) / 1000).toFixed(1);
+      badge.textContent = 'OK'; badge.className = 'badge ok';
+      out.className = 'tip'; out.textContent = `✅ အသံရပါတယ် (${(ab.byteLength / 1024).toFixed(0)} KB · ${sec} စက္ကန့်)`;
+      try { new Audio(URL.createObjectURL(new Blob([ab], { type: 'audio/mpeg' }))).play().catch(() => {}); } catch {}
+    } catch (e) {
+      badge.textContent = 'Error'; badge.className = 'badge req';
+      out.className = 'err';
+      out.textContent = String((e && e.message) || e) === 'Failed to fetch' ? 'Worker ကို ချိတ်ဆက်မရပါ (Internet / VPN စစ်ပါ)' : String((e && e.message) || e);
+    }
+    b.disabled = false;
+  };
 
   /* FFmpeg card */
   const mtNote = () => {

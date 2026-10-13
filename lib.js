@@ -512,7 +512,7 @@ export async function tts(text, persona, pitchOffset = 0, rateOffset = 0, tries 
       });
       if (!r.ok) throw new Error(`TTS ${r.status}: ${await r.text()}`);
       const ab = await r.arrayBuffer();
-      if (ab.byteLength < 200) throw new Error('TTS audio မရပါ');
+      if (ab.byteLength < 200) throw new Error(`TTS audio မရပါ (${ab.byteLength} bytes)`);
       return ab;
     } catch (e) { last = e; if (onRetry) onRetry(e); await sleep(Math.min(5000, 700 * (k + 1) ** 1.5)); }
   }
