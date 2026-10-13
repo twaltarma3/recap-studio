@@ -297,3 +297,8 @@ body .stepper span b{font-size:12px}
 .trow b{flex:none;font-variant-numeric:tabular-nums}
 .tbar{height:8px;border-radius:99px;background:#0f0f12;margin-top:4px;overflow:hidden}
 .tbar i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,#6b56ff,#a187ff)}
+
+/* settings: multi-core engine switch */
+.mtrow{display:flex;align-items:center;gap:10px;margin-top:14px;cursor:pointer}
+.mtrow input{width:22px;height:22px;margin:0;flex:none}
+.mtrow input:disabled + span{opacity:.5}

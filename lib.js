@@ -23,17 +23,41 @@ export const PERSONAS = [
 let ff = null, progCb = null, ffLoading = null, dlCb = null;
 export const setFFProgress = cb => { progCb = cb; };
 
-const FF_CACHE = 'ffmpeg-core-v1';
-const FF_BASE = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm';
-const FF_FILES = [
-  { name: 'ffmpeg-core.js', type: 'text/javascript', w: 0.05 },
-  { name: 'ffmpeg-core.wasm', type: 'application/wasm', w: 0.95 }
-];
+// 'st' = the normal single-thread engine; 'mt' = multi-core engine (needs a cross-origin-isolated page)
+const CORES = {
+  st: {
+    cache: 'ffmpeg-core-v1', base: 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm',
+    files: [
+      { name: 'ffmpeg-core.js', type: 'text/javascript', w: 0.05 },
+      { name: 'ffmpeg-core.wasm', type: 'application/wasm', w: 0.95 }
+    ]
+  },
+  mt: {
+    cache: 'ffmpeg-core-mt-v1', base: 'https://cdn.jsdelivr.net/npm/@ffmpeg/core-mt@0.12.6/dist/esm',
+    files: [
+      { name: 'ffmpeg-core.js', type: 'text/javascript', w: 0.04 },
+      { name: 'ffmpeg-core.wasm', type: 'application/wasm', w: 0.95 },
+      { name: 'ffmpeg-core.worker.js', type: 'text/javascript', w: 0.01 }
+    ]
+  }
+};
+// multi-core: only when the browser allows it (SharedArrayBuffer) AND the user switched it on in Settings
+export const mtSupported = () => typeof SharedArrayBuffer !== 'undefined' && !!globalThis.crossOriginIsolated;
+export const mtWanted = () => { try { return localStorage.getItem('ffMt') === '1'; } catch { return false; } };
+const wantKind = () => (mtWanted() && mtSupported() ? 'mt' : 'st');
+let ffKind = null, mtFailed = false;
+// which engine is running: { kind: 'mt' | 'st' | null, fellBack: multi-core was wanted but could not start }
+export const engineInfo = () => ({ kind: ffKind, fellBack: mtFailed && mtWanted() });
+export function setMtWanted(on) {
+  try { on ? localStorage.setItem('ffMt', '1') : localStorage.removeItem('ffMt'); } catch {}
+  mtFailed = false;
+  if (ff && ffKind !== wantKind()) { try { ff.terminate(); } catch {} ff = null; ffKind = null; keptInput = null; }
+}
 
-async function ffAsset(file, onFrac) {
-  const url = `${FF_BASE}/${file.name}`;
+async function ffAsset(core, file, onFrac) {
+  const url = `${core.base}/${file.name}`;
   let cache = null;
-  try { cache = await caches.open(FF_CACHE); } catch {}
+  try { cache = await caches.open(core.cache); } catch {}
   const hit = cache ? await cache.match(url) : null;
   if (hit) {
     const b = await hit.blob();
@@ -59,40 +83,92 @@ async function ffAsset(file, onFrac) {
   return URL.createObjectURL(blob);
 }
 
+async function loadCore(kind) {
+  const core = CORES[kind];
+  const f = new FFmpeg();
+  f.on('progress', ({ progress }) => progCb && progCb(Math.max(0, Math.min(1, progress))));
+  const urls = [];
+  let doneW = 0;
+  for (const file of core.files) {
+    const base = doneW;
+    urls.push(await ffAsset(core, file, p => dlCb && dlCb(base + p * file.w)));
+    doneW += file.w;
+  }
+  const opts = { coreURL: urls[0], wasmURL: urls[1] };
+  if (urls[2]) opts.workerURL = urls[2];
+  let timer;
+  try {
+    // a multi-core start that never finishes must not block the app
+    await Promise.race([f.load(opts), new Promise((_, rej) => { timer = setTimeout(() => rej(new Error('Engine start timeout')), 60000); })]);
+  } catch (e) { try { f.terminate(); } catch {} throw e; }
+  finally { clearTimeout(timer); }
+  return f;
+}
+
 export function getFFmpeg(onProg) {
   if (onProg) dlCb = onProg;
-  if (ff) { dlCb && dlCb(1); return Promise.resolve(ff); }
+  if (ff && ffKind === wantKind()) { dlCb && dlCb(1); return Promise.resolve(ff); }
   if (!ffLoading) {
     ffLoading = (async () => {
-      const f = new FFmpeg();
-      f.on('progress', ({ progress }) => progCb && progCb(Math.max(0, Math.min(1, progress))));
-      const urls = [];
-      let doneW = 0;
-      for (const file of FF_FILES) {
-        const base = doneW;
-        urls.push(await ffAsset(file, p => dlCb && dlCb(base + p * file.w)));
-        doneW += file.w;
+      if (ff) { try { ff.terminate(); } catch {} ff = null; ffKind = null; keptInput = null; }   // engine choice changed
+      let kind = mtFailed ? 'st' : wantKind();
+      let f;
+      try { f = await loadCore(kind); }
+      catch (e) {
+        if (kind !== 'mt') throw e;
+        mtFailed = true; kind = 'st';                 // multi-core could not start -> fall back to the normal engine
+        f = await loadCore('st');
       }
-      await f.load({ coreURL: urls[0], wasmURL: urls[1] });
-      ff = f;
+      ff = f; ffKind = kind;
       return f;
     })().finally(() => { ffLoading = null; dlCb = null; });
   }
   return ffLoading;
 }
 
+// Runs one ffmpeg command. On the multi-core engine a stuck run (no log / progress for 30 s) is
+// stopped, multi-core is switched off for this session and an error with .mtStall is thrown,
+// so the caller can simply run again on the normal engine.
+const MT_STALL_MS = 30000;
+async function ffRun(f, args) {
+  if (ffKind !== 'mt') return f.exec(args);
+  let last = Date.now(), iv;
+  const mark = () => { last = Date.now(); };
+  f.on('log', mark); f.on('progress', mark);
+  try {
+    return await Promise.race([
+      f.exec(args),
+      new Promise((_, rej) => {
+        iv = setInterval(() => {
+          if (Date.now() - last < MT_STALL_MS) return;
+          mtFailed = true;
+          try { f.terminate(); } catch {}
+          if (ff === f) { ff = null; ffKind = null; keptInput = null; }
+          const e = new Error('Multi-core Engine ရပ်သွားလို့ ပုံမှန် Engine ကို ပြောင်းသုံးပါမယ် — ပြန်စမည် ကိုနှိပ်ပါ');
+          e.mtStall = true; rej(e);
+        }, 2000);
+      })
+    ]);
+  } finally { clearInterval(iv); try { f.off('log', mark); f.off('progress', mark); } catch {} }
+}
+// encoder / filter thread settings: with automatic threads the multi-core build can deadlock (seen with blur + subtitles)
+const mtArgs = () => (ffKind === 'mt' ? ['-filter_threads', '1', '-filter_complex_threads', '1'] : []);
+const mtEnc = () => (ffKind === 'mt' ? ['-threads', String(Math.max(2, Math.min(8, navigator.hardwareConcurrency || 4)))] : []);
+
+// is the engine the user currently wants already downloaded?
 export async function ffmpegCached() {
   try {
-    const c = await caches.open(FF_CACHE);
-    const r = await Promise.all(FF_FILES.map(f => c.match(`${FF_BASE}/${f.name}`)));
+    const core = CORES[mtFailed ? 'st' : wantKind()];
+    const c = await caches.open(core.cache);
+    const r = await Promise.all(core.files.map(f => c.match(`${core.base}/${f.name}`)));
     return r.every(Boolean);
   } catch { return false; }
 }
 
 export async function ffmpegClear() {
-  try { await caches.delete(FF_CACHE); } catch {}
+  for (const k in CORES) { try { await caches.delete(CORES[k].cache); } catch {} }
   if (ff) { try { ff.terminate(); } catch {} }   // free the old wasm worker's memory
-  ff = null;
+  ff = null; ffKind = null; mtFailed = false;
   keptInput = null;
 }
 
@@ -122,7 +198,7 @@ export async function extractAudio(file, onProg) {
   try { await f.writeFile(inName, await fetchFile(file)); }
   catch { throw new Error('Video ဖိုင်ကို ဖတ်မရပါ — ဖုန်း Downloads/Movies ထဲက ဖိုင်ကို ပြန်ရွေးပါ'); }
   keptInput = inName;
-  const code = await f.exec(['-i', inName, '-vn', '-ac', '1', '-ar', '16000', '-f', 'wav', 'a.wav']);
+  const code = await ffRun(f, ['-i', inName, '-vn', '-ac', '1', '-ar', '16000', '-f', 'wav', 'a.wav']);
   if (code !== 0) throw new Error('Video ထဲက အသံကို ထုတ်မရပါ');
   const data = await f.readFile('a.wav');
   await f.deleteFile('a.wav');
@@ -784,7 +860,7 @@ export async function renderDub({ file, videoDur, segs, burmese, persona, pitch,
       const tempo = Math.min(tb.len / slot, maxTempo);
       if (tempo > 1.03) {
         await f.writeFile('s.mp3', new Uint8Array(raw[i]));
-        const code = await f.exec(['-i', 's.mp3', '-filter:a', tempoChain(tempo), '-ar', String(SR), '-ac', '1', 's.wav']);
+        const code = await ffRun(f, ['-i', 's.mp3', '-filter:a', tempoChain(tempo), '-ar', String(SR), '-ac', '1', 's.wav']);
         if (code === 0) {
           const wav = await f.readFile('s.wav');
           buf = await ctx.decodeAudioData(wav.slice().buffer);
@@ -834,7 +910,7 @@ export async function renderDub({ file, videoDur, segs, burmese, persona, pitch,
         try { sz = await videoSize(file); } catch {}
         if (!(sz && sz.w && sz.h)) {                                   // browser can't decode this codec -> ask ffmpeg itself
           try {
-            flog.length = 0; await f.exec(['-i', inName]);
+            flog.length = 0; await ffRun(f, ['-i', inName]);
             const t = flog.join('\n'), m = t.match(/Video:[^\n]*?[ ,](\d{2,5})x(\d{2,5})/), rot = t.match(/rotation of (-?[\d.]+)/);
             if (m) { sz = { w: +m[1], h: +m[2] }; if (rot && Math.abs(Math.round(+rot[1])) % 180 === 90) sz = { w: sz.h, h: sz.w }; }
           } catch {}
@@ -860,9 +936,9 @@ export async function renderDub({ file, videoDur, segs, burmese, persona, pitch,
     // build the list of ffmpeg attempts for a given video filter ('' = copy the video stream untouched)
     const build = (vf, withSubs, withOvl = false) => {
       const vMap = vf ? ['-map', '[v]'] : ['-map', '0:v:0'];
-      const enc = vf ? ['-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '27', '-pix_fmt', 'yuv420p'] : ['-c:v', 'copy'];
+      const enc = vf ? ['-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '27', '-pix_fmt', 'yuv420p', ...mtEnc()] : ['-c:v', 'copy'];
       const tail = ['-c:a', 'aac', '-b:a', '128k', '-shortest', '-movflags', '+faststart', 'out.mp4'];
-      const base = ['-i', inName, '-i', 'mix.wav', ...(withSubs ? ['-f', 'concat', '-safe', '0', '-i', 'subs.txt'] : []), ...(withOvl ? ['-i', 'ovl.png'] : [])];
+      const base = [...mtArgs(), '-i', inName, '-i', 'mix.wav', ...(withSubs ? ['-f', 'concat', '-safe', '0', '-i', 'subs.txt'] : []), ...(withOvl ? ['-i', 'ovl.png'] : [])];
       const list = [];
       if (wantMix) {
         for (const lim of [',alimiter=limit=0.95:level=0', '']) {
@@ -905,7 +981,7 @@ export async function renderDub({ file, videoDur, segs, burmese, persona, pitch,
           : a.mix ? 'မြန်မာအသံ၊ မူရင်းအသံနဲ့ ဗီဒီယို ပေါင်းနေပါတယ်' : 'မြန်မာအသံနဲ့ ဗီဒီယို ပေါင်းနေပါတယ်';
         onProgress(0.86, ffLabel);
         flog.length = 0; flog.push(`#plan ${p + 1} ${a.mix ? 'mix' : 'nomix'}`);
-        code = await f.exec(a.args);
+        code = await ffRun(f, a.args);
         if (code !== 0 && !diag) diag = flog.filter(x => x.length < 300).slice(-14).join('\n');
         if (code === 0) { usedMix = a.mix; fxFailed = !!fxFilter && p > 0; break outer; }
         try { await f.deleteFile('out.mp4'); } catch {}
@@ -927,7 +1003,7 @@ export async function renderDub({ file, videoDur, segs, burmese, persona, pitch,
     lap('save');
     setFFProgress(null);
     onProgress(1, 'ပြီးပါပြီ 🎉');
-    return { video: new Blob([out.slice().buffer], { type: 'video/mp4' }), placed, fellBack, fxFailed, fontFailed, diag, geoOk: !!geo, ovlOk: ovl, subsOk: !!subs, stats: dubStats(placed, maxTempo), timing, tries, src };
+    return { video: new Blob([out.slice().buffer], { type: 'video/mp4' }), placed, fellBack, fxFailed, fontFailed, diag, geoOk: !!geo, ovlOk: ovl, subsOk: !!subs, stats: dubStats(placed, maxTempo), timing, tries, src, engine: engineInfo() };
   } catch (e) {
     // failed part-way: free the leftover work files so a retry doesn't run out of memory
     try { f.off('log', onLog); } catch {}

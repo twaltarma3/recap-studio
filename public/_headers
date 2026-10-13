@@ -1,0 +1,6 @@
+# Cloudflare Pages: make the page "cross-origin isolated" so the optional
+# multi-core FFmpeg engine can use SharedArrayBuffer. "credentialless" keeps
+# Google Fonts, the CDN and the Worker loading as before.
+/*
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Embedder-Policy: credentialless
