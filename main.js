@@ -193,6 +193,7 @@ function pageGuide() {
           <li><b>"File could not be read"</b> — Video ကို Downloads/Movies ထဲကနေ ပြန်ရွေးပါ။ ရလဒ် အဆင့်မှာ <b>🎞 Video ပြန်ရွေးပြီး ပြန်စမည်</b> ကိုနှိပ်ပါ။</li>
           <li><b>စာတန်းထိုး Font မပေါ်ရင်</b> — Font dropdown အောက်က အခြေအနေစာကို ကြည့်ပါ။ ❌ ဆိုရင် တခြား Font ရွေးပါ။</li>
           <li><b>Video ထုတ်တာ အရမ်းကြာရင်</b> — Mirror၊ Blur၊ စာတန်းထိုး ကို ပိတ်လိုက်ပါ။</li>
+          <li><b>⚡ Multi-core Engine ဖွင့်ပြီး အဆင်မပြေရင်</b> (ရပ်နေတာ၊ app ပိတ်သွားတာ) — API Key Settings မှာ <b>⚡ Multi-core Engine</b> ကို ပြန်ပိတ်ပါ။ ရပ်သွားရင် app က ပုံမှန် Engine နဲ့ အလိုအလျောက် ပြန်ထုတ်ပေးပါတယ်။</li>
           <li><b>Engine ဒေါင်းမရရင်</b> — API Key Settings မှာ <b>Cache ဖျက်မည်</b> ပြီး <b>Install</b> ပြန်နှိပ်ပါ။</li>
         </ul>`)}
     </div>
@@ -312,6 +313,11 @@ function pageKeys() {
         <button class="btn danger" id="ffClear">🗑 Cache ဖျက်မည်</button>
         <button class="btn primary" id="ffInstall">⬇ Install</button>
       </div>
+      <label class="mtrow">
+        <input id="ffMt" type="checkbox" ${L.mtWanted() ? 'checked' : ''} ${L.mtSupported() ? '' : 'disabled'} />
+        <span><b>⚡ Multi-core Engine</b> <span class="badge">စမ်းသပ်ဆဲ</span></span>
+      </label>
+      <p class="muted small" id="mtNote" style="margin:6px 0 0"></p>
     </div>`;
 
   $('#kAai').value = localStorage.getItem('aaiKey') || '';
@@ -344,6 +350,23 @@ function pageKeys() {
   upd();
 
   /* FFmpeg card */
+  const mtNote = () => {
+    const n = $('#mtNote'); if (!n) return;
+    const cores = navigator.hardwareConcurrency || '?';
+    n.textContent = !L.mtSupported()
+      ? 'ဒီ browser မှာ Multi-core မရပါ — ပုံမှန် Engine ကိုပဲ သုံးပါမယ်။'
+      : L.engineInfo().fellBack
+        ? '⚠ Multi-core Engine အဆင်မပြေလို့ (စတင်မရ / ရပ်သွား) ဒီတစ်ခေါက် ပုံမှန် Engine ကို သုံးနေပါတယ်။ ဆက်ဖြစ်နေရင် ပိတ်ထားပါ။'
+        : L.mtWanted()
+          ? `✅ ဖွင့်ထားပါတယ် — ဖုန်းရဲ့ core ${cores} ခုလုံး သုံးပြီး Video ပေါင်းပါမယ်။ အဆင်မပြေရင် (ရပ်နေတာ၊ app ပိတ်သွားတာ) ဒီခလုတ်ကို ပြန်ပိတ်ပါ။`
+          : `ဖွင့်ရင် ဖုန်းရဲ့ core ${cores} ခုလုံး သုံးလို့ Video ပေါင်းတာ ပိုမြန်နိုင်ပါတယ်။ Engine (~32MB) ကို တစ်ကြိမ် ထပ်ဒေါင်းရပါမယ်။`;
+  };
+  $('#ffMt').onchange = e => {
+    L.setMtWanted(e.target.checked);
+    toast(e.target.checked ? '⚡ Multi-core ဖွင့်ပြီးပါပြီ — Install ကိုနှိပ်ပြီး Engine ဒေါင်းပါ' : 'ပုံမှန် Engine ကို ပြန်သုံးပါမယ်');
+    mtNote(); ffRefresh();
+  };
+  mtNote();
   const ffRefresh = async () => {
     ffCached = await L.ffmpegCached();
     const b = $('#ffBadge'), i = $('#ffInstall'); if (!b || !i) return;
@@ -367,7 +390,9 @@ function pageKeys() {
         if (f) f.style.width = Math.round(p * 100) + '%';
         if (b) { b.textContent = 'Downloading ' + Math.round(p * 100) + '%'; b.className = 'badge'; }
       });
-      toast('✅ Engine အဆင်သင့်ပါပြီ');
+      const en = L.engineInfo();
+      toast(en.fellBack ? '⚠ Multi-core မရလို့ ပုံမှန် Engine နဲ့ အဆင်သင့်ပါပြီ' : en.kind === 'mt' ? '✅ ⚡ Multi-core Engine အဆင်သင့်ပါပြီ' : '✅ Engine အဆင်သင့်ပါပြီ');
+      mtNote();
     } catch (e) { toast((e.message || 'ဒေါင်းလုဒ် မအောင်မြင်ပါ').slice(0, 80)); }
     finally {
       ffBusy = false;
@@ -899,9 +924,10 @@ async function step4() {
     <p class="muted">ခဏစောင့်ပေးပါ — ဒီ tab ကို ဖွင့်ထားပါ၊ screen မပိတ်ပါနဲ့။</p>${bar()}`;
   let wake; try { wake = await navigator.wakeLock?.request('screen'); } catch {}
   const stopClock = startClock();
+  let mtRetry = false;
   try {
     const persona = L.PERSONAS.find(p => p.id === state.personaId);
-    const { video, placed, fellBack, fxFailed, fontFailed, diag, geoOk, ovlOk, subsOk, stats, timing, tries, src } = await L.renderDub({
+    const { video, placed, fellBack, fxFailed, fontFailed, diag, geoOk, ovlOk, subsOk, stats, timing, tries, src, engine } = await L.renderDub({
       file: state.file, videoDur: state.videoDur, segs: state.segs, burmese: state.burmese,
       persona, pitch: state.pitch, rate: state.rate,
       fx: {
@@ -915,7 +941,7 @@ async function step4() {
     });
     state.diag = `geo:${geoOk} subs:${subsOk} overlay:${ovlOk} fxFailed:${fxFailed}\n${diag || ''}`;
     const took = stopClock();
-    state.result = { video, url: URL.createObjectURL(video), srt: L.buildSrt(state.burmese, placed), stats, took, timing, tries, src };
+    state.result = { video, url: URL.createObjectURL(video), srt: L.buildSrt(state.burmese, placed), stats, took, timing, tries, src, engine };
     showResult();
     H.histAdd({ name: state.file.name, video, srt: state.result.srt, size: video.size, dur: state.videoDur, took })
       .catch(() => toast('မှတ်တမ်းထဲ သိမ်းဖို့ ဖုန်းထဲ နေရာမလောက်ပါ — Video ကို Download လုပ်ထားပါ'));
@@ -923,6 +949,7 @@ async function step4() {
     else if (fxFailed) toast('Effect (Mirror/Blur/စာတန်းထိုး) အချို့ ထည့်မရလို့ ရတာလောက်ပဲ ထုတ်ထားပါတယ်');
     else if (fellBack) toast('မူရင်းအသံ ရောစပ်မရလို့ မြန်မာအသံချည်းပဲ ထည့်ထားပါတယ်');
   } catch (e) {
+    if (e && e.mtStall) { mtRetry = true; return; }      // multi-core got stuck: run again on the normal engine (see finally)
     view.innerHTML = `<h2>အမှားရှိနေပါသည်</h2>`; showErr(e);
     view.insertAdjacentHTML('beforeend', `<button class="btn primary" id="retry">ပြန်စမည်</button>
       <label class="btn block" for="repick" style="display:block;text-align:center;cursor:pointer">🎞 Video ပြန်ရွေးပြီး ပြန်စမည်<input id="repick" type="file" accept="video/*" hidden /></label>
@@ -934,7 +961,10 @@ async function step4() {
       step4();
     };
     $('#back').onclick = () => go(3);
-  } finally { stopClock(); wake?.release?.(); state.busy = false; renderStepper(); }
+  } finally {
+    stopClock(); wake?.release?.(); state.busy = false; renderStepper();
+    if (mtRetry) { toast('⚡ Multi-core ရပ်သွားလို့ ပုံမှန် Engine နဲ့ ပြန်ထုတ်နေပါတယ်'); setTimeout(step4, 300); }
+  }
 }
 
 function statBlock() {
@@ -967,8 +997,10 @@ function timingBlock() {
     <div class="trow"><span>${label}</span><b>${secTxt(t[k])}</b></div>
     <div class="tbar"><i style="width:${Math.max(2, Math.round((t[k] / max) * 100))}%"></i></div>`).join('');
   const src = r.src ? `<p class="muted small" style="margin:10px 0 0">📹 မူရင်း Video: ${r.src.w}×${r.src.h} · ${Math.round(r.src.fps)} fps</p>` : '';
+  const en = r.engine && r.engine.kind
+    ? `<p class="muted small" style="margin:6px 0 0">⚙ Engine: ${r.engine.kind === 'mt' ? `⚡ Multi-core (core ${navigator.hardwareConcurrency || '?'} ခု)` : 'ပုံမှန် (single-core)'}${r.engine.fellBack ? ' — Multi-core အဆင်မပြေလို့' : ''}</p>` : '';
   const retry = r.tries > 1 ? `<p class="muted small" style="margin:6px 0 0">🔁 ပထမနည်း မရလို့ Video ကို ${r.tries} ကြိမ် ထုတ်ခဲ့ရပါတယ်</p>` : '';
-  return `<details class="panel timing" open><summary><b>📊 အဆင့်အလိုက် ကြာချိန်</b></summary>${rows}${src}${retry}</details>`;
+  return `<details class="panel timing" open><summary><b>📊 အဆင့်အလိုက် ကြာချိန်</b></summary>${rows}${src}${en}${retry}</details>`;
 }
 
 function showResult() {
