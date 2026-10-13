@@ -49,6 +49,8 @@ function clearResult() {
   if (state.result && state.result.url) URL.revokeObjectURL(state.result.url);   // free the old video from memory
   state.result = null;
 }
+// friendly hint under an error box: what to check before trying again
+const errTip = html => view.insertAdjacentHTML('beforeend', `<div class="warn">${html}</div>`);
 const showErr = (e) => { const d = document.createElement('div'); d.className = 'err'; d.textContent = e.message || String(e); view.appendChild(d); };
 const download = (blob, name) => { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); };
 
@@ -101,7 +103,7 @@ function buildMenu() {
       <button class="ditem" data-p="premium"><span>2</span><b>Premium Recap</b><small>မကြာမီ</small></button>
       <button class="ditem" data-p="keys"><span>3</span><b>API Key Settings</b><small>AssemblyAI Key · FFmpeg Engine</small></button>
       <button class="ditem" data-p="guide"><span>4</span><b>အသုံးပြုပုံ လမ်းညွှန်</b><small>အဆင့်လိုက် ရှင်းလင်းချက်</small></button>
-      <button class="ditem" data-p="history"><span>5</span><b>မှတ်တမ်း (History)</b><small>၂၄ နာရီအတွင်း ထုတ်ထားတဲ့ Video များ</small></button>
+      <button class="ditem" data-p="history"><span>5</span><b>မှတ်တမ်း (History)</b><small>နောက်ဆုံး ထုတ်ထားတဲ့ Video ၂ ခု</small></button>
     </nav>`);
   burger.onclick = openDrawer;
   $('#scrim').onclick = closeDrawer;
@@ -175,10 +177,22 @@ function pageGuide() {
           <li>ပြီးရင် Video ကို ကြည့်ပါ။ <b>Download</b> နဲ့ Video ကိုသိမ်းပါ၊ <b>.srt</b> နဲ့ စာတန်းထိုးဖိုင်ကိုလည်း သိမ်းလို့ရပါတယ်။</li>
           <li><b>⚠ ရှည်လွန်းတဲ့ စာကြောင်း</b> ပေါ်ရင် — <b>တိုအောင်ခိုင်းမည့် Prompt ကူးမည်</b> ကိုနှိပ်ပြီး Gemini မှာ paste လုပ်ပါ။ ရလာတဲ့ JSON ကို <b>မူရင်းစာသား</b> အဆင့်မှာ ထည့်ပြီး Video ပြန်ထုတ်ပါ။</li>
           <li>ပြန်ပြင်ချင်ရင် အပေါ်က <b>1 / 2 / 3</b> အဆင့်ဘားကို နှိပ်ပြီး ပြန်သွားနိုင်ပါတယ်။</li>
-          <li>ထုတ်ပြီးသား Video တွေကို <b>☰ Menu → မှတ်တမ်း (History)</b> မှာ ၂၄ နာရီအတွင်း ပြန်ကြည့်၊ ပြန်ဒေါင်းလို့ ရပါတယ်။</li>
+          <li>ထုတ်ပြီးသား Video တွေကို <b>☰ Menu → မှတ်တမ်း (History)</b> မှာ ပြန်ကြည့်၊ ပြန်ဒေါင်းလို့ ရပါတယ် (နောက်ဆုံး ၂ ခု၊ ၂၄ နာရီအတွင်း)။</li>
         </ol>`)}
 
-      ${sec(6, 'အကြံပြုချက်များ', `
+      ${sec(6, '⚡ Multi-core Engine (Video ပိုမြန်အောင်)', `
+        <p style="margin:0">ဖုန်းရဲ့ CPU core အားလုံးကို သုံးပြီး Video ပေါင်းလို့ ပုံမှန်ထက် <b>၂ ဆလောက် ပိုမြန်</b> နိုင်ပါတယ်။ (ပုံမှန် Engine က core တစ်ခုတည်းပဲ သုံးပါတယ်)</p>
+        <b>ဖွင့်နည်း</b>
+        <ol>
+          <li><b>☰ Menu → API Key Settings</b> ကိုဖွင့်ပါ။</li>
+          <li><b>Device Video Engine</b> အောက်က <b>⚡ Multi-core Engine</b> ကို ✅ ခြစ်ပါ။</li>
+          <li><b>⬇ Install</b> ကိုနှိပ်ပြီး Engine (~32MB) ကို တစ်ကြိမ် ဒေါင်းပါ။ (Wi-Fi နဲ့ ဒေါင်းပါ)</li>
+          <li>Video ထုတ်ပြီးရင် ရလဒ်က <b>📊 အဆင့်အလိုက် ကြာချိန်</b> မှာ <b>⚙ Engine: ⚡ Multi-core</b> လို့ ပေါ်ရင် အလုပ်လုပ်နေပါပြီ။</li>
+        </ol>
+        <div class="warn">⚠ <b>RAM နည်းတဲ့ ဖုန်း / ဖုန်းအဟောင်း</b> (RAM 4GB နဲ့အောက်၊ ဈေးပေါ်ဖုန်း) တွေမှာ <b>မဖွင့်ပါနဲ့</b>။ Memory ပိုစားလို့ ဖုန်းလေးတာ၊ ပူတာ၊ browser ပိတ်သွားတာ ဖြစ်နိုင်ပါတယ်။ ပုံမှန် Engine နဲ့ပဲ သုံးပါ။</div>
+        <div class="tip">💡 Video ထုတ်နေတုန်း Multi-core ရပ်သွားရင် app က <b>ပုံမှန် Engine နဲ့ အလိုအလျောက် ပြန်ထုတ်</b> ပေးပါတယ်။ ခဏခဏ ဖြစ်နေရင် ✅ ကို ပြန်ဖြုတ်ထားပါ။ iPhone (Safari) အချို့မှာ မရပါ — ခလုတ်ကို နှိပ်လို့မရရင် အဲဒါပါ။</div>`)}
+
+      ${sec(7, 'အကြံပြုချက်များ', `
         <ul>
           <li>အရင်ဆုံး <b>၁-၂ မိနစ်လောက် Video တိုတိုလေး</b> နဲ့ စမ်းပါ။</li>
           <li>မူရင်းအသံ ကျယ်ပြီး မြန်မာသံကို ဖုံးနေရင် <b>🗣 စကားပြောနေစဉ်</b> ကို ပိုလျှော့ပါ။</li>
@@ -187,8 +201,10 @@ function pageGuide() {
           <li>AssemblyAI free plan မှာ လစဉ်သုံးခွင့် ကန့်သတ်ချက် ရှိပါတယ်။</li>
         </ul>`)}
 
-      ${sec(7, 'ပြဿနာ ဖြေရှင်းနည်း', `
+      ${sec(8, 'ပြဿနာ ဖြေရှင်းနည်း', `
         <ul>
+          <li><b>စာသားထုတ်တဲ့နေရာမှာ Error တက်ရင်</b> — <b>VPN</b> ချိတ်ထားရင် ဖြုတ်ပြီး ပြန်ကြိုးစားပါ။ Wi-Fi / Internet ကိုလည်း စစ်ပါ။</li>
+          <li><b>Video ပေါင်းနေတဲ့နေရာမှာ Error တက်ရင်</b> (ဥပမာ "TTS 500"၊ "refused connection") — <b>Wi-Fi / Internet</b> ကောင်းမကောင်း အရင်စစ်ပြီး <b>ပြန်စမည်</b> ကိုနှိပ်ပါ။ ပြင်ထားတာတွေ မပျောက်ပါဘူး။</li>
           <li><b>အသံမထွက်ရင် / "TTS audio မရပါ"</b> — API Key Settings မှာ <b>🔎 စစ်ဆေးမည်</b> နဲ့ Key နဲ့ ချိတ်ဆက်မှုကို စစ်ပါ။</li>
           <li><b>"File could not be read"</b> — Video ကို Downloads/Movies ထဲကနေ ပြန်ရွေးပါ။ ရလဒ် အဆင့်မှာ <b>🎞 Video ပြန်ရွေးပြီး ပြန်စမည်</b> ကိုနှိပ်ပါ။</li>
           <li><b>စာတန်းထိုး Font မပေါ်ရင်</b> — Font dropdown အောက်က အခြေအနေစာကို ကြည့်ပါ။ ❌ ဆိုရင် တခြား Font ရွေးပါ။</li>
@@ -214,7 +230,7 @@ const left = ms => {
 async function pageHistory() {
   view.innerHTML = `
     <h2>🗂 မှတ်တမ်း (History)</h2>
-    <p class="muted small">ဒီဖုန်းမှာ ထုတ်ခဲ့တဲ့ Video တွေကို ၂၄ နာရီ သိမ်းထားပေးပါတယ်။ ၂၄ နာရီကျော်ရင် အလိုအလျောက် ဖျက်ပါမယ်။ လိုချင်တာကို Download လုပ်ထားပါ။</p>
+    <p class="muted small">နောက်ဆုံး ထုတ်ထားတဲ့ Video <b>၂ ခု</b>ကို ဒီဖုန်းမှာ <b>၂၄ နာရီ</b> သိမ်းထားပေးပါတယ်။ အသစ်ထုတ်ရင် အဟောင်းဆုံးကို ဖျက်ပြီး ၂၄ နာရီကျော်ရင်လည်း အလိုအလျောက် ဖျက်ပါမယ်။ လိုချင်တာကို Download လုပ်ထားပါ။</p>
     <div id="hlist"><p class="muted">ဖွင့်နေသည်…</p></div>`;
   let items;
   try { items = await H.histList(); }
@@ -769,6 +785,7 @@ async function transcribeFlow() {
   } catch (e) {
     stopClock();
     view.innerHTML = `<h2>အမှားရှိနေပါသည်</h2>`; showErr(e);
+    errTip('⚠ <b>VPN ချိတ်ထားရင် ဖြုတ်ပြီး</b> ပြန်ကြိုးစားပါ။ Wi-Fi / Internet ကောင်းမကောင်းလည်း စစ်ပါ။ (AssemblyAI Key မှန်လားဆိုတာ API Key Settings → 🔎 စစ်ဆေးမည် နဲ့ စစ်နိုင်ပါတယ်)');
     state.busy = false; renderStepper();
     view.insertAdjacentHTML('beforeend', `<button class="btn primary" id="back">ဗီဒီယိုတင် အဆင့်သို့ ပြန်သွားမည်</button>`);
     $('#back').onclick = () => go(1);
@@ -951,6 +968,9 @@ async function step4() {
   } catch (e) {
     if (e && e.mtStall) { mtRetry = true; return; }      // multi-core got stuck: run again on the normal engine (see finally)
     view.innerHTML = `<h2>အမှားရှိနေပါသည်</h2>`; showErr(e);
+    errTip(/TTS|fetch|network|connection/i.test(String(e && e.message))
+      ? '⚠ <b>မြန်မာအသံ ထုတ်တဲ့ server နဲ့ ချိတ်ဆက်မှု ပြတ်သွားပါတယ်။</b> Wi-Fi / Internet ကောင်းမကောင်း အရင်စစ်ပြီး <b>ပြန်စမည်</b> ကိုနှိပ်ပါ။ ပြင်ထားတဲ့ စာသားနဲ့ Setting တွေ မပျောက်ပါဘူး။'
+      : '⚠ Wi-Fi / Internet ကောင်းမကောင်း အရင်စစ်ပြီး <b>ပြန်စမည်</b> ကိုနှိပ်ပါ။ ဆက်ဖြစ်နေရင် Effect တချို့ (Blur၊ စာတန်းထိုး၊ Logo) ကို ပိတ်ပြီး စမ်းကြည့်ပါ။');
     view.insertAdjacentHTML('beforeend', `<button class="btn primary" id="retry">ပြန်စမည်</button>
       <label class="btn block" for="repick" style="display:block;text-align:center;cursor:pointer">🎞 Video ပြန်ရွေးပြီး ပြန်စမည်<input id="repick" type="file" accept="video/*" hidden /></label>
       <button class="btn block" id="back">ဘာသာပြန် အဆင့်သို့ ပြန်သွားမည်</button>`);
