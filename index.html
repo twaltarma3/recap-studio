@@ -18,22 +18,6 @@
     <section id="view" class="card"></section>
   </main>
 
-  <dialog id="settings">
-    <form method="dialog" class="dlg">
-      <h2>API Settings</h2>
-      <label>Worker URL
-        <input id="workerUrl" placeholder="https://recap-proxy.yourname.workers.dev" />
-      </label>
-      <label>AssemblyAI API Key
-        <input id="aaiKey" type="password" placeholder="AssemblyAI key" />
-      </label>
-      <p class="muted small">Keys are saved only in this browser (localStorage).</p>
-      <div class="row">
-        <button value="cancel" class="ghost">Close</button>
-        <button id="saveSettings" value="ok" class="btn primary">Save</button>
-      </div>
-    </form>
-  </dialog>
   <div id="toast"></div>
   <script type="module" src="/main.js"></script>
 </body>
