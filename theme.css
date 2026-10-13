@@ -287,3 +287,13 @@ body .stepper span b{font-size:12px}
 .hempty{text-align:center;padding:28px 10px;font-size:40px}
 .hempty p{font-size:16px;margin:6px 0 2px;color:#f1f1f7}
 .hempty small{font-size:13px}
+
+/* result page: per-stage timing */
+.timing summary{cursor:pointer;list-style:none}
+.timing summary::-webkit-details-marker{display:none}
+.timing summary::after{content:' ▾';color:#a3a3b5}
+.timing[open] summary{margin-bottom:6px}
+.trow{display:flex;justify-content:space-between;gap:10px;font-size:14px;margin-top:10px}
+.trow b{flex:none;font-variant-numeric:tabular-nums}
+.tbar{height:8px;border-radius:99px;background:#0f0f12;margin-top:4px;overflow:hidden}
+.tbar i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,#6b56ff,#a187ff)}

@@ -901,7 +901,7 @@ async function step4() {
   const stopClock = startClock();
   try {
     const persona = L.PERSONAS.find(p => p.id === state.personaId);
-    const { video, placed, fellBack, fxFailed, fontFailed, diag, geoOk, ovlOk, subsOk, stats } = await L.renderDub({
+    const { video, placed, fellBack, fxFailed, fontFailed, diag, geoOk, ovlOk, subsOk, stats, timing, tries, src } = await L.renderDub({
       file: state.file, videoDur: state.videoDur, segs: state.segs, burmese: state.burmese,
       persona, pitch: state.pitch, rate: state.rate,
       fx: {
@@ -915,7 +915,7 @@ async function step4() {
     });
     state.diag = `geo:${geoOk} subs:${subsOk} overlay:${ovlOk} fxFailed:${fxFailed}\n${diag || ''}`;
     const took = stopClock();
-    state.result = { video, url: URL.createObjectURL(video), srt: L.buildSrt(state.burmese, placed), stats, took };
+    state.result = { video, url: URL.createObjectURL(video), srt: L.buildSrt(state.burmese, placed), stats, took, timing, tries, src };
     showResult();
     H.histAdd({ name: state.file.name, video, srt: state.result.srt, size: video.size, dur: state.videoDur, took })
       .catch(() => toast('မှတ်တမ်းထဲ သိမ်းဖို့ ဖုန်းထဲ နေရာမလောက်ပါ — Video ကို Download လုပ်ထားပါ'));
@@ -950,11 +950,33 @@ function statBlock() {
   return h;
 }
 
+// how long each render stage took, with a bar per stage so the slowest one stands out
+const STAGES = [
+  ['tts', '🗣 မြန်မာအသံ ထုတ်ချိန်'],
+  ['fit', '⏱ အချိန်ကိုက် ညှိချိန်'],
+  ['mix', '🎚 အသံပေါင်းချိန်'],
+  ['prep', '🧩 Video ပြင်ဆင်ချိန် (စာတန်းထိုး၊ Logo)'],
+  ['encode', '🎞 Video ပေါင်းချိန် (encode)'],
+  ['save', '💾 ဖိုင်သိမ်းချိန်']
+];
+const secTxt = s => s < 60 ? `${s.toFixed(1)} စက္ကန့်` : fmtDur(s);
+function timingBlock() {
+  const r = state.result, t = r.timing; if (!t) return '';
+  const max = Math.max(...STAGES.map(([k]) => t[k] || 0), 0.001);
+  const rows = STAGES.filter(([k]) => t[k] >= 0.05).map(([k, label]) => `
+    <div class="trow"><span>${label}</span><b>${secTxt(t[k])}</b></div>
+    <div class="tbar"><i style="width:${Math.max(2, Math.round((t[k] / max) * 100))}%"></i></div>`).join('');
+  const src = r.src ? `<p class="muted small" style="margin:10px 0 0">📹 မူရင်း Video: ${r.src.w}×${r.src.h} · ${Math.round(r.src.fps)} fps</p>` : '';
+  const retry = r.tries > 1 ? `<p class="muted small" style="margin:6px 0 0">🔁 ပထမနည်း မရလို့ Video ကို ${r.tries} ကြိမ် ထုတ်ခဲ့ရပါတယ်</p>` : '';
+  return `<details class="panel timing" open><summary><b>📊 အဆင့်အလိုက် ကြာချိန်</b></summary>${rows}${src}${retry}</details>`;
+}
+
 function showResult() {
   view.innerHTML = `
     <h2>ရလဒ်များ (Results)</h2>
     <video src="${state.result.url}" controls playsinline></video>
     ${state.result.took ? `<p class="muted small">⏱ ထုတ်ချိန် ${fmtDur(state.result.took)} · 🗂 မှတ်တမ်းထဲမှာ ၂၄ နာရီ သိမ်းထားပါတယ်</p>` : ''}
+    ${timingBlock()}
     ${statBlock()}
     ${state.diag && /fxFailed:true|false\n[^]/.test(state.diag) && /fxFailed:true|failed|Error|error/i.test(state.diag) ? `<details style="margin:10px 0"><summary class="muted small">🛠 Effect log (အမှားရှာရန်)</summary><pre id="diagTxt" style="white-space:pre-wrap;font-size:11px;max-height:220px;overflow:auto">${esc(state.diag)}</pre><button class="btn block" id="diagCp" type="button">📋 Log ကူးမည်</button></details>` : ''}
     <button id="dl" class="btn primary">⬇ Video Download (.mp4)</button>
