@@ -742,6 +742,10 @@ export async function renderDub({ file, videoDur, segs, burmese, persona, pitch,
   const f = await getFFmpeg();
   const flog = []; const onLog = ({ message }) => { flog.push(String(message)); if (flog.length > 400) flog.shift(); }; try { f.on('log', onLog); } catch {}
   const ctx = new OfflineAudioContext(1, Math.ceil((videoDur + 30) * SR), SR);
+  // seconds spent in each stage, shown on the result page
+  const timing = {};
+  let tMark = performance.now();
+  const lap = k => { const t = performance.now(); timing[k] = (timing[k] || 0) + (t - tMark) / 1000; tMark = t; };
   let inName = null, temp = false;
   try {
     // 1) TTS (3 in parallel) — 0..50%
@@ -760,6 +764,7 @@ export async function renderDub({ file, videoDur, segs, burmese, persona, pitch,
     };
     onProgress(0, `မြန်မာအသံ ထုတ်နေပါတယ် (0/${todo.length})`);
   await Promise.all([run(), run(), run()]);
+  lap('tts');
 
     // 2) fit each clip into its time slot — 50..75%
     setFFProgress(null);
@@ -793,6 +798,7 @@ export async function renderDub({ file, videoDur, segs, burmese, persona, pitch,
       cursor = start + tb.len + GAP;
     }
 
+    lap('fit');
     // 3) mix all clips into one track — 75..85%
     onProgress(0.76, 'အသံတွေကို တစ်ဆက်တည်း ပေါင်းနေပါတယ်');
     for (const c of clips) {
@@ -803,6 +809,7 @@ export async function renderDub({ file, videoDur, segs, burmese, persona, pitch,
     }
     const mixed = await ctx.startRendering();
     const wavBytes = encodeWav(mixed);
+    lap('mix');
     onProgress(0.85, 'ဗီဒီယိုဖိုင်ကို ပြင်ဆင်နေပါတယ်');
 
     // 4) mux with video — 85..100%
@@ -879,6 +886,7 @@ export async function renderDub({ file, videoDur, segs, burmese, persona, pitch,
     if (subs && ovl) { const f2 = buildFx(fx, subs, geo, 0); plans.push(build(f2, true, false)); }       // without watermark / logo
     if ((subs || ovl) && buildFx(fx, null, geo, 0)) plans.push(build(buildFx(fx, null, geo, 0), false, false));
     if (fxFilter) plans.push(build('', false));
+    lap('prep');
     // progress text: say what this pass is putting together
     const fxNames = [];
     if (geo && geo.ratio) fxNames.push('အချိုး');
@@ -904,6 +912,11 @@ export async function renderDub({ file, videoDur, segs, burmese, persona, pitch,
       }
     }
     if (code !== 0) throw new Error('Video ပေါင်းစပ်မှု မအောင်မြင်ပါ (ffmpeg error)');
+    lap('encode');
+    // source video size / frame rate, read from ffmpeg's own log of the successful pass
+    let src = null;
+    const sm = flog.join('\n').match(/Stream #0:\d+[^\n]*?Video:[^\n]*?(\d{2,5})x(\d{2,5})[^\n]*?([\d.]+) fps/);
+    if (sm) src = { w: +sm[1], h: +sm[2], fps: +sm[3] };
     if (fx && fx.subs && fx.subs.on && !subs) fxFailed = true;
     try { f.off('log', onLog); } catch {}
     if (fx && fx.subs && fx.subs.on && !subs) diag = (diag ? diag + '\n' : '') + 'subtitle track build failed' + (subs === null ? '' : '');
@@ -911,9 +924,10 @@ export async function renderDub({ file, videoDur, segs, burmese, persona, pitch,
     const fellBack = wantMix && !usedMix;
     const out = await f.readFile('out.mp4');
     for (const x of [temp ? inName : null, 'mix.wav', 'out.mp4', ovl ? 'ovl.png' : null, ...(subs ? subs.files : [])]) { if (x) { try { await f.deleteFile(x); } catch {} } }
+    lap('save');
     setFFProgress(null);
     onProgress(1, 'ပြီးပါပြီ 🎉');
-    return { video: new Blob([out.slice().buffer], { type: 'video/mp4' }), placed, fellBack, fxFailed, fontFailed, diag, geoOk: !!geo, ovlOk: ovl, subsOk: !!subs, stats: dubStats(placed, maxTempo) };
+    return { video: new Blob([out.slice().buffer], { type: 'video/mp4' }), placed, fellBack, fxFailed, fontFailed, diag, geoOk: !!geo, ovlOk: ovl, subsOk: !!subs, stats: dubStats(placed, maxTempo), timing, tries, src };
   } catch (e) {
     // failed part-way: free the leftover work files so a retry doesn't run out of memory
     try { f.off('log', onLog); } catch {}
