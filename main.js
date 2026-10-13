@@ -156,7 +156,7 @@ function pageGuide() {
         <div class="tip" style="margin:0 0 10px">📲 <b>App လို အပြည့်ဖွင့်ချင်ရင်</b> — ☰ Menu → <b>App အဖြစ် ထည့်မည်</b> (ဒါမှမဟုတ် Chrome ⋮ → Add to Home screen)။ Home screen က icon နဲ့ ဖွင့်ရင် browser bar မပါဘဲ ပွင့်ပါတယ်။</div>
         <ol>
           <li><b>Video File ရွေးချယ်ပါ</b> ကိုနှိပ်ပြီး Video ရွေးပါ။ (MP4၊ MOV၊ WEBM၊ MKV — ၁၀ မိနစ်အထိ)</li>
-          <li>ဒါမှမဟုတ် <b>TikTok link</b> ကို ကူးပြီး ကွက်ထဲ ထည့်ပါ (📋 နဲ့ Paste လုပ်လို့ရ) → <b>Load</b> ကိုနှိပ်ပါ။ Video ကို အလိုအလျောက် ဒေါင်းပြီး Preview မှာ ပြပေးပါမယ်။</li>
+          <li>ဒါမှမဟုတ် <b>TikTok / YouTube link</b> ကို ကူးပြီး ကွက်ထဲ ထည့်ပါ (📋 နဲ့ Paste လုပ်လို့ရ) → <b>Load</b> ကိုနှိပ်ပါ။ Video ကို အလိုအလျောက် ဒေါင်းပြီး Preview မှာ ပြပေးပါမယ်။</li>
           <li><b>မူရင်းစကားပြောဘာသာ</b> ကို ရွေးပါ။ (ဥပမာ Chinese)</li>
           <li><b>စာသားထုတ်မည် (Next)</b> ကိုနှိပ်ပါ။ စကားပြောအသံကို စာသားပြောင်းပြီး အချိန်နဲ့တကွ ထုတ်ပေးပါမယ်။</li>
         </ol>
@@ -783,7 +783,8 @@ function bindLinkBox() {
     if (linkBusy) return;
     const link = L.findLink(inp.value) || inp.value.trim();
     if (!link) { toast('Link ကို အရင်ထည့်ပါ'); inp.focus(); return; }
-    if (!L.isTikTok(link)) { toast(/youtu/i.test(link) ? 'YouTube link ကို မကြာမီ ထည့်ပေးပါမယ် — အခု TikTok ပဲ ရပါသေးတယ်' : 'TikTok link မဟုတ်ပါ'); return; }
+    const yt = L.isYouTube(link);
+    if (!yt && !L.isTikTok(link)) { toast('TikTok ဒါမှမဟုတ် YouTube link ကို ထည့်ပါ'); return; }
     linkBusy = true; state.busy = true; renderStepper();
     $('#lnkErr').hidden = true;
     const btns = [$('#lnkLoad'), $('#lnkPaste'), $('#f')]; btns.forEach(b => { if (b) b.disabled = true; }); inp.disabled = true;
@@ -793,13 +794,13 @@ function bindLinkBox() {
       f.style.width = (frac ? Math.round(frac * 100) : Math.min(90, Math.round(bytes / 400000))) + '%';
       $('#lnkNum').textContent = frac ? Math.round(frac * 100) + '%' : (bytes / 1048576).toFixed(1) + ' MB';
     };
-    $('#lnkTxt').textContent = 'TikTok ကနေ Video ယူနေပါတယ်…';
+    $('#lnkTxt').textContent = (yt ? 'YouTube' : 'TikTok') + ' ကနေ Video ယူနေပါတယ်…';
     try {
-      const { file, duration } = await L.loadTikTok(link, setP);
+      const { file, duration, quality } = await L.loadVideoLink(link, setP);
       state.file = file; state.segs = []; state.origSegs = null; L.forgetInput();
       linkBusy = false; state.busy = false;
       step1(); renderStepper();
-      toast(duration > 900 ? '⚠ Video က ၁၅ မိနစ်ထက် ရှည်ပါတယ် — ကြာနိုင်ပါတယ်' : '✅ TikTok Video ရပါပြီ');
+      toast(duration > 900 ? '⚠ Video က ၁၅ မိနစ်ထက် ရှည်ပါတယ် — ကြာနိုင်ပါတယ်' : `✅ ${yt ? 'YouTube' : 'TikTok'} Video ရပါပြီ${quality ? ' (' + quality + ')' : ''}`);
     } catch (e) {
       linkBusy = false; state.busy = false; renderStepper();
       btns.forEach(b => { if (b) b.disabled = false; }); inp.disabled = false;
@@ -823,13 +824,13 @@ function step1() {
     <div class="linkbox">
       <div class="ordiv"><span>ဒါမှမဟုတ် link ထည့်ပါ</span></div>
       <div class="linkrow">
-        <input id="lnk" type="url" inputmode="url" autocomplete="off" placeholder="TikTok link ကို ဒီမှာ ထည့်ပါ" />
+        <input id="lnk" type="url" inputmode="url" autocomplete="off" placeholder="TikTok / YouTube link ကို ဒီမှာ ထည့်ပါ" />
         <button type="button" class="btn" id="lnkPaste" aria-label="Paste">📋</button>
         <button type="button" class="btn primary" id="lnkLoad">🔗 Load</button>
       </div>
       <div id="lnkErr" class="err" hidden></div>
       <div id="lnkProg" hidden><div class="bar"><i id="lnkFill"></i></div><div class="pct"><span id="lnkTxt">ဒေါင်းနေပါတယ်…</span><b id="lnkNum">0%</b></div></div>
-      <p class="muted small" style="margin:6px 2px 0">ရနိုင်တာ: <b>TikTok</b> · YouTube (မကြာမီ)</p>
+      <p class="muted small" style="margin:6px 2px 0">ရနိုင်တာ: <b>TikTok</b> · <b>YouTube</b> <span class="badge">စမ်းသပ်ဆဲ</span></p>
     </div>
     ${state.file ? previewBlock() : ''}
     <label>မူရင်းစကားပြောဘာသာ
