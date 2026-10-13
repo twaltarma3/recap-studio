@@ -132,7 +132,7 @@ export function getFFmpeg(onProg) {
 const MT_STALL_MS = 30000;
 async function ffRun(f, args) {
   if (ffKind !== 'mt') return f.exec(args);
-  let last = Date.now(), iv;
+  let last = Date.now(), iv, stalled = false;
   const mark = () => { last = Date.now(); };
   f.on('log', mark); f.on('progress', mark);
   try {
@@ -141,19 +141,25 @@ async function ffRun(f, args) {
       new Promise((_, rej) => {
         iv = setInterval(() => {
           if (Date.now() - last < MT_STALL_MS) return;
-          mtFailed = true;
-          try { f.terminate(); } catch {}
+          stalled = true; mtFailed = true;
           if (ff === f) { ff = null; ffKind = null; keptInput = null; }
-          const e = new Error('Multi-core Engine ရပ်သွားလို့ ပုံမှန် Engine ကို ပြောင်းသုံးပါမယ် — ပြန်စမည် ကိုနှိပ်ပါ');
-          e.mtStall = true; rej(e);
+          rej(new Error('stall'));
+          try { f.terminate(); } catch {}         // also rejects the pending exec ("called FFmpeg.terminate()")
         }, 2000);
       })
     ]);
+  } catch (err) {
+    if (!stalled) throw err;
+    const e = new Error('Multi-core Engine ရပ်သွားလို့ ပုံမှန် Engine ကို ပြောင်းသုံးပါမယ် — ပြန်စမည် ကိုနှိပ်ပါ');
+    e.mtStall = true; throw e;                    // always report the stall, whichever rejection arrived first
   } finally { clearInterval(iv); try { f.off('log', mark); f.off('progress', mark); } catch {} }
 }
-// encoder / filter thread settings: with automatic threads the multi-core build can deadlock (seen with blur + subtitles)
+// Thread limits for the multi-core build. It has a fixed pool of 32 threads; with automatic settings every
+// input (video, audio, subtitle PNGs, logo PNG) opens about one decoder thread per CPU core, so on an 8-core
+// phone the pool runs out and ffmpeg waits forever. Explicit small numbers avoid that and were also fastest.
 const mtArgs = () => (ffKind === 'mt' ? ['-filter_threads', '1', '-filter_complex_threads', '1'] : []);
-const mtEnc = () => (ffKind === 'mt' ? ['-threads', String(Math.max(2, Math.min(8, navigator.hardwareConcurrency || 4)))] : []);
+const mtIn = n => (ffKind === 'mt' ? ['-threads', String(n)] : []);            // decoder threads, goes before an -i
+const mtEnc = () => (ffKind === 'mt' ? ['-threads', '4'] : []);                 // x264 encoder threads
 
 // is the engine the user currently wants already downloaded?
 export async function ffmpegCached() {
@@ -938,7 +944,7 @@ export async function renderDub({ file, videoDur, segs, burmese, persona, pitch,
       const vMap = vf ? ['-map', '[v]'] : ['-map', '0:v:0'];
       const enc = vf ? ['-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '27', '-pix_fmt', 'yuv420p', ...mtEnc()] : ['-c:v', 'copy'];
       const tail = ['-c:a', 'aac', '-b:a', '128k', '-shortest', '-movflags', '+faststart', 'out.mp4'];
-      const base = [...mtArgs(), '-i', inName, '-i', 'mix.wav', ...(withSubs ? ['-f', 'concat', '-safe', '0', '-i', 'subs.txt'] : []), ...(withOvl ? ['-i', 'ovl.png'] : [])];
+      const base = [...mtArgs(), ...mtIn(2), '-i', inName, ...mtIn(1), '-i', 'mix.wav', ...(withSubs ? [...mtIn(1), '-f', 'concat', '-safe', '0', '-i', 'subs.txt'] : []), ...(withOvl ? [...mtIn(1), '-i', 'ovl.png'] : [])];
       const list = [];
       if (wantMix) {
         for (const lim of [',alimiter=limit=0.95:level=0', '']) {
