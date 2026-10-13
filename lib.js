@@ -211,6 +211,75 @@ export async function extractAudio(file, onProg) {
   return new Blob([data.slice().buffer], { type: 'audio/wav' });
 }
 
+/* ---------- TikTok link -> video file (through the worker) ---------- */
+const DL_ERR = {
+  not_tiktok: 'TikTok link မဟုတ်ပါ — tiktok.com link ကို ထည့်ပါ',
+  not_found: 'Video ကို ရှာမတွေ့ပါ — link မှန်လား၊ Private / ဖျက်ထားတဲ့ video လား စစ်ပါ',
+  too_big: 'Video အရမ်းကြီးလွန်းပါတယ် (300MB ထက်ကျော်)',
+  download_failed: 'Video ဒေါင်းမရပါ — ခဏနေ ပြန်ကြိုးစားပါ'
+};
+// pulls the first http(s) link out of whatever was pasted (TikTok's share text has words around it)
+export const findLink = t => ((String(t || '').match(/https?:\/\/[^\s"'<>]+/i) || [])[0] || '').replace(/[)\].,!?]+$/, '');
+export const isTikTok = u => { try { return /(^|\.)tiktok\.com$/i.test(new URL(u).hostname); } catch { return false; } };
+
+// streams a video response into a File, reporting progress
+async function readVideo(r, link, onProg) {
+  const total = +r.headers.get('content-length') || 0;
+  const reader = r.body.getReader(), parts = [];
+  let got = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    parts.push(value); got += value.length;
+    onProg && onProg(total ? got / total : 0, got);
+  }
+  if (got < 1000) throw new Error('Video ဒေါင်းမရပါ — ခဏနေ ပြန်ကြိုးစားပါ');
+  const id = (link.match(/video\/(\d+)/) || link.match(/\/([A-Za-z0-9]{5,})\/?(?:\?|$)/) || [])[1] || Date.now();
+  let title = '';
+  try { title = decodeURIComponent(r.headers.get('x-video-title') || ''); } catch {}
+  return { file: new File(parts, `tiktok_${id}.mp4`, { type: 'video/mp4' }), title, duration: +r.headers.get('x-video-duration') || 0 };
+}
+
+// backup: the phone asks tikwm itself (the phone's own daily limit, not the Worker's shared one),
+// then the Worker downloads that file address for us (/dl/file only accepts TikTok / tikwm hosts)
+async function viaPhoneTikwm(link, onProg) {
+  let j;
+  try { j = await (await fetch('https://www.tikwm.com/api/?hd=1&url=' + encodeURIComponent(link))).json(); }
+  catch { throw new Error('phone tikwm: blocked'); }
+  if (!j || j.code !== 0 || !j.data) throw new Error('phone tikwm: ' + String((j && j.msg) || 'no data'));
+  const abs = u => (!u ? '' : /^https?:/i.test(u) ? u : 'https://www.tikwm.com' + (u.startsWith('/') ? '' : '/') + u);
+  let last = '';
+  for (const u of [abs(j.data.hdplay), abs(j.data.play)].filter(Boolean)) {
+    const r = await fetch(`${cfg.workerUrl}/dl/file?u=${encodeURIComponent(u)}`);
+    if (r.ok) {
+      const out = await readVideo(r, link, onProg);
+      out.title = out.title || String(j.data.title || ''); out.duration = out.duration || +j.data.duration || 0;
+      return out;
+    }
+    last = 'file ' + r.status;
+  }
+  throw new Error('phone tikwm: ' + last);
+}
+
+export async function loadTikTok(link, onProg) {
+  let r;
+  try { r = await fetch(`${cfg.workerUrl}/dl/tiktok?url=${encodeURIComponent(link)}`); }
+  catch { throw new Error('Server နဲ့ ချိတ်ဆက်မရပါ — Wi-Fi / Internet စစ်ပါ၊ VPN ချိတ်ထားရင် ဖြုတ်ပါ'); }
+  if (r.ok) return readVideo(r, link, onProg);
+  let e = null; try { e = await r.clone().json(); } catch {}
+  if (e && e.error === 'not_found') {
+    try { return await viaPhoneTikwm(link, onProg); }                 // last try before giving up
+    catch (pe) { e.detail = [e.detail, String(pe.message || pe)].filter(Boolean).join(' | '); }
+  }
+  if (e && DL_ERR[e.error]) {
+    const err = new Error(DL_ERR[e.error]);
+    err.detail = e.detail || '';                   // what the download services said (shown small, for troubleshooting)
+    throw err;
+  }
+  if (r.status === 404) throw new Error('Worker မှာ TikTok download မပါသေးပါ — Worker ကို update လုပ်ပါ');
+  throw new Error(`Video ဒေါင်းမရပါ (${r.status}) — ခဏနေ ပြန်ကြိုးစားပါ`);
+}
+
 /* ---------- AssemblyAI (through the worker) ---------- */
 async function aai(path, opts = {}) {
   if (!cfg.workerUrl || !cfg.aaiKey) throw new Error('API Key Settings ထဲမှာ AssemblyAI key ကို အရင်ထည့်ပါ');
