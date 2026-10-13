@@ -615,6 +615,7 @@ function buildFx(fx, subs, g, ovl = 0) {
   const gr = [];
   let cur = '[0:v]', n = 0;
   const lbl = () => `[t${n++}]`;
+  if (fx && fx.cap30) { const o = lbl(); gr.push(`${cur}fps=30${o}`); cur = o; }        // 60 fps source -> 30 fps (half the frames to encode)
   if (!geo && g && g.scaled) { const o = lbl(); gr.push(`${cur}scale=${g.OW}:${g.OH}${o}`); cur = o; }
   if (geo) {
     const o = lbl();
@@ -1008,6 +1009,15 @@ export async function renderDub({ file, videoDur, segs, burmese, persona, pitch,
       try { subs = await makeSubTrack(f, { file, videoDur, burmese, placed, fx }); } catch { subs = null; }
     }
     const ovlIdx = ovl ? (subs ? 3 : 2) : 0;
+    // "30 fps" option: only lower the frame rate when the source is faster (60 fps); 24/25/30 fps stay as they are
+    if (fx && fx.fps30) {
+      let srcFps = 0;
+      try {
+        flog.length = 0; fhead.length = 0; await ffRun(f, ['-i', inName]);
+        const m = fhead.join('\n').match(/Video:[^\n]*?([\d.]+) fps/); srcFps = m ? +m[1] : 0;
+      } catch (e) { if (e && e.mtStall) throw e; }
+      fx = { ...fx, cap30: srcFps > 31 };
+    }
     const fxFilter = buildFx(fx, subs, geo, ovlIdx);
     const mixHead = wantMix
       ? `[0:a]volume='${gainExpr(duckIntervals(segs, placed), keepTalk, keepGap)}':eval=frame[o];[1:a]volume=${dubGain.toFixed(2)},apad[d];[o][d]amix=inputs=2:duration=first:dropout_transition=0,volume=2`
@@ -1050,6 +1060,7 @@ export async function renderDub({ file, videoDur, segs, burmese, persona, pitch,
     if (fx && fx.blur) fxNames.push('Blur');
     if (subs) fxNames.push('စာတန်းထိုး');
     if (ovl) fxNames.push('Watermark/Logo');
+    if (fx && fx.cap30) fxNames.push('30fps');
     let tries = 0;
     let code = -1, usedMix = false, fxFailed = false, diag = '';
     outer: for (let p = 0; p < plans.length; p++) {
