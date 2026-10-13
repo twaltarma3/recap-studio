@@ -58,7 +58,8 @@ const P = {
   flip: '<path d="M12 3v18M16 7l4 5-4 5M8 7l-4 5 4 5"/>',
   vmove: '<path d="M12 2v20M8 6l4-4 4 4M8 18l4 4 4-4"/>',
   reset: '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/>',
-  ext: '<path d="M7 17 17 7M8 7h9v9"/>'
+  ext: '<path d="M7 17 17 7M8 7h9v9"/>',
+  link: '<path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/>'
 };
 
 // emoji -> icon name (variation selector U+FE0F is stripped before lookup)
@@ -70,7 +71,7 @@ const MAP = {
   '📖': 'book', '📭': 'inbox', '🕒': 'clock', '👁': 'eye', '✨': 'sparkles', '📐': 'ratio', '✂': 'scissors',
   '💧': 'drop', '🎨': 'palette', '🔠': 'type', '📁': 'folderUp', '🏷': 'tag', '⭕': 'badge', '▶': 'play',
   '⏸': 'pause', '⏳': 'hourglass', '🔥': 'flame', '🤖': 'bot', '🧩': 'layers', '💾': 'save', '📹': 'video',
-  '🔁': 'repeat', '🛠': 'wrench', '↔': 'flip', '⇅': 'vmove', '↕': 'vmove', '↺': 'reset', '↗': 'ext'
+  '🔁': 'repeat', '🛠': 'wrench', '↔': 'flip', '⇅': 'vmove', '↕': 'vmove', '↺': 'reset', '↗': 'ext', '🔗': 'link'
 };
 
 export const icon = (name, cls = '') =>

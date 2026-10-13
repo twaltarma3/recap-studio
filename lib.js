@@ -211,6 +211,43 @@ export async function extractAudio(file, onProg) {
   return new Blob([data.slice().buffer], { type: 'audio/wav' });
 }
 
+/* ---------- TikTok link -> video file (through the worker) ---------- */
+const DL_ERR = {
+  not_tiktok: 'TikTok link မဟုတ်ပါ — tiktok.com link ကို ထည့်ပါ',
+  not_found: 'Video ကို ရှာမတွေ့ပါ — link မှန်လား၊ Private / ဖျက်ထားတဲ့ video လား စစ်ပါ',
+  too_big: 'Video အရမ်းကြီးလွန်းပါတယ် (300MB ထက်ကျော်)',
+  download_failed: 'Video ဒေါင်းမရပါ — ခဏနေ ပြန်ကြိုးစားပါ'
+};
+// pulls the first http(s) link out of whatever was pasted (TikTok's share text has words around it)
+export const findLink = t => ((String(t || '').match(/https?:\/\/[^\s"'<>]+/i) || [])[0] || '').replace(/[)\].,!?]+$/, '');
+export const isTikTok = u => { try { return /(^|\.)tiktok\.com$/i.test(new URL(u).hostname); } catch { return false; } };
+
+export async function loadTikTok(link, onProg) {
+  let r;
+  try { r = await fetch(`${cfg.workerUrl}/dl/tiktok?url=${encodeURIComponent(link)}`); }
+  catch { throw new Error('Server နဲ့ ချိတ်ဆက်မရပါ — Wi-Fi / Internet စစ်ပါ၊ VPN ချိတ်ထားရင် ဖြုတ်ပါ'); }
+  if (!r.ok) {
+    let e = null; try { e = await r.clone().json(); } catch {}
+    if (e && DL_ERR[e.error]) throw new Error(DL_ERR[e.error]);
+    if (r.status === 404) throw new Error('Worker မှာ TikTok download မပါသေးပါ — Worker ကို update လုပ်ပါ');
+    throw new Error(`Video ဒေါင်းမရပါ (${r.status}) — ခဏနေ ပြန်ကြိုးစားပါ`);
+  }
+  const total = +r.headers.get('content-length') || 0;
+  const reader = r.body.getReader(), parts = [];
+  let got = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    parts.push(value); got += value.length;
+    onProg && onProg(total ? got / total : 0, got);
+  }
+  if (got < 1000) throw new Error('Video ဒေါင်းမရပါ — ခဏနေ ပြန်ကြိုးစားပါ');
+  const id = (link.match(/video\/(\d+)/) || link.match(/\/([A-Za-z0-9]{6,})\/?$/) || [])[1] || Date.now();
+  let title = '';
+  try { title = decodeURIComponent(r.headers.get('x-video-title') || ''); } catch {}
+  return { file: new File(parts, `tiktok_${id}.mp4`, { type: 'video/mp4' }), title, duration: +r.headers.get('x-video-duration') || 0 };
+}
+
 /* ---------- AssemblyAI (through the worker) ---------- */
 async function aai(path, opts = {}) {
   if (!cfg.workerUrl || !cfg.aaiKey) throw new Error('API Key Settings ထဲမှာ AssemblyAI key ကို အရင်ထည့်ပါ');

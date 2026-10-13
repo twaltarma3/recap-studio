@@ -149,3 +149,14 @@ body .ditem.on span{background:var(--grad) !important;color:#fff !important}
 /* ---------- guide ---------- */
 .guide .n{background:var(--grad) !important;color:#fff !important;box-shadow:0 4px 12px var(--violet-glow) !important}
 .guide .gbody{color:#d9d7e8}
+
+/* ---------- "paste a link" box under the upload area ---------- */
+.linkbox{margin:2px 0 14px}
+.ordiv{display:flex;align-items:center;gap:10px;color:var(--dim);font-size:13px;margin:4px 0 10px}
+.ordiv::before,.ordiv::after{content:'';flex:1;height:1px;background:var(--stroke-2)}
+.linkrow{display:flex;gap:8px;align-items:stretch}
+.linkrow input{flex:1;min-width:0;margin:0 !important;min-height:50px}
+.linkrow .btn{margin:0 !important;width:auto !important;flex:none;padding:0 14px;min-height:50px}
+.linkrow #lnkPaste{width:50px !important;padding:0}
+.linkrow #lnkLoad{padding:0 16px}
+#lnkProg{margin-top:10px}
