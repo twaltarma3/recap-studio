@@ -432,7 +432,7 @@ export function parseTranslations(raw) {
 }
 
 /* ---------- TTS ---------- */
-export async function tts(text, persona, pitchOffset = 0, rateOffset = 0, tries = 6) {
+export async function tts(text, persona, pitchOffset = 0, rateOffset = 0, tries = 6, onRetry = null) {
   let last;
   for (let k = 0; k < tries; k++) {
     try {
@@ -445,7 +445,7 @@ export async function tts(text, persona, pitchOffset = 0, rateOffset = 0, tries 
       const ab = await r.arrayBuffer();
       if (ab.byteLength < 200) throw new Error('TTS audio မရပါ');
       return ab;
-    } catch (e) { last = e; await sleep(Math.min(5000, 700 * (k + 1) ** 1.5)); }
+    } catch (e) { last = e; if (onRetry) onRetry(e); await sleep(Math.min(5000, 700 * (k + 1) ** 1.5)); }
   }
   throw last;
 }
@@ -453,11 +453,11 @@ export async function tts(text, persona, pitchOffset = 0, rateOffset = 0, tries 
 // clips already made in this session: re-rendering with the same text / voice / pitch / speed skips the network
 const TTS_MAX = 1500;
 const ttsMemo = new Map();
-async function ttsCached(text, persona, pitch, rate) {
+async function ttsCached(text, persona, pitch, rate, onRetry) {
   const key = [persona.voice, persona.pitch + pitch, Math.max(-50, Math.min(100, persona.rate + rate)), text].join('|');
   const hit = ttsMemo.get(key);
   if (hit) return hit.slice(0);                    // always hand out a copy: ffmpeg.writeFile transfers (empties) the buffer
-  const ab = await tts(text, persona, pitch, rate);
+  const ab = await tts(text, persona, pitch, rate, 6, onRetry);
   ttsMemo.set(key, ab.slice(0));
   if (ttsMemo.size > TTS_MAX) ttsMemo.delete(ttsMemo.keys().next().value);
   return ab;
@@ -822,7 +822,10 @@ function dubStats(placed, maxTempo) {
 export async function renderDub({ file, videoDur, segs, burmese, persona, pitch, rate = 0, fx = null, keepTalk = 0, keepGap = 0, offset = 0, maxTempo = 1.7, dubGain = 1.6, onProgress }) {
   const n = segs.length;
   const f = await getFFmpeg();
-  const flog = []; const onLog = ({ message }) => { flog.push(String(message)); if (flog.length > 400) flog.shift(); }; try { f.on('log', onLog); } catch {}
+  // flog: last 400 log lines (for error reports); fhead: first lines of the current run (input stream info)
+  const flog = [], fhead = [];
+  const onLog = ({ message }) => { const m = String(message); flog.push(m); if (flog.length > 400) flog.shift(); if (fhead.length < 150) fhead.push(m); };
+  try { f.on('log', onLog); } catch {}
   const ctx = new OfflineAudioContext(1, Math.ceil((videoDur + 30) * SR), SR);
   // seconds spent in each stage, shown on the result page
   const timing = {};
@@ -830,22 +833,23 @@ export async function renderDub({ file, videoDur, segs, burmese, persona, pitch,
   const lap = k => { const t = performance.now(); timing[k] = (timing[k] || 0) + (t - tMark) / 1000; tMark = t; };
   let inName = null, temp = false;
   try {
-    // 1) TTS (3 in parallel) — 0..50%
+    // 1) TTS (5 in parallel; drops to 3 as soon as any request has to be retried) — 0..50%
     const raw = new Array(n).fill(null);
     const todo = [...Array(n).keys()].filter(i => burmese[i]);
     const total = todo.length || 1;
-    let done = 0, failed = false;
-    const run = async () => {
-      while (todo.length && !failed) {          // one line failed for good -> the other workers stop too
+    let done = 0, failed = false, lanes = 5;
+    const slowDown = () => { lanes = 3; };
+    const run = async lane => {
+      while (todo.length && !failed && lane < lanes) {   // one line failed for good -> the other workers stop too
         const i = todo.shift();
-        try { raw[i] = await ttsCached(burmese[i], persona, pitch, rate); }
+        try { raw[i] = await ttsCached(burmese[i], persona, pitch, rate, slowDown); }
         catch (e) { failed = true; throw e; }
         done++;
         onProgress((done / total) * 0.5, `မြန်မာအသံ ထုတ်နေပါတယ် (${done}/${total})`);
       }
     };
     onProgress(0, `မြန်မာအသံ ထုတ်နေပါတယ် (0/${todo.length})`);
-  await Promise.all([run(), run(), run()]);
+    await Promise.all([0, 1, 2, 3, 4].map(run));
   lap('tts');
 
     // 2) fit each clip into its time slot — 50..75%
@@ -986,7 +990,7 @@ export async function renderDub({ file, videoDur, segs, burmese, persona, pitch,
           : vfOn && fxNames.length ? `ဗီဒီယိုကို ${fxNames.join('၊ ')} နဲ့ ပြန်ထုတ်ပြီး အသံပေါင်းနေပါတယ်`
           : a.mix ? 'မြန်မာအသံ၊ မူရင်းအသံနဲ့ ဗီဒီယို ပေါင်းနေပါတယ်' : 'မြန်မာအသံနဲ့ ဗီဒီယို ပေါင်းနေပါတယ်';
         onProgress(0.86, ffLabel);
-        flog.length = 0; flog.push(`#plan ${p + 1} ${a.mix ? 'mix' : 'nomix'}`);
+        flog.length = 0; fhead.length = 0; flog.push(`#plan ${p + 1} ${a.mix ? 'mix' : 'nomix'}`);
         code = await ffRun(f, a.args);
         if (code !== 0 && !diag) diag = flog.filter(x => x.length < 300).slice(-14).join('\n');
         if (code === 0) { usedMix = a.mix; fxFailed = !!fxFilter && p > 0; break outer; }
@@ -997,7 +1001,7 @@ export async function renderDub({ file, videoDur, segs, burmese, persona, pitch,
     lap('encode');
     // source video size / frame rate, read from ffmpeg's own log of the successful pass
     let src = null;
-    const sm = flog.join('\n').match(/Stream #0:\d+[^\n]*?Video:[^\n]*?(\d{2,5})x(\d{2,5})[^\n]*?([\d.]+) fps/);
+    const sm = fhead.join('\n').match(/Stream #0:\d+[^\n]*?Video:[^\n]*?(\d{2,5})x(\d{2,5})[^\n]*?([\d.]+) fps/);
     if (sm) src = { w: +sm[1], h: +sm[2], fps: +sm[3] };
     if (fx && fx.subs && fx.subs.on && !subs) fxFailed = true;
     try { f.off('log', onLog); } catch {}
