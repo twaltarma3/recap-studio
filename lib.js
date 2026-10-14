@@ -1047,7 +1047,7 @@ function dubStats(placed, maxTempo) {
   return { lateCount: d.filter(x => x > 0.5).length, maxDrift: Math.max(0, ...d), longLines };
 }
 
-export async function renderDub({ file, videoDur, segs, burmese, persona, pitch, rate = 0, fx = null, keepTalk = 0, keepGap = 0, offset = 0, maxTempo = 1.7, dubGain = 1.6, onProgress }) {
+export async function renderDub({ file, videoDur, segs, burmese, persona, pitch, rate = 0, fx = null, trimEnd = 0, keepTalk = 0, keepGap = 0, offset = 0, maxTempo = 1.7, dubGain = 1.6, onProgress }) {
   const n = segs.length;
   const f = await getFFmpeg();
   // flog: last 400 log lines (for error reports); fhead: first lines of the current run (input stream info)
@@ -1065,7 +1065,9 @@ export async function renderDub({ file, videoDur, segs, burmese, persona, pitch,
     // A line Microsoft will not speak is tried in smaller pieces, then left silent (listed on the result page);
     // too many of those, or any other error (network), stops the render.
     const raw = new Array(n).fill(null);
-    const todo = [...Array(n).keys()].filter(i => burmese[i] && speakable(burmese[i]));
+    // "cut the ending": the output stops at outDur; lines that start after it get no voice / subtitle
+    const outDur = trimEnd > 0 ? Math.max(1, videoDur - trimEnd) : 0;
+    const todo = [...Array(n).keys()].filter(i => burmese[i] && speakable(burmese[i]) && !(outDur && segs[i].start + offset >= outDur - 0.2));
     const total = todo.length || 1;
     const skipped = [];
     const maxSkip = Math.max(2, Math.floor(total * 0.1));
@@ -1203,7 +1205,7 @@ export async function renderDub({ file, videoDur, segs, burmese, persona, pitch,
     const build = (vf, withSubs, withOvl = false) => {
       const vMap = vf ? ['-map', '[v]'] : ['-map', '0:v:0'];
       const enc = vf ? ['-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '27', '-pix_fmt', 'yuv420p', ...mtEnc()] : ['-c:v', 'copy'];
-      const tail = ['-c:a', 'aac', '-b:a', '128k', '-shortest', '-movflags', '+faststart', 'out.mp4'];
+      const tail = ['-c:a', 'aac', '-b:a', '128k', '-shortest', ...(outDur ? ['-t', outDur.toFixed(2)] : []), '-movflags', '+faststart', 'out.mp4'];
       const base = [...mtArgs(), ...mtIn(mainDec()), '-i', inName, ...mtIn(1), '-i', 'mix.wav', ...(withSubs ? [...mtIn(1), '-f', 'concat', '-safe', '0', '-i', 'subs.txt'] : []), ...(withOvl ? [...mtIn(1), '-i', 'ovl.png'] : [])];
       const list = [];
       if (wantMix) {
