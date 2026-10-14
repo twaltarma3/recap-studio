@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Padauk:wght@400;700&display=swap');
+/* Padauk is loaded from index.html (with crossorigin, needed by the multi-core isolation headers) */
 /* Premium theme layer: visual only (colour, depth, shadow). Loaded after style.css, so it never touches layout. */
 :root{
   --ink:#191743; --muted:#6d6b8c; --line:#e3dff6; --bg:#f3f1fb; --card:#fff;

@@ -184,6 +184,9 @@ async function ffRun(f, args) {
 // phone the pool runs out and ffmpeg waits forever. Explicit small numbers avoid that and were also fastest.
 const mtArgs = () => (ffKind === 'mt' ? ['-filter_threads', '1', '-filter_complex_threads', '1'] : []);
 const mtIn = n => (ffKind === 'mt' ? ['-threads', String(n)] : []);            // decoder threads, goes before an -i
+// decoder threads for the main video: reading (decoding) a 1080p / 60 fps source is the slowest part once 720p and
+// 30 fps shrink the encode; 4 threads decode ~30% faster than 2. Phones with fewer cores stay at 2.
+const mainDec = () => ((navigator.hardwareConcurrency || 4) >= 6 ? 4 : 2);
 const mtEnc = () => (ffKind === 'mt' ? ['-threads', '4'] : []);                 // x264 encoder threads
 
 // is the engine the user currently wants already downloaded?
@@ -742,8 +745,9 @@ export function outGeometry(sz, fx) {
   const W = even(sz.w), H = even(sz.h);
   const r = fx && RATIOS[fx.ratio];
   if (!r) {
-    // "fast" option: shrink a large original-ratio video to 1280 on the long side (same size the ratio presets use)
-    const k = fx && fx.fast ? Math.min(1, 1280 / Math.max(W, H)) : 1;
+    // "fast" option: shrink a large original-ratio video to 720p — at most 720 on the short side and 1280 on the
+    // long side (1920x1080 -> 1280x720, 1080x1080 -> 720x720, 1080x1920 -> 720x1280)
+    const k = fx && fx.fast ? Math.min(1, 1280 / Math.max(W, H), 720 / Math.min(W, H)) : 1;
     if (k < 1) return { W, H, OW: even(W * k), OH: even(H * k), ratio: false, scaled: true };
     return { W, H, OW: W, OH: H, ratio: false };
   }
@@ -753,6 +757,8 @@ export function outGeometry(sz, fx) {
 }
 
 /* ---- video filter graph: ratio -> mirror -> zoom -> blurred band -> burned-in subtitles -> watermark/logo ---- */
+// Scaling uses fast_bilinear (bilinear for the zoom-in): ffmpeg's default bicubic is so slow in WebAssembly that
+// shrinking to 720p made the multi-core encode slower than not shrinking at all.
 // subs: {y} (input 2 = png sequence); g: geometry from outGeometry(); ovl: input index of the watermark/logo png (0 = none)
 function buildFx(fx, subs, g, ovl = 0) {
   const mirror = !!(fx && fx.mirror), blur = !!(fx && fx.blur);
@@ -763,23 +769,23 @@ function buildFx(fx, subs, g, ovl = 0) {
   let cur = '[0:v]', n = 0;
   const lbl = () => `[t${n++}]`;
   if (fx && fx.cap30) { const o = lbl(); gr.push(`${cur}fps=30${o}`); cur = o; }        // 60 fps source -> 30 fps (half the frames to encode)
-  if (!geo && g && g.scaled) { const o = lbl(); gr.push(`${cur}scale=${g.OW}:${g.OH}${o}`); cur = o; }
+  if (!geo && g && g.scaled) { const o = lbl(); gr.push(`${cur}scale=${g.OW}:${g.OH}:flags=fast_bilinear${o}`); cur = o; }
   if (geo) {
     const o = lbl();
     if (fx.fit === 'pad') {
       gr.push(`${cur}split[p1][p2]`);
-      gr.push(`[p1]scale=${g.OW}:${g.OH}:force_original_aspect_ratio=increase,crop=${g.OW}:${g.OH},scale=${even(g.OW / 6)}:${even(g.OH / 6)},gblur=sigma=6:steps=2,scale=${g.OW}:${g.OH}[pbg]`);
-      gr.push(`[p2]scale=${g.OW}:${g.OH}:force_original_aspect_ratio=decrease[pfg]`);
+      gr.push(`[p1]scale=${g.OW}:${g.OH}:force_original_aspect_ratio=increase:flags=fast_bilinear,crop=${g.OW}:${g.OH},scale=${even(g.OW / 6)}:${even(g.OH / 6)}:flags=fast_bilinear,gblur=sigma=6:steps=2,scale=${g.OW}:${g.OH}:flags=fast_bilinear[pbg]`);
+      gr.push(`[p2]scale=${g.OW}:${g.OH}:force_original_aspect_ratio=decrease:flags=fast_bilinear[pfg]`);
       gr.push(`[pbg][pfg]overlay=x=(W-w)/2:y=(H-h)/2${o}`);
     } else {
-      gr.push(`${cur}scale=${g.OW}:${g.OH}:force_original_aspect_ratio=increase,crop=${g.OW}:${g.OH}${o}`);
+      gr.push(`${cur}scale=${g.OW}:${g.OH}:force_original_aspect_ratio=increase:flags=fast_bilinear,crop=${g.OW}:${g.OH}${o}`);
     }
     cur = o;
   }
   if (mirror) { const o = lbl(); gr.push(`${cur}hflip${o}`); cur = o; }
   if (doZoom) {
     const o = lbl();
-    gr.push(`${cur}crop=${even(g.OW / zoom)}:${even(g.OH / zoom)},scale=${g.OW}:${g.OH}${o}`);
+    gr.push(`${cur}crop=${even(g.OW / zoom)}:${even(g.OH / zoom)},scale=${g.OW}:${g.OH}:flags=bilinear${o}`);
     cur = o;
   }
   if (blur) {
@@ -1198,7 +1204,7 @@ export async function renderDub({ file, videoDur, segs, burmese, persona, pitch,
       const vMap = vf ? ['-map', '[v]'] : ['-map', '0:v:0'];
       const enc = vf ? ['-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '27', '-pix_fmt', 'yuv420p', ...mtEnc()] : ['-c:v', 'copy'];
       const tail = ['-c:a', 'aac', '-b:a', '128k', '-shortest', '-movflags', '+faststart', 'out.mp4'];
-      const base = [...mtArgs(), ...mtIn(2), '-i', inName, ...mtIn(1), '-i', 'mix.wav', ...(withSubs ? [...mtIn(1), '-f', 'concat', '-safe', '0', '-i', 'subs.txt'] : []), ...(withOvl ? [...mtIn(1), '-i', 'ovl.png'] : [])];
+      const base = [...mtArgs(), ...mtIn(mainDec()), '-i', inName, ...mtIn(1), '-i', 'mix.wav', ...(withSubs ? [...mtIn(1), '-f', 'concat', '-safe', '0', '-i', 'subs.txt'] : []), ...(withOvl ? [...mtIn(1), '-i', 'ovl.png'] : [])];
       const list = [];
       if (wantMix) {
         for (const lim of [',alimiter=limit=0.95:level=0', '']) {
@@ -1254,6 +1260,9 @@ export async function renderDub({ file, videoDur, segs, burmese, persona, pitch,
     let src = null;
     const sm = fhead.join('\n').match(/Stream #0:\d+[^\n]*?Video:[^\n]*?(\d{2,5})x(\d{2,5})[^\n]*?([\d.]+) fps/);
     if (sm) src = { w: +sm[1], h: +sm[2], fps: +sm[3] };
+    // what was actually written: size after 720p / ratio, frame rate after the 30 fps option (null = stream copy)
+    let outV = null;
+    if (src && fxFilter && !fxFailed) outV = { w: geo ? geo.OW : src.w, h: geo ? geo.OH : src.h, fps: fx && fx.cap30 ? 30 : src.fps };
     if (fx && fx.subs && fx.subs.on && !subs) fxFailed = true;
     try { f.off('log', onLog); } catch {}
     if (fx && fx.subs && fx.subs.on && !subs) diag = (diag ? diag + '\n' : '') + 'subtitle track build failed' + (subs === null ? '' : '');
@@ -1264,7 +1273,7 @@ export async function renderDub({ file, videoDur, segs, burmese, persona, pitch,
     lap('save');
     setFFProgress(null);
     onProgress(1, 'ပြီးပါပြီ 🎉');
-    return { video: new Blob([out.slice().buffer], { type: 'video/mp4' }), placed, fellBack, fxFailed, fontFailed, diag, geoOk: !!geo, ovlOk: ovl, subsOk: !!subs, stats: dubStats(placed, maxTempo), timing, tries, src, engine: engineInfo(), skipped: skipped.sort((a, b) => a - b) };
+    return { video: new Blob([out.slice().buffer], { type: 'video/mp4' }), placed, fellBack, fxFailed, fontFailed, diag, geoOk: !!geo, ovlOk: ovl, subsOk: !!subs, stats: dubStats(placed, maxTempo), timing, tries, src, engine: engineInfo(), out: outV, skipped: skipped.sort((a, b) => a - b) };
   } catch (e) {
     // failed part-way: free the leftover work files so a retry doesn't run out of memory
     try { f.off('log', onLog); } catch {}

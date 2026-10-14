@@ -5,6 +5,7 @@ import './design.css';
 import { startIcons } from './icons.js';
 import * as L from './lib.js';
 import * as H from './history.js';
+import * as T from './thumb.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 const DEFAULTS = { pitch: 10, rate: 20, keepTalk: 0, keepGap: 0.3, offset: 0, maxTempo: 2.0, dubGain: 1.8 };
@@ -12,7 +13,7 @@ const state = {
   step: 1, showSrc: false, file: null, videoDur: 0, lang: 'auto', segs: [], sourceLines: [],
   burmese: [], personaId: 'TH', ...DEFAULTS, result: null, busy: false, origSegs: null,
   fxMirror: false, fxBlur: false, blurH: 15, blurY: 100, blurS: 50, blurO: 100, previewUrl: null, previewFor: null,
-  pStyle: 'recap', fxRatio: 'orig', fxFit: 'crop', fxZoom: 100, fxFast: false, fxFps30: false, wmOn: false, wmText: '', wmPos: 'br', wmSize: 4,
+  pStyle: 'recap', fxRatio: 'orig', fxFit: 'crop', fxZoom: 100, fxFast: true, fxFps30: true, wmOn: false, wmText: '', wmPos: 'br', wmSize: 4,
   logoOn: false, logoData: null, logoPos: 'tr', logoSize: 14, tab: 'video',
   fxSubs: false, subS: 5, subY: 88, subC: '#ffffff', subO: '#000000', subFont: 'pt16', fontOk: false
 };
@@ -53,6 +54,7 @@ const esc = t => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;');
 // drop extra blank lines at the end (a stray Enter) so the line count still matches
 const trimTail = (lines, n) => { while (lines.length > n && lines[lines.length - 1] === '') lines.pop(); return lines; };
 function clearResult() {
+  state.thumb = null;                                                           // thumbnail belongs to that result
   if (state.result && state.result.url) URL.revokeObjectURL(state.result.url);   // free the old video from memory
   state.result = null;
 }
@@ -1079,7 +1081,7 @@ async function step4() {
       setQuota(a);
     }
     const persona = L.PERSONAS.find(p => p.id === state.personaId);
-    const { video, placed, fellBack, fxFailed, fontFailed, diag, geoOk, ovlOk, subsOk, stats, timing, tries, src, engine, skipped } = await L.renderDub({
+    const { video, placed, fellBack, fxFailed, fontFailed, diag, geoOk, ovlOk, subsOk, stats, timing, tries, src, out, engine, skipped } = await L.renderDub({
       file: state.file, videoDur: state.videoDur, segs: state.segs, burmese: state.burmese,
       persona, pitch: state.pitch, rate: state.rate,
       fx: {
@@ -1093,7 +1095,7 @@ async function step4() {
     });
     state.diag = `geo:${geoOk} subs:${subsOk} overlay:${ovlOk} fxFailed:${fxFailed}\n${diag || ''}`;
     const took = stopClock();
-    state.result = { video, url: URL.createObjectURL(video), srt: L.buildSrt(state.burmese, placed), stats, took, timing, tries, src, engine, skipped };
+    state.result = { video, url: URL.createObjectURL(video), srt: L.buildSrt(state.burmese, placed), stats, took, timing, tries, src, out, engine, skipped };
     showResult();
     H.histAdd({ name: state.file.name, video, srt: state.result.srt, size: video.size, dur: state.videoDur, took })
       .catch(() => toast('မှတ်တမ်းထဲ သိမ်းဖို့ ဖုန်းထဲ နေရာမလောက်ပါ — Video ကို Download လုပ်ထားပါ'));
@@ -1169,7 +1171,8 @@ function timingBlock() {
   const rows = STAGES.filter(([k]) => t[k] >= 0.05).map(([k, label]) => `
     <div class="trow"><span>${label}</span><b>${secTxt(t[k])}</b></div>
     <div class="tbar"><i style="width:${Math.max(2, Math.round((t[k] / max) * 100))}%"></i></div>`).join('');
-  const src = r.src ? `<p class="muted small" style="margin:10px 0 0">📹 မူရင်း Video: ${r.src.w}×${r.src.h} · ${Math.round(r.src.fps)} fps</p>` : '';
+  const o = r.out, same = o && r.src && o.w === r.src.w && o.h === r.src.h && Math.round(o.fps) === Math.round(r.src.fps);
+  const src = r.src ? `<p class="muted small" style="margin:10px 0 0">📹 မူရင်း Video: ${r.src.w}×${r.src.h} · ${Math.round(r.src.fps)} fps${o && !same ? ` → ထုတ်ထားတာ: ${o.w}×${o.h} · ${Math.round(o.fps)} fps` : ''}</p>` : '';
   const en = r.engine && r.engine.kind
     ? `<p class="muted small" style="margin:6px 0 0">⚙ Engine: ${r.engine.kind === 'mt' ? `⚡ Multi-core (core ${navigator.hardwareConcurrency || '?'} ခု)` : 'ပုံမှန် (single-core)'}${r.engine.fellBack ? ' — Multi-core အဆင်မပြေလို့' : ''}</p>` : '';
   const retry = r.tries > 1 ? `<p class="muted small" style="margin:6px 0 0">🔁 ပထမနည်း မရလို့ Video ကို ${r.tries} ကြိမ် ထုတ်ခဲ့ရပါတယ်</p>` : '';
@@ -1186,6 +1189,7 @@ function showResult() {
     ${state.diag && /fxFailed:true|false\n[^]/.test(state.diag) && /fxFailed:true|failed|Error|error/i.test(state.diag) ? `<details style="margin:10px 0"><summary class="muted small">🛠 Effect log (အမှားရှာရန်)</summary><pre id="diagTxt" style="white-space:pre-wrap;font-size:11px;max-height:220px;overflow:auto">${esc(state.diag)}</pre><button class="btn block" id="diagCp" type="button">📋 Log ကူးမည်</button></details>` : ''}
     <button id="dl" class="btn primary">⬇ Video Download (.mp4)</button>
     <button id="srt" class="btn block">Download Subtitles (.srt)</button>
+    <div id="thumbBox"><button id="thumbGo" class="btn block">🖼 Thumbnail ပြုလုပ်မည် (ChatGPT 3D)</button></div>
     <div class="row" style="margin-top:14px">
       <button id="back" class="ghost">‹ အသံရွေးချယ်မှုသို့</button>
       <button id="again" class="ghost">Video အသစ်</button>
@@ -1199,6 +1203,8 @@ function showResult() {
     try { await navigator.clipboard.writeText(t); toast('Prompt ကူးပြီးပါပြီ — Gemini မှာ paste လုပ်ပါ'); } catch { toast('ကူးမရပါ'); }
   });
   $('#toStep2')?.addEventListener('click', () => { state.showSrc = true; go(2); });
+  $('#thumbGo').onclick = () => thumbPanel();
+  if (state.thumb && state.thumb.shots) thumbPanel();
   $('#back').onclick = () => { clearResult(); go(3); };
   $('#again').onclick = () => { clearResult(); Object.assign(state, { showSrc: false, file: null, segs: [], origSegs: null, burmese: [] }); go(1); };
 }
@@ -1362,7 +1368,63 @@ async function pageAdmin() {
   });
 }
 
+/* ---------------- Thumbnail: pick a shot of the main character, ChatGPT makes the 3D thumbnail ---------------- */
+async function thumbPanel() {
+  const box = $('#thumbBox'); if (!box) return;
+  const th = state.thumb || (state.thumb = { shots: null, sel: 0, src: null });
+  if (!th.shots) {
+    box.innerHTML = `<div class="panel"><b>🖼 Thumbnail</b>
+      <p class="muted small" id="tbMsg">အဓိက ဇာတ်ကောင်ရဲ့ ပုံတွေ ရှာနေပါတယ်… (ပထမဆုံးတစ်ကြိမ် မျက်နှာရှာ Engine ~13MB ဒေါင်းပါမယ်)</p>
+      <div class="bar"><i id="tbFill"></i></div></div>`;
+    // the original upload (no subtitles burned in); if the phone can't decode it, the finished video
+    const srcs = [state.file && URL.createObjectURL(state.file), state.result && state.result.url].filter(Boolean);
+    let err = null;
+    for (const src of srcs) {
+      try {
+        const r = await T.pickCharacterShots(src, { onProgress: p => { const f = $('#tbFill'); if (f) f.style.width = Math.round(p * 100) + '%'; } });
+        Object.assign(th, { shots: r.shots, faces: r.faces, src, sel: 0 });
+        break;
+      } catch (e) { err = e; }
+    }
+    if (!th.shots) { box.innerHTML = `<div class="err">${esc((err && err.message) || 'ပုံထုတ်လို့ မရပါ')}</div><button id="thumbGo" class="btn block">ပြန်ကြိုးစားမည်</button>`; $('#thumbGo').onclick = () => thumbPanel(); return; }
+  }
+  if (!$('#thumbBox')) return;
+  box.innerHTML = `
+    <div class="panel thumbp">
+      <b>🖼 Thumbnail (ChatGPT နဲ့ 3D ပုံ)</b>
+      <p class="tstep">၁) ဇာတ်ကောင်ပုံ တစ်ပုံ ရွေးပါ</p>
+      ${th.faces ? '' : '<p class="muted small">မျက်နှာ ရှင်းရှင်း မတွေ့လို့ ပုံအကြည်ဆုံးတွေကို ပြထားပါတယ်။</p>'}
+      <div class="tshots">${th.shots.map((f, i) => `<button type="button" data-i="${i}" class="${i === th.sel ? 'on' : ''}"><img src="${f.img}" alt="" /><small>${fmtDur(f.t)}</small></button>`).join('')}</div>
+      <p class="tstep">၂) ပုံ ဒေါင်းပြီး Prompt ကူးပါ</p>
+      <button type="button" class="btn primary block" id="tbGet">📋 ပုံ ဒေါင်း + Prompt ကူးမည်</button>
+      <p class="tstep">၃) ChatGPT မှာ ပုံ ထုတ်ပါ</p>
+      <a class="btn block" id="tbOpen" href="https://chatgpt.com/" target="_blank" rel="noopener" style="display:block;text-align:center">💬 ChatGPT ဖွင့်မည်</a>
+      <ol class="muted small tsteps">
+        <li><b>+</b> ကိုနှိပ်ပြီး ဒေါင်းထားတဲ့ ပုံကို ထည့်ပါ</li>
+        <li>Prompt ကို paste လုပ်ပြီး ပို့ပါ</li>
+        <li>ChatGPT က ခေါင်းစဉ် ၅ ခုနဲ့ ဒီဇိုင်း ၅ မျိုး ပြပါမယ် — ကြိုက်တာ ရွေးပြီး ပြောပါ (ဥပမာ <b>"ခေါင်းစဉ် 2၊ ဒီဇိုင်း 3"</b>)</li>
+        <li>ထွက်လာတဲ့ 3D ပုံကို Download လုပ်ပြီး သုံးပါ</li>
+      </ol>
+      <p class="warn small" style="margin-top:10px">💡 ChatGPT က မြန်မာစာလုံးကို တစ်ခါတလေ မှားရေးတတ်ပါတယ်။ မှားနေရင် <b>"ခေါင်းစဉ်စာလုံး မှန်အောင် ပြန်ထုတ်ပေးပါ"</b> လို့ ထပ်ပြောပါ။</p>
+    </div>`;
+  view.querySelectorAll('.tshots button').forEach(b => {
+    b.onclick = () => { th.sel = +b.dataset.i; view.querySelectorAll('.tshots button').forEach(x => x.classList.toggle('on', x === b)); };
+  });
+  $('#tbGet').onclick = async () => {
+    const b = $('#tbGet'); b.disabled = true;
+    let copied = false;
+    try { await navigator.clipboard.writeText(T.chatgptPrompt(state.burmese)); copied = true; } catch {}
+    try {
+      const blob = await T.shotBlob(th.src, th.shots[th.sel]);
+      if (blob) download(blob, state.file.name.replace(/\.[^.]+$/, '') + '_character.jpg');
+      toast(copied ? '✅ ပုံ ဒေါင်းပြီး Prompt ကူးပြီးပါပြီ — ChatGPT ဖွင့်ပါ' : 'ပုံ ဒေါင်းပြီးပါပြီ — Prompt ကူးမရလို့ ထပ်နှိပ်ပါ');
+    } catch { toast('ပုံ ထုတ်လို့ မရပါ'); }
+    b.disabled = false;
+  };
+}
+
 /* ---------------- start ---------------- */
+if (import.meta.env.DEV) window.__recap = { state, go };     // for local UI tests only (not in the built app)
 startIcons();
 buildMenu();
 (async () => {
