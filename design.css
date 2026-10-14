@@ -160,3 +160,17 @@ body .ditem.on span{background:var(--grad) !important;color:#fff !important}
 .linkrow #lnkPaste{width:50px !important;padding:0}
 .linkrow #lnkLoad{padding:0 16px}
 #lnkProg{margin-top:10px}
+
+/* ---------- access code / admin ---------- */
+.quota{margin:-2px 0 10px}
+.quota b{color:#c9b8ff}
+.codeline{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px;padding:10px 12px;border-radius:14px;background:#0e0d16;border:1px dashed rgba(139,92,246,.45)}
+.codeline .ccode{font-size:20px;letter-spacing:3px;font-family:ui-monospace,Menlo,Consolas,monospace;color:#e9e2ff}
+.codeline .ghost{width:44px;height:44px;min-height:44px;padding:0;margin:0;flex:none}
+.limrow{display:flex;align-items:center;gap:10px}
+.limrow .ghost{width:44px;height:44px;min-height:44px;padding:0;margin:0;font-size:22px}
+.limrow b{min-width:28px;text-align:center;font-size:18px}
+.acode .two{margin-top:10px}
+#nLimit{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+#nLimit .chip{flex:1 1 0;min-width:48px}
+#nLimit .chip.on{background:var(--grad) !important;color:#fff !important;border-color:transparent !important;box-shadow:0 6px 16px rgba(124,58,237,.35) !important}

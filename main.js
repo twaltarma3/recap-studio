@@ -16,6 +16,10 @@ const state = {
   logoOn: false, logoData: null, logoPos: 'tr', logoSize: 14, tab: 'video',
   fxSubs: false, subS: 5, subY: 88, subC: '#ffffff', subO: '#000000', subFont: 'pt16', fontOk: false
 };
+// access codes: on only when the Worker has them set up (accessCheck answers something other than {open:true})
+const acc = { on: false, ok: false, name: '', limit: 0, used: 0, left: -1 };
+const setQuota = r => Object.assign(acc, { ok: true, name: r.name || '', limit: r.limit || 0, used: r.used || 0, left: r.left ?? -1 });
+const quotaTxt = () => acc.limit > 0 ? `ယနေ့ ကျန် ${acc.left}/${acc.limit} ပုဒ်` : 'အကန့်အသတ် မရှိ';
 const STEPS = ['ဗီဒီယိုတင်', 'မူရင်းစာသား', 'ဘာသာပြန်', 'ရလဒ်'];
 const view = $('#view');
 const selFont = () => (state.subFont === 'custom' && !state.fontOk) ? 'system' : state.subFont;
@@ -71,13 +75,14 @@ function go(step) { state.step = step; render(); window.scrollTo(0, 0); }
 function render() {
   histUrls.forEach(u => URL.revokeObjectURL(u)); histUrls = [];      // leaving / redrawing History: free its videos
   const stp = $('#stepper');
+  if (acc.on && !acc.ok && !['code', 'admin', 'guide'].includes(page)) page = 'code';   // no valid code yet
   if (page === 'free') {
     stp.style.display = '';
     renderStepper();
     [null, step1, step2, step3, step4][state.step]();
   } else {
     stp.style.display = 'none';
-    ({ premium: pagePremium, keys: pageKeys, guide: pageGuide, history: pageHistory }[page])();
+    ({ premium: pagePremium, keys: pageKeys, guide: pageGuide, history: pageHistory, code: pageCode, admin: pageAdmin }[page])();
   }
   syncMenu();
 }
@@ -85,7 +90,12 @@ function render() {
 /* ---------------- menu (hamburger + drawer) ---------------- */
 function openDrawer() { $('#drawer').classList.add('open'); $('#scrim').classList.add('open'); }
 function closeDrawer() { $('#drawer').classList.remove('open'); $('#scrim').classList.remove('open'); }
-function syncMenu() { document.querySelectorAll('.ditem').forEach(b => b.classList.toggle('on', b.dataset.p === page)); }
+function syncMenu() {
+  document.querySelectorAll('.ditem').forEach(b => b.classList.toggle('on', b.dataset.p === page));
+  const dc = $('#dCode'), da = $('#dAdmin');
+  if (dc) { dc.hidden = !acc.on; $('#dCodeTxt').textContent = acc.ok ? `${acc.name} · ${quotaTxt()}` : 'Code ထည့်ရန်'; }
+  if (da) da.hidden = !L.access.adminPass;
+}
 function openPage(p) {
   closeDrawer();
   if (state.busy) { toast('လုပ်ဆောင်နေစဉ် မပြောင်းနိုင်ပါ — ပြီးအောင်စောင့်ပါ'); return; }
@@ -107,6 +117,8 @@ function buildMenu() {
       <button class="ditem" data-p="keys"><span>⚙</span><b>API Key Settings</b><small>AssemblyAI Key · FFmpeg Engine</small></button>
       <button class="ditem" data-p="guide"><span>📖</span><b>အသုံးပြုပုံ လမ်းညွှန်</b><small>အဆင့်လိုက် ရှင်းလင်းချက်</small></button>
       <button class="ditem" data-p="history"><span>🗂</span><b>မှတ်တမ်း (History)</b><small>နောက်ဆုံး ထုတ်ထားတဲ့ Video ၂ ခု</small></button>
+      <button class="ditem" data-p="code" id="dCode" hidden><span>🔑</span><b>Access Code</b><small id="dCodeTxt">…</small></button>
+      <button class="ditem" data-p="admin" id="dAdmin" hidden><span>🛡</span><b>Admin</b><small>Code ထုတ်ရန် · Limit စီမံရန်</small></button>
     </nav>`);
   burger.onclick = openDrawer;
   $('#scrim').onclick = closeDrawer;
@@ -844,6 +856,7 @@ function bindLinkBox() {
 function step1() {
   view.innerHTML = `
     <h2>Video တင်ပါ</h2>
+    ${acc.on && acc.ok ? `<p class="muted small quota">🎟 ${esc(acc.name)} · <b>${quotaTxt()}</b></p>` : ''}
     <label class="drop ${state.file ? 'has' : ''}" for="f">
       <input id="f" type="file" accept="video/*" hidden />
       <b>${state.file ? esc(state.file.name) : 'နှိပ်၍ Video File ရွေးချယ်ပါ'}</b>
@@ -1057,6 +1070,14 @@ async function step4() {
   const stopClock = startClock();
   let mtRetry = false;
   try {
+    if (acc.on) {
+      // one use per video per day; re-rendering the same file again today is free
+      const a = await L.accessStart(`${state.file.name}|${state.file.size}`);
+      if (a.error === 'limit') throw Object.assign(new Error(`ယနေ့အတွက် Video ${a.limit} ပုဒ် ထုတ်ပြီးပါပြီ`), { limit: true });
+      if (a.error === 'bad_code') { acc.ok = false; throw Object.assign(new Error('Access Code မမှန်တော့ပါ (ပိတ်ထား / ဖျက်ထား)'), { badCode: true }); }
+      if (!a.ticket) throw new Error('Access စစ်လို့မရပါ (' + (a.status || 'network') + ')');
+      setQuota(a);
+    }
     const persona = L.PERSONAS.find(p => p.id === state.personaId);
     const { video, placed, fellBack, fxFailed, fontFailed, diag, geoOk, ovlOk, subsOk, stats, timing, tries, src, engine, skipped } = await L.renderDub({
       file: state.file, videoDur: state.videoDur, segs: state.segs, burmese: state.burmese,
@@ -1082,7 +1103,17 @@ async function step4() {
   } catch (e) {
     if (e && e.mtStall) { mtRetry = true; return; }      // multi-core got stuck: run again on the normal engine (see finally)
     view.innerHTML = `<h2>အမှားရှိနေပါသည်</h2>`; showErr(e);
-    errTip(/No audio|အသံမထွက်/i.test(String(e && e.message))
+    if (e && (e.limit || e.badCode)) {
+      errTip(e.limit
+        ? '🎟 အစမ်းသုံးခွင့်က တစ်ရက်ကို အကန့်အသတ် ရှိပါတယ်။ <b>မနက်ဖြန် (မြန်မာစံတော်ချိန် ည ၁၂ နာရီနောက်)</b> ပြန်ထုတ်လို့ရပါမယ်။ ပြင်ထားတဲ့ စာသားတွေ မပျောက်ပါဘူး — ဒီ tab ကို မပိတ်ပါနဲ့။'
+        : '🔑 Code ပေးထားတဲ့သူကို ဆက်သွယ်ပြီး Code အသစ် တောင်းပါ။');
+      view.insertAdjacentHTML('beforeend', `<button class="btn block" id="back">ဘာသာပြန် အဆင့်သို့ ပြန်သွားမည်</button>`);
+      $('#back').onclick = () => (e.badCode ? openPage('code') : go(3));
+      return;
+    }
+    errTip(/ticket/i.test(String(e && e.message))
+      ? '🔑 Access Code နဲ့ ပြန်ဝင်ပြီး <b>ပြန်စမည်</b> ကိုနှိပ်ပါ။'
+      : /No audio|အသံမထွက်/i.test(String(e && e.message))
       ? '⚠ <b>Microsoft က မြန်မာအသံ ထုတ်မပေးပါ။</b> အသံအများကြီး ဆက်တိုက်တောင်းရင် ခဏပိတ်ထားတတ်ပါတယ်။ ၁၀–၁၅ မိနစ်လောက် နားပြီး <b>ပြန်စမည်</b> ကိုနှိပ်ပါ (ရပြီးသား အသံတွေကို ပြန်မတောင်းတော့ပါဘူး)။ Error မှာပါတဲ့ ID စာကြောင်းတွေမှာ သင်္ကေတ / အင်္ဂလိပ်စာ ပါရင် မြန်မာလို ပြင်ရေးကြည့်ပါ။'
       : /TTS|fetch|network|connection/i.test(String(e && e.message))
       ? '⚠ <b>မြန်မာအသံ ထုတ်တဲ့ server နဲ့ ချိတ်ဆက်မှု ပြတ်သွားပါတယ်။</b> Wi-Fi / Internet ကောင်းမကောင်း အရင်စစ်ပြီး <b>ပြန်စမည်</b> ကိုနှိပ်ပါ။ ပြင်ထားတဲ့ စာသားနဲ့ Setting တွေ မပျောက်ပါဘူး။'
@@ -1172,8 +1203,176 @@ function showResult() {
   $('#again').onclick = () => { clearResult(); Object.assign(state, { showSrc: false, file: null, segs: [], origSegs: null, burmese: [] }); go(1); };
 }
 
+
+/* ---------------- Access code (people trying the app get a code with a daily limit) ---------------- */
+function pageCode() {
+  view.innerHTML = acc.ok ? `
+    <h2>🔑 Access Code</h2>
+    <div class="kbox">
+      <div class="krow"><b>${esc(acc.name)}</b><span class="badge ok">Active</span></div>
+      <p class="muted small" style="margin:8px 0 0">Code: <b>${esc(L.access.code)}</b></p>
+      <p style="margin:10px 0 0">🎟 <b>${quotaTxt()}</b></p>
+      <p class="muted small" style="margin:6px 0 0">Video တစ်ပုဒ် ထုတ်တိုင်း တစ်ခါ ရေတွက်ပါတယ်။ Video တစ်ပုဒ်တည်းကို ယနေ့ထဲ ပြန်ထုတ်ရင် ထပ်မရေတွက်ပါ။ မြန်မာစံတော်ချိန် ည ၁၂ နာရီမှာ ပြန်စပါတယ်။</p>
+    </div>
+    <button class="btn primary block" id="toFree">🎬 Video ထုတ်မည်</button>
+    <button class="btn block" id="logout">Code ပြောင်းမည်</button>
+    <p class="small" style="text-align:center;margin-top:18px"><a class="link" id="toAdmin">🛡 Admin</a></p>` : `
+    <h2>🔑 Access Code ထည့်ပါ</h2>
+    <p class="muted">ဒီ App ကို အစမ်းသုံးဖို့ Code လိုပါတယ်။ Code ပေးထားတဲ့သူဆီက ရထားတဲ့ Code ကို ထည့်ပါ။</p>
+    <div class="kbox">
+      <input id="codeIn" placeholder="ဥပမာ  ABCD-1234" autocomplete="off" autocapitalize="characters" spellcheck="false" style="text-transform:uppercase;letter-spacing:2px;font-size:20px;text-align:center" value="${esc(L.access.code)}" />
+      <button class="btn primary block" id="codeGo">ဝင်မည်</button>
+      <div id="codeErr" class="err" hidden></div>
+    </div>
+    <p class="small" style="text-align:center;margin-top:18px"><a class="link" id="toAdmin">🛡 Admin</a></p>`;
+  $('#toAdmin').onclick = () => openPage('admin');
+  if (acc.ok) {
+    $('#toFree').onclick = () => openPage('free');
+    $('#logout').onclick = () => { L.access.code = ''; acc.ok = false; render(); };
+    // refresh today's count
+    L.accessCheck().then(r => { if (r && r.name && page === 'code') { setQuota(r); pageCode(); syncMenu(); } }).catch(() => {});
+    return;
+  }
+  const go_ = async () => {
+    const code = $('#codeIn').value.trim().toUpperCase();
+    const err = $('#codeErr'), b = $('#codeGo');
+    if (!code) return;
+    b.disabled = true; err.hidden = true;
+    try {
+      const r = await L.accessCheck(code);
+      if (r.open) { acc.on = false; acc.ok = true; openPage('free'); return; }
+      if (r.error) throw new Error('Code မမှန်ပါ (သို့) ပိတ်ထားပါတယ်');
+      L.access.code = code; setQuota(r);
+      toast(`✅ ${r.name} — ${quotaTxt()}`);
+      openPage(L.cfg.aaiKey ? 'free' : 'keys');
+    } catch (e) {
+      err.hidden = false; err.textContent = e.message === 'Failed to fetch' ? 'ချိတ်ဆက်မရပါ — Internet စစ်ပါ' : e.message;
+    }
+    b.disabled = false;
+  };
+  $('#codeGo').onclick = go_;
+  $('#codeIn').onkeydown = e => { if (e.key === 'Enter') go_(); };
+}
+
+/* ---------------- Admin: make codes, set the daily limit, see who used what ---------------- */
+const agoDays = t => {
+  if (!t) return 'မသုံးရသေး';
+  const m = Math.floor((Date.now() - t) / 60000);
+  return m < 1 ? 'အခုလေးတင်' : m < 60 ? `${m} မိနစ်က` : m < 1440 ? `${Math.floor(m / 60)} နာရီက` : `${Math.floor(m / 1440)} ရက်က`;
+};
+const APP_URL = 'https://recap-studio-74n.pages.dev';
+const shareText = c => `🎬 Recap Studio\nAccess Code: ${c.code}\nတစ်ရက် ${c.limit > 0 ? c.limit + ' ပုဒ်' : 'အကန့်အသတ်မရှိ'}\n${APP_URL}`;
+async function shareCode(c) {
+  const text = shareText(c);
+  try { if (navigator.share) { await navigator.share({ text }); return; } } catch (e) { if (e && e.name === 'AbortError') return; }
+  try { await navigator.clipboard.writeText(text); toast('📋 Code နဲ့ Link ကူးပြီးပါပြီ'); } catch { toast(c.code); }
+}
+
+async function pageAdmin() {
+  if (!L.access.adminPass) {
+    view.innerHTML = `
+      <h2>🛡 Admin</h2>
+      <p class="muted">Worker မှာ ထည့်ထားတဲ့ <b>ADMIN_PASS</b> ကို ရိုက်ထည့်ပါ။ ဒီဖုန်းမှာ မှတ်ထားပါမယ်။</p>
+      <div class="kbox">
+        <input id="apass" type="password" placeholder="Admin Password" autocomplete="current-password" />
+        <button class="btn primary block" id="ago">ဝင်မည်</button>
+        <div id="aerr" class="err" hidden></div>
+      </div>`;
+    const go_ = async () => {
+      const pw = $('#apass').value.trim(); if (!pw) return;
+      $('#ago').disabled = true;
+      L.access.adminPass = pw;
+      const r = await L.adminCall({ action: 'list' }).catch(e => ({ error: e.message }));
+      if (r.codes) { syncMenu(); pageAdmin(); return; }
+      L.access.adminPass = '';
+      const e = $('#aerr'); e.hidden = false;
+      e.textContent = r.error === 'bad_pass' ? 'Password မမှန်ပါ'
+        : r.error === 'not_setup' ? 'Worker မှာ RECAP_KV နဲ့ ADMIN_PASS မထည့်ရသေးပါ (လမ်းညွှန် ကြည့်ပါ)'
+        : 'ချိတ်ဆက်မရပါ: ' + (r.error || r.status);
+      $('#ago').disabled = false;
+    };
+    $('#ago').onclick = go_;
+    $('#apass').onkeydown = e => { if (e.key === 'Enter') go_(); };
+    return;
+  }
+
+  view.innerHTML = `<h2>🛡 Admin</h2><p class="muted">ဖွင့်နေပါတယ်…</p>`;
+  const r = await L.adminCall({ action: 'list' }).catch(e => ({ error: e.message }));
+  if (page !== 'admin') return;
+  if (r.error === 'bad_pass') { L.access.adminPass = ''; syncMenu(); return pageAdmin(); }
+  if (!r.codes) { view.innerHTML = `<h2>🛡 Admin</h2><div class="err">ဖွင့်မရပါ: ${esc(r.error || r.status)}</div><button class="btn block" id="again">ပြန်စမ်းမည်</button>`; $('#again').onclick = pageAdmin; return; }
+
+  const used = r.codes.reduce((n, c) => n + (c.today || 0), 0);
+  view.innerHTML = `
+    <h2>🛡 Admin</h2>
+    <p class="muted small">Code ${r.codes.length} ခု · ယနေ့ (${r.day}) စုစုပေါင်း ${used} ပုဒ် ထုတ်ထားပါတယ်</p>
+
+    <div class="kbox">
+      <b>➕ Code အသစ် ထုတ်မည်</b>
+      <input id="nName" placeholder="နာမည် (ဥပမာ မောင်မောင်)" maxlength="40" style="margin-top:10px" />
+      <p class="muted small" style="margin:10px 0 6px">တစ်ရက်ကို ထုတ်ခွင့်</p>
+      <div class="chips" id="nLimit">
+        ${[[1, '၁ ပုဒ်'], [2, '၂ ပုဒ်'], [3, '၃ ပုဒ်'], [5, '၅ ပုဒ်'], [0, '∞']].map(([v, t]) => `<button type="button" class="chip ${v === 2 ? 'on' : ''}" data-v="${v}">${t}</button>`).join('')}
+      </div>
+      <button class="btn primary block" id="nGo">Code ထုတ်မည်</button>
+    </div>
+
+    <div id="codes">${r.codes.length ? r.codes.map(c => `
+      <div class="kbox acode" data-c="${esc(c.code)}">
+        <div class="krow"><b>${esc(c.name)}</b><span class="badge ${c.active ? 'ok' : 'req'}">${c.active ? 'ဖွင့်ထား' : 'ပိတ်ထား'}</span></div>
+        <div class="codeline"><b class="ccode">${esc(c.code)}</b><button class="ghost cshare" title="Share">📤</button></div>
+        <p class="muted small" style="margin:6px 0 0">ယနေ့ <b>${c.today || 0}</b>/${c.limit > 0 ? c.limit : '∞'} · စုစုပေါင်း ${c.total || 0} ပုဒ် · နောက်ဆုံး ${agoDays(c.last)}</p>
+        <div class="krow" style="margin-top:10px">
+          <span class="small">တစ်ရက် ထုတ်ခွင့်</span>
+          <span class="limrow"><button class="ghost cminus">−</button><b class="clim">${c.limit > 0 ? c.limit : '∞'}</b><button class="ghost cplus">+</button></span>
+        </div>
+        <div class="two">
+          <button class="btn ctoggle">${c.active ? '⏸ ပိတ်မည်' : '▶ ဖွင့်မည်'}</button>
+          <button class="btn creset" ${c.today ? '' : 'disabled'}>↺ ယနေ့ ပြန်စ</button>
+        </div>
+        <button class="btn danger block cdel">🗑 ဖျက်မည်</button>
+      </div>`).join('') : '<p class="muted">Code မရှိသေးပါ — အပေါ်မှာ ထုတ်ပါ။</p>'}</div>
+
+    <button class="btn block" id="aout">Admin မှ ထွက်မည်</button>`;
+
+  let nLim = 2;
+  view.querySelectorAll('#nLimit .chip').forEach(b => { b.onclick = () => { nLim = +b.dataset.v; view.querySelectorAll('#nLimit .chip').forEach(x => x.classList.toggle('on', x === b)); }; });
+  $('#nGo').onclick = async () => {
+    $('#nGo').disabled = true;
+    const c = await L.adminCall({ action: 'create', name: $('#nName').value.trim(), limit: nLim }).catch(e => ({ error: e.message }));
+    if (c.code) { toast('✅ Code ' + c.code + ' ထုတ်ပြီးပါပြီ'); await pageAdmin(); shareCode(c); }
+    else { toast('မရပါ: ' + (c.error || c.status)); $('#nGo').disabled = false; }
+  };
+  $('#aout').onclick = () => { L.access.adminPass = ''; syncMenu(); openPage(acc.ok || !acc.on ? 'free' : 'code'); };
+
+  const byCode = Object.fromEntries(r.codes.map(c => [c.code, c]));
+  const act = async (body, msg) => {
+    const x = await L.adminCall(body).catch(e => ({ error: e.message }));
+    if (x.ok) { if (msg) toast(msg); pageAdmin(); } else toast('မရပါ: ' + (x.error || x.status));
+  };
+  view.querySelectorAll('.acode').forEach(el => {
+    const code = el.dataset.c, c = byCode[code];
+    el.querySelector('.cshare').onclick = () => shareCode(c);
+    const setLim = v => act({ action: 'update', code, limit: v });
+    el.querySelector('.cminus').onclick = () => setLim(c.limit === 0 ? 5 : Math.max(1, c.limit - 1));
+    el.querySelector('.cplus').onclick = () => setLim(c.limit === 0 ? 0 : c.limit >= 10 ? 0 : c.limit + 1);
+    el.querySelector('.ctoggle').onclick = () => act({ action: 'update', code, active: !c.active }, c.active ? '⏸ ပိတ်လိုက်ပါပြီ' : '▶ ဖွင့်လိုက်ပါပြီ');
+    el.querySelector('.creset').onclick = () => act({ action: 'reset', code }, '↺ ယနေ့ အရေအတွက် ပြန်စပြီးပါပြီ');
+    el.querySelector('.cdel').onclick = () => { if (confirm(`${c.name} (${code}) ကို ဖျက်မှာ သေချာလား?`)) act({ action: 'delete', code }, '🗑 ဖျက်ပြီးပါပြီ'); };
+  });
+}
+
 /* ---------------- start ---------------- */
 startIcons();
 buildMenu();
-if (!L.cfg.aaiKey) page = 'keys';
-render();
+(async () => {
+  // does this Worker use access codes, and is the saved code still good?
+  view.innerHTML = '<p class="muted" style="margin-top:30px;text-align:center">ဖွင့်နေပါတယ်…</p>';
+  const r = await L.accessCheck().catch(() => null);
+  if (r && (r.name || r.error === 'bad_code')) {      // an older Worker without codes answers 404: stay open
+    acc.on = true;
+    if (r.name) setQuota(r);
+  }
+  if (!L.cfg.aaiKey && (!acc.on || acc.ok)) page = 'keys';
+  render();
+})();
