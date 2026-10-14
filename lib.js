@@ -184,6 +184,9 @@ async function ffRun(f, args) {
 // phone the pool runs out and ffmpeg waits forever. Explicit small numbers avoid that and were also fastest.
 const mtArgs = () => (ffKind === 'mt' ? ['-filter_threads', '1', '-filter_complex_threads', '1'] : []);
 const mtIn = n => (ffKind === 'mt' ? ['-threads', String(n)] : []);            // decoder threads, goes before an -i
+// decoder threads for the main video: reading (decoding) a 1080p / 60 fps source is the slowest part once 720p and
+// 30 fps shrink the encode; 4 threads decode ~30% faster than 2. Phones with fewer cores stay at 2.
+const mainDec = () => ((navigator.hardwareConcurrency || 4) >= 6 ? 4 : 2);
 const mtEnc = () => (ffKind === 'mt' ? ['-threads', '4'] : []);                 // x264 encoder threads
 
 // is the engine the user currently wants already downloaded?
@@ -1201,7 +1204,7 @@ export async function renderDub({ file, videoDur, segs, burmese, persona, pitch,
       const vMap = vf ? ['-map', '[v]'] : ['-map', '0:v:0'];
       const enc = vf ? ['-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '27', '-pix_fmt', 'yuv420p', ...mtEnc()] : ['-c:v', 'copy'];
       const tail = ['-c:a', 'aac', '-b:a', '128k', '-shortest', '-movflags', '+faststart', 'out.mp4'];
-      const base = [...mtArgs(), ...mtIn(2), '-i', inName, ...mtIn(1), '-i', 'mix.wav', ...(withSubs ? [...mtIn(1), '-f', 'concat', '-safe', '0', '-i', 'subs.txt'] : []), ...(withOvl ? [...mtIn(1), '-i', 'ovl.png'] : [])];
+      const base = [...mtArgs(), ...mtIn(mainDec()), '-i', inName, ...mtIn(1), '-i', 'mix.wav', ...(withSubs ? [...mtIn(1), '-f', 'concat', '-safe', '0', '-i', 'subs.txt'] : []), ...(withOvl ? [...mtIn(1), '-i', 'ovl.png'] : [])];
       const list = [];
       if (wantMix) {
         for (const lim of [',alimiter=limit=0.95:level=0', '']) {
