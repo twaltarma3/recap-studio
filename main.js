@@ -1189,7 +1189,7 @@ function showResult() {
     ${state.diag && /fxFailed:true|false\n[^]/.test(state.diag) && /fxFailed:true|failed|Error|error/i.test(state.diag) ? `<details style="margin:10px 0"><summary class="muted small">🛠 Effect log (အမှားရှာရန်)</summary><pre id="diagTxt" style="white-space:pre-wrap;font-size:11px;max-height:220px;overflow:auto">${esc(state.diag)}</pre><button class="btn block" id="diagCp" type="button">📋 Log ကူးမည်</button></details>` : ''}
     <button id="dl" class="btn primary">⬇ Video Download (.mp4)</button>
     <button id="srt" class="btn block">Download Subtitles (.srt)</button>
-    <div id="thumbBox"><button id="thumbGo" class="btn block">🖼 Thumbnail ပြုလုပ်မည် (3:4)</button></div>
+    <div id="thumbBox"><button id="thumbGo" class="btn block">🖼 Thumbnail ပြုလုပ်မည် (ChatGPT 3D)</button></div>
     <div class="row" style="margin-top:14px">
       <button id="back" class="ghost">‹ အသံရွေးချယ်မှုသို့</button>
       <button id="again" class="ghost">Video အသစ်</button>
@@ -1204,7 +1204,7 @@ function showResult() {
   });
   $('#toStep2')?.addEventListener('click', () => { state.showSrc = true; go(2); });
   $('#thumbGo').onclick = () => thumbPanel();
-  if (state.thumb && state.thumb.frames) thumbPanel();
+  if (state.thumb && state.thumb.shots) thumbPanel();
   $('#back').onclick = () => { clearResult(); go(3); };
   $('#again').onclick = () => { clearResult(); Object.assign(state, { showSrc: false, file: null, segs: [], origSegs: null, burmese: [] }); go(1); };
 }
@@ -1368,144 +1368,58 @@ async function pageAdmin() {
   });
 }
 
-/* ---------------- Thumbnail (3:4) from a frame of the video ---------------- */
-let thumbDraw = 0;
+/* ---------------- Thumbnail: pick a shot of the main character, ChatGPT makes the 3D thumbnail ---------------- */
 async function thumbPanel() {
   const box = $('#thumbBox'); if (!box) return;
-  const th = state.thumb || (state.thumb = {
-    frames: null, dur: 0, t: 0, img: null, focus: 50, scale: 100, cutTop: 0, cutBottom: 18, ai: false,
-    style: (() => { try { const v = localStorage.getItem('thumbStyle'); return T.STYLES.some(x => x.id === v) ? v : 'blue'; } catch { return 'blue'; } })(),
-    title: '', sub: ''
-  });
-  if (!th.frames) {
+  const th = state.thumb || (state.thumb = { shots: null, sel: 0, src: null });
+  if (!th.shots) {
+    box.innerHTML = `<div class="panel"><b>🖼 Thumbnail</b>
+      <p class="muted small" id="tbMsg">အဓိက ဇာတ်ကောင်ရဲ့ ပုံတွေ ရှာနေပါတယ်… (ပထမဆုံးတစ်ကြိမ် မျက်နှာရှာ Engine ~13MB ဒေါင်းပါမယ်)</p>
+      <div class="bar"><i id="tbFill"></i></div></div>`;
     // the original upload (no subtitles burned in); if the phone can't decode it, the finished video
     const srcs = [state.file && URL.createObjectURL(state.file), state.result && state.result.url].filter(Boolean);
-    box.innerHTML = `<div class="panel"><b>🖼 Thumbnail</b><p class="muted small" id="tbMsg">Video ထဲက ပုံလှလှလေးတွေ ရှာနေပါတယ်…</p><div class="bar"><i id="tbFill"></i></div></div>`;
     let err = null;
     for (const src of srcs) {
       try {
-        const r = await T.pickFrames(src, { onProgress: p => { const f = $('#tbFill'); if (f) f.style.width = Math.round(p * 100) + '%'; } });
-        th.frames = r.frames; th.dur = r.dur; th.src = src; th.t = r.frames[0].t;
-        th.img = await T.grabFrame(src, th.t);
+        const r = await T.pickCharacterShots(src, { onProgress: p => { const f = $('#tbFill'); if (f) f.style.width = Math.round(p * 100) + '%'; } });
+        Object.assign(th, { shots: r.shots, faces: r.faces, src, sel: 0 });
         break;
       } catch (e) { err = e; }
     }
-    if (!th.frames) { box.innerHTML = `<div class="err">${esc((err && err.message) || 'ပုံထုတ်လို့ မရပါ')}</div><button id="thumbGo" class="btn block">ပြန်ကြိုးစားမည်</button>`; $('#thumbGo').onclick = () => thumbPanel(); return; }
+    if (!th.shots) { box.innerHTML = `<div class="err">${esc((err && err.message) || 'ပုံထုတ်လို့ မရပါ')}</div><button id="thumbGo" class="btn block">ပြန်ကြိုးစားမည်</button>`; $('#thumbGo').onclick = () => thumbPanel(); return; }
   }
-  await L.ensureSubFont('pt16').catch(() => {});
   if (!$('#thumbBox')) return;
   box.innerHTML = `
     <div class="panel thumbp">
-      <b>🖼 Thumbnail (3:4)</b>
-      <canvas id="tbMain" width="540" height="720"></canvas>
-      <p class="tstep">၁) ပုံရွေးပါ <span class="muted small">— စိတ်ဝင်စားစရာ အကောင်းဆုံး ၆ ပုံ</span></p>
-      <div class="tframes">${th.frames.map((f, i) => `<button type="button" data-i="${i}" class="${Math.abs(f.t - th.t) < 0.01 ? 'on' : ''}"><img src="${f.img}" alt="" /><small>${fmtDur(f.t)}</small></button>`).join('')}</div>
-      <label class="small muted" style="display:block;margin-top:8px">⏱ အချိန် ကိုယ်တိုင်ရွေး: <b id="tbTv">${fmtDur(th.t)}</b></label>
-      <input id="tbT" type="range" min="0" max="${th.dur.toFixed(1)}" step="0.1" value="${th.t.toFixed(1)}" />
-      <label class="small muted" style="display:block;margin-top:6px">↔ ပုံနေရာ ရွှေ့ရန် (ဘယ် / ညာ)</label>
-      <input id="tbF" type="range" min="0" max="100" step="1" value="${th.focus}" />
-      <div class="tcuts" ${th.ai ? 'hidden' : ''}>
-        <label class="small muted" style="display:block;margin-top:6px">✂ Video ထဲက စာတန်း ဖြတ်ထုတ်ရန် — အောက်ခြေ <b id="tbCbV">${th.cutBottom}%</b></label>
-        <input id="tbCb" type="range" min="0" max="40" step="1" value="${th.cutBottom}" />
-        <label class="small muted" style="display:block;margin-top:6px">✂ အပေါ်ဘက် <b id="tbCtV">${th.cutTop}%</b></label>
-        <input id="tbCt" type="range" min="0" max="40" step="1" value="${th.cutTop}" />
-      </div>
-
-      <details class="tai" ${th.ai ? 'open' : ''}>
-        <summary>🎨 AI နဲ့ 3D ကာတွန်း ပုံ ဖန်တီးမည် <span class="badge">ChatGPT</span></summary>
-        <p class="muted small" style="margin:8px 0">ရွေးထားတဲ့ အခန်းကို ChatGPT က 3D ကာတွန်း ပုံစံ ပုံအသစ် ပြန်ဆွဲပေးပါမယ် (ဇာတ်ကားထဲက ပုံ တိုက်ရိုက် မဟုတ်တော့ပါ)။</p>
-        <button type="button" class="btn block" id="tbAiGet">① ပုံ + Prompt ယူမည်</button>
-        <p class="muted small" style="margin:6px 0">② <b>ChatGPT</b> ဖွင့် → <b>+</b> နဲ့ ဒေါင်းထားတဲ့ပုံ ထည့် → Prompt ကို paste လုပ်ပြီး ပို့ → ထွက်လာတဲ့ ပုံကို Download လုပ်ပါ</p>
-        <label class="btn primary block" style="display:block;text-align:center;cursor:pointer">③ ChatGPT ပုံကို ထည့်မည်<input id="tbAiIn" type="file" accept="image/*" hidden /></label>
-        ${th.ai ? '<button type="button" class="btn block" id="tbAiOff">↩ ဇာတ်ကားထဲက ပုံ ပြန်သုံးမည်</button>' : ''}
-      </details>
-      <p class="tstep">၂) ခေါင်းစဉ်</p>
-      <textarea id="tbTitle" rows="2" placeholder="ဥပမာ  ဘုရင်မရဲ့ လျှို့ဝှက်ချက်">${esc(th.title)}</textarea>
-      <input id="tbSub" placeholder="ခေါင်းစဉ်ငယ် (မထည့်လည်းရ)" value="${esc(th.sub)}" />
-      <label class="small muted" style="display:block;margin-top:6px">🔠 စာလုံးအရွယ် <b id="tbSzV">${th.scale}%</b></label>
-      <input id="tbSz" type="range" min="60" max="140" step="5" value="${th.scale}" />
-      <button type="button" class="btn block" id="tbPrompt">🤖 Gemini ခေါင်းစဉ် Prompt ကူးမည်</button>
-      <p class="muted small" style="margin:6px 0 0">Gemini ပေးတဲ့ <b>"1. ခေါင်းစဉ် | ခေါင်းစဉ်ငယ်"</b> တစ်ကြောင်းကို ခေါင်းစဉ်အကွက်ထဲ paste လုပ်ရင် အလိုလို ခွဲထည့်ပေးပါမယ်။</p>
-      <p class="tstep">၃) Style ရွေးပါ</p>
-      <div class="tstyles">${T.STYLES.map(s => `
-        <button type="button" data-s="${s.id}" class="${s.id === th.style ? 'on' : ''}">
-          <canvas width="135" height="180"></canvas>
-          <span><b>${s.name}</b><small>${s.desc}</small></span>
-        </button>`).join('')}</div>
-      <button type="button" class="btn primary block" id="tbDl">⬇ Thumbnail Download (.jpg)</button>
+      <b>🖼 Thumbnail (ChatGPT နဲ့ 3D ပုံ)</b>
+      <p class="tstep">၁) ဇာတ်ကောင်ပုံ တစ်ပုံ ရွေးပါ</p>
+      ${th.faces ? '' : '<p class="muted small">မျက်နှာ ရှင်းရှင်း မတွေ့လို့ ပုံအကြည်ဆုံးတွေကို ပြထားပါတယ်။</p>'}
+      <div class="tshots">${th.shots.map((f, i) => `<button type="button" data-i="${i}" class="${i === th.sel ? 'on' : ''}"><img src="${f.img}" alt="" /><small>${fmtDur(f.t)}</small></button>`).join('')}</div>
+      <p class="tstep">၂) ပုံ ဒေါင်းပြီး Prompt ကူးပါ</p>
+      <button type="button" class="btn primary block" id="tbGet">📋 ပုံ ဒေါင်း + Prompt ကူးမည်</button>
+      <p class="tstep">၃) ChatGPT မှာ ပုံ ထုတ်ပါ</p>
+      <a class="btn block" id="tbOpen" href="https://chatgpt.com/" target="_blank" rel="noopener" style="display:block;text-align:center">💬 ChatGPT ဖွင့်မည်</a>
+      <ol class="muted small tsteps">
+        <li><b>+</b> ကိုနှိပ်ပြီး ဒေါင်းထားတဲ့ ပုံကို ထည့်ပါ</li>
+        <li>Prompt ကို paste လုပ်ပြီး ပို့ပါ</li>
+        <li>ChatGPT က ခေါင်းစဉ် ၅ ခုနဲ့ ဒီဇိုင်း ၅ မျိုး ပြပါမယ် — ကြိုက်တာ ရွေးပြီး ပြောပါ (ဥပမာ <b>"ခေါင်းစဉ် 2၊ ဒီဇိုင်း 3"</b>)</li>
+        <li>ထွက်လာတဲ့ 3D ပုံကို Download လုပ်ပြီး သုံးပါ</li>
+      </ol>
+      <p class="warn small" style="margin-top:10px">💡 ChatGPT က မြန်မာစာလုံးကို တစ်ခါတလေ မှားရေးတတ်ပါတယ်။ မှားနေရင် <b>"ခေါင်းစဉ်စာလုံး မှန်အောင် ပြန်ထုတ်ပေးပါ"</b> လို့ ထပ်ပြောပါ။</p>
     </div>`;
-
-  const opts = () => ({ style: th.style, title: th.title, sub: th.sub, focus: th.focus / 100, font: 'pt16', scale: th.scale / 100,
-    cutTop: th.ai ? 0 : th.cutTop / 100, cutBottom: th.ai ? 0 : th.cutBottom / 100 });
-  const redraw = (minis = false) => {
-    cancelAnimationFrame(thumbDraw);
-    thumbDraw = requestAnimationFrame(() => {
-      const c = $('#tbMain'); if (!c) return;
-      T.drawThumb(c.getContext('2d'), c.width, c.height, th.img, opts());
-      if (minis) view.querySelectorAll('.tstyles button').forEach(b => {
-        const m = b.querySelector('canvas');
-        T.drawThumb(m.getContext('2d'), m.width, m.height, th.img, { ...opts(), style: b.dataset.s });
-      });
-    });
-  };
-  redraw(true);
-
-  const setFrame = async t => {
-    th.t = t; $('#tbTv').textContent = fmtDur(t);
-    view.querySelectorAll('.tframes button').forEach(b => b.classList.toggle('on', Math.abs(th.frames[+b.dataset.i].t - t) < 0.01));
-    try { th.img = await T.grabFrame(th.src, t); } catch { toast('ဒီနေရာက ပုံ ယူလို့မရပါ'); return; }
-    if (th.ai) { th.ai = false; th.frameImg = null; thumbPanel(); return; }
-    redraw(true);
-  };
-  view.querySelectorAll('.tframes button').forEach(b => { b.onclick = () => { const t = th.frames[+b.dataset.i].t; $('#tbT').value = t.toFixed(1); setFrame(t); }; });
-  $('#tbT').oninput = e => { $('#tbTv').textContent = fmtDur(+e.target.value); };
-  $('#tbT').onchange = e => setFrame(+e.target.value);
-  $('#tbF').oninput = e => { th.focus = +e.target.value; redraw(true); };
-  $('#tbTitle').oninput = e => {
-    let v = e.target.value.replace(/^\s*\d+\s*[.)။]\s*/, '');
-    if (v.includes('|')) {                                   // pasted "ခေါင်းစဉ် | ခေါင်းစဉ်ငယ်"
-      const [a, ...b] = v.split('|');
-      v = a.trim(); th.sub = b.join(' ').trim(); $('#tbSub').value = th.sub;
-      e.target.value = v;
-    }
-    th.title = v; redraw(true);
-  };
-  $('#tbSub').oninput = e => { th.sub = e.target.value; redraw(true); };
-  $('#tbSz').oninput = e => { th.scale = +e.target.value; $('#tbSzV').textContent = th.scale + '%'; redraw(true); };
-  $('#tbCb').oninput = e => { th.cutBottom = +e.target.value; $('#tbCbV').textContent = th.cutBottom + '%'; redraw(true); };
-  $('#tbCt').oninput = e => { th.cutTop = +e.target.value; $('#tbCtV').textContent = th.cutTop + '%'; redraw(true); };
-  $('#tbAiGet').onclick = async () => {
-    try { await navigator.clipboard.writeText(T.imagePrompt((th.title || '') + ' ' + (th.sub || ''))); } catch {}
-    const blob = await T.cleanFrameBlob(th.frameImg || th.img, opts());
-    if (blob) download(blob, state.file.name.replace(/\.[^.]+$/, '') + '_scene.jpg');
-    toast('ပုံ ဒေါင်းပြီး Prompt ကူးပြီးပါပြီ — ChatGPT မှာ ပုံ ထည့်ပြီး paste လုပ်ပါ');
-  };
-  $('#tbAiIn').onchange = async e => {
-    const f = e.target.files[0]; if (!f) return;
-    try {
-      const bmp = await createImageBitmap(f);
-      const c = document.createElement('canvas'); c.width = bmp.width; c.height = bmp.height; c.getContext('2d').drawImage(bmp, 0, 0);
-      if (!th.ai) th.frameImg = th.img;                  // keep the movie frame to go back to
-      th.img = c; th.ai = true; th.focus = 50;
-      thumbPanel();
-    } catch { toast('ဒီပုံကို ဖွင့်လို့ မရပါ'); }
-  };
-  $('#tbAiOff')?.addEventListener('click', () => { th.img = th.frameImg || th.img; th.ai = false; thumbPanel(); });
-  $('#tbPrompt').onclick = async () => {
-    try { await navigator.clipboard.writeText(T.titlePrompt(state.burmese)); toast('Prompt ကူးပြီးပါပြီ — Gemini မှာ paste လုပ်ပါ'); } catch { toast('ကူးမရပါ'); }
-  };
-  view.querySelectorAll('.tstyles button').forEach(b => {
-    b.onclick = () => {
-      th.style = b.dataset.s; try { localStorage.setItem('thumbStyle', th.style); } catch {}
-      view.querySelectorAll('.tstyles button').forEach(x => x.classList.toggle('on', x === b));
-      redraw();
-      $('#tbMain').scrollIntoView({ behavior: 'smooth', block: 'center' });
-    };
+  view.querySelectorAll('.tshots button').forEach(b => {
+    b.onclick = () => { th.sel = +b.dataset.i; view.querySelectorAll('.tshots button').forEach(x => x.classList.toggle('on', x === b)); };
   });
-  $('#tbDl').onclick = async () => {
-    const blob = await T.thumbBlob(th.img, opts());
-    if (!blob) { toast('ပုံ ထုတ်လို့ မရပါ'); return; }
-    download(blob, state.file.name.replace(/\.[^.]+$/, '') + '_thumbnail.jpg');
+  $('#tbGet').onclick = async () => {
+    const b = $('#tbGet'); b.disabled = true;
+    let copied = false;
+    try { await navigator.clipboard.writeText(T.chatgptPrompt(state.burmese)); copied = true; } catch {}
+    try {
+      const blob = await T.shotBlob(th.src, th.shots[th.sel]);
+      if (blob) download(blob, state.file.name.replace(/\.[^.]+$/, '') + '_character.jpg');
+      toast(copied ? '✅ ပုံ ဒေါင်းပြီး Prompt ကူးပြီးပါပြီ — ChatGPT ဖွင့်ပါ' : 'ပုံ ဒေါင်းပြီးပါပြီ — Prompt ကူးမရလို့ ထပ်နှိပ်ပါ');
+    } catch { toast('ပုံ ထုတ်လို့ မရပါ'); }
+    b.disabled = false;
   };
 }
 

@@ -3,7 +3,17 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "scripts": { "dev": "vite --host", "build": "vite build", "preview": "vite preview --host" },
-  "dependencies": { "@ffmpeg/ffmpeg": "^0.12.10", "@ffmpeg/util": "^0.12.1" },
-  "devDependencies": { "vite": "^5.4.0" }
+  "scripts": {
+    "dev": "vite --host",
+    "build": "vite build",
+    "preview": "vite preview --host"
+  },
+  "dependencies": {
+    "@ffmpeg/ffmpeg": "^0.12.10",
+    "@ffmpeg/util": "^0.12.1",
+    "@mediapipe/tasks-vision": "1.1.0"
+  },
+  "devDependencies": {
+    "vite": "^5.4.0"
+  }
 }
