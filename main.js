@@ -18,14 +18,18 @@ const state = {
   fxSubs: false, subS: 5, subY: 88, subC: '#ffffff', subO: '#000000', subFont: 'pt16', fontOk: false
 };
 // access codes: on only when the Worker has them set up (accessCheck answers something other than {open:true})
-const acc = { on: false, ok: false, name: '', limit: 0, used: 0, left: -1, plan: 'free', expires: 0 };
+const acc = { on: false, ok: false, name: '', limit: 0, used: 0, left: -1, plan: 'free', expires: 0, credits: 0 };
 const setQuota = r => Object.assign(acc, { ok: true, name: r.name || '', limit: r.limit || 0, used: r.used || 0, left: r.left ?? -1,
-  ...(r.plan ? { plan: r.plan, expires: r.expires || 0 } : {}) });
-const isPremium = () => acc.on && acc.ok && acc.plan === 'premium';
+  ...(r.plan ? { plan: r.plan, expires: r.expires || 0, credits: r.credits || 0 } : {}) });
+// Premium is paid per video (credits); a video already paid keeps its premium features after the last credit is used
+const jobId = () => (state.file ? `${state.file.name}|${state.file.size}` : '');
+L.premium.job = jobId;
+const premPlan = () => acc.on && acc.ok && acc.plan === 'premium';
+const isPremium = () => premPlan() && (acc.credits > 0 || L.premium.on);
 const dateTxt = ms => { const d = new Date(ms); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 const daysLeft = ms => Math.max(0, Math.ceil((ms - Date.now()) / 86400000));
-const planTxt = () => isPremium() ? `💎 Premium${acc.expires ? ` · ${daysLeft(acc.expires)} ရက် ကျန်` : ''}` : '';
-const quotaTxt = () => acc.limit > 0 ? `ယနေ့ ကျန် ${acc.left}/${acc.limit} ပုဒ်` : 'အကန့်အသတ် မရှိ';
+const creditTxt = n => `Credit ${n} ပုဒ် ကျန်`;
+const quotaTxt = () => premPlan() ? creditTxt(acc.credits) : acc.limit > 0 ? `ယနေ့ ကျန် ${acc.left}/${acc.limit} ပုဒ်` : 'အကန့်အသတ် မရှိ';
 const STEPS = ['ဗီဒီယိုတင်', 'မူရင်းစာသား', 'ဘာသာပြန်', 'ရလဒ်'];
 const view = $('#view');
 const selFont = () => (state.subFont === 'custom' && !state.fontOk) ? 'system' : state.subFont;
@@ -336,19 +340,20 @@ function pagePremium() {
   const row = (icon, t, d) => `<li><span>${icon}</span><div><b>${t}</b><small>${d}</small></div></li>`;
   view.innerHTML = `
     <h2>💎 Premium</h2>
-    ${on ? `<div class="tip">✅ <b>Premium သုံးနေပါတယ်</b>${acc.expires ? ` — ${dateTxt(acc.expires)} အထိ (${daysLeft(acc.expires)} ရက် ကျန်)` : ''}</div>`
+    ${on ? `<div class="tip">✅ <b>Premium သုံးနေပါတယ်</b> — ${creditTxt(acc.credits)}</div>`
+      : premPlan() ? '<div class="tip">💎 Premium Credit ကုန်သွားပါပြီ — အောက်က အဆင့်တွေအတိုင်း ထပ်ဝယ်ပါ</div>'
       : '<p class="muted">Video ထုတ်တဲ့ အလုပ်ရှုပ်တဲ့ အဆင့်တွေကို App က အလိုအလျောက် လုပ်ပေးပါတယ်။</p>'}
     <ul class="plist">
       ${row('🔑', 'AssemblyAI Key မလို', 'Key ဖွင့်စရာ၊ ထည့်စရာ မလိုဘဲ စာသားထုတ်လို့ရ')}
       ${row('✨', 'Auto ဘာသာပြန်', 'Gemini မှာ Copy/Paste မလုပ်ရတော့ဘဲ ခလုတ်တစ်ချက်နဲ့ မြန်မာလို ဘာသာပြန်')}
       ${row('🖼', 'Auto Thumbnail ခေါင်းစဉ်', 'ဇာတ်ကြောင်းကနေ ခေါင်းစဉ် ၅ ခု ထုတ်ပေး — ရွေးပြီး ChatGPT ကို တန်းပို့')}
-      ${row('🎟', 'တစ်ရက် ပုဒ်ရေ ပိုရ', 'Free ထက် Video ပိုထုတ်လို့ရ')}
+      ${row('🎟', 'တစ်ရက် ကန့်သတ်ချက် မရှိ', 'ဝယ်ထားတဲ့ Credit ရှိသလောက် ထုတ်လို့ရ — Video တစ်ပုဒ် = Credit ၁ ခု (တစ်ပုဒ်တည်း ပြန်ထုတ်ရင် မနှုတ်)')}
     </ul>
     ${on ? '<button class="btn primary block" id="toFree">🎬 Video ထုတ်မည်</button>'
       : `<div class="kbox"><b>Premium ဘယ်လိုရမလဲ</b>
           <ol class="muted small" style="margin:8px 0 0;padding-left:20px;line-height:1.9">
-            <li>Admin ကို ဆက်သွယ်ပြီး ငွေလွှဲပါ (KPay / Wave)</li>
-            <li>💎 Premium Code ရပါမယ်</li>
+            <li>Admin ကို ဆက်သွယ်ပြီး လိုချင်တဲ့ Video ပုဒ်ရေအတွက် ငွေလွှဲပါ (KPay / Wave)</li>
+            <li>💎 Premium Code (သို့) Credit ထပ်ဖြည့်ပေးပါမယ်</li>
             <li>☰ Menu → 🔑 Access Code → <b>Code ပြောင်းမည်</b> ကနေ Code အသစ် ထည့်ပါ</li>
           </ol></div>
         <button class="btn block" id="toFree">Free နဲ့ ဆက်သုံးမည်</button>`}`;
@@ -895,7 +900,7 @@ function bindLinkBox() {
 function step1() {
   view.innerHTML = `
     <h2>Video တင်ပါ</h2>
-    ${acc.on && acc.ok ? `<p class="muted small quota">🎟 ${esc(acc.name)} · <b>${quotaTxt()}</b>${isPremium() ? ` · <span class="pbadge">${planTxt()}</span>` : ''}</p>` : ''}
+    ${acc.on && acc.ok ? `<p class="muted small quota">🎟 ${esc(acc.name)} · <b>${quotaTxt()}</b>${premPlan() ? ` · <span class="pbadge">💎 Premium</span>` : ''}</p>` : ''}
     <label class="drop ${state.file ? 'has' : ''}" for="f">
       <input id="f" type="file" accept="video/*" hidden />
       <b>${state.file ? esc(state.file.name) : 'နှိပ်၍ Video File ရွေးချယ်ပါ'}</b>
@@ -946,6 +951,7 @@ async function transcribeFlow() {
     state.origSegs = null;
     state.segs = await L.transcribe(wav, state.lang, st => { tick = Math.min(tick + 0.04, 0.95); setProg(tick, names[st] || st); });
     state.burmese = []; state.busy = false;
+    if (premPlan()) L.accessCheck().then(r => { if (r && r.name) setQuota(r); }).catch(() => {});   // credits left after this video
     stopClock();
     go(2);
   } catch (e) {
@@ -1125,7 +1131,8 @@ async function step4() {
   try {
     if (acc.on) {
       // one use per video per day; re-rendering the same file again today is free
-      const a = await L.accessStart(`${state.file.name}|${state.file.size}`);
+      const a = await L.accessStart(jobId());
+      if (a.error === 'no_credit') { setQuota(a); throw Object.assign(new Error('💎 Premium Credit ကုန်သွားပါပြီ — Admin ဆီက ထပ်ဝယ်ပါ'), { limit: true }); }
       if (a.error === 'limit') throw Object.assign(new Error(`ယနေ့အတွက် Video ${a.limit} ပုဒ် ထုတ်ပြီးပါပြီ`), { limit: true });
       if (a.error === 'bad_code') { acc.ok = false; throw Object.assign(new Error('Access Code မမှန်တော့ပါ (ပိတ်ထား / ဖျက်ထား)'), { badCode: true }); }
       if (a.error === 'expired') { acc.ok = false; throw Object.assign(new Error(`Code သက်တမ်း ကုန်သွားပါပြီ (${dateTxt(a.expires)})`), { badCode: true }); }
@@ -1269,9 +1276,11 @@ function pageCode() {
     <div class="kbox">
       <div class="krow"><b>${esc(acc.name)}</b><span class="badge ok">Active</span></div>
       <p class="muted small" style="margin:8px 0 0">Code: <b>${esc(L.access.code)}</b></p>
-      ${isPremium() ? `<p style="margin:10px 0 0"><span class="pbadge">💎 Premium</span>${acc.expires ? ` <span class="muted small">· ${dateTxt(acc.expires)} အထိ (${daysLeft(acc.expires)} ရက် ကျန်)</span>` : ''}</p>` : ''}
+      ${premPlan() ? `<p style="margin:10px 0 0"><span class="pbadge">💎 Premium</span>${acc.expires ? ` <span class="muted small">· ${dateTxt(acc.expires)} အထိ</span>` : ''}</p>` : ''}
       <p style="margin:10px 0 0">🎟 <b>${quotaTxt()}</b></p>
-      <p class="muted small" style="margin:6px 0 0">Video တစ်ပုဒ် ထုတ်တိုင်း တစ်ခါ ရေတွက်ပါတယ်။ Video တစ်ပုဒ်တည်းကို ယနေ့ထဲ ပြန်ထုတ်ရင် ထပ်မရေတွက်ပါ။ မြန်မာစံတော်ချိန် ည ၁၂ နာရီမှာ ပြန်စပါတယ်။</p>
+      <p class="muted small" style="margin:6px 0 0">${premPlan()
+        ? 'Video တစ်ပုဒ် စာသားထုတ်တာ (သို့) ထုတ်တာ စလုပ်တိုင်း Credit ၁ ခု နှုတ်ပါတယ်။ Video တစ်ပုဒ်တည်းကို ပြန်လုပ်ရင် ထပ်မနှုတ်ပါ။'
+        : 'Video တစ်ပုဒ် ထုတ်တိုင်း တစ်ခါ ရေတွက်ပါတယ်။ Video တစ်ပုဒ်တည်းကို ယနေ့ထဲ ပြန်ထုတ်ရင် ထပ်မရေတွက်ပါ။ မြန်မာစံတော်ချိန် ည ၁၂ နာရီမှာ ပြန်စပါတယ်။'}</p>
     </div>
     <button class="btn primary block" id="toFree">🎬 Video ထုတ်မည်</button>
     <button class="btn block" id="logout">Code ပြောင်းမည်</button>
@@ -1321,7 +1330,7 @@ const agoDays = t => {
   return m < 1 ? 'အခုလေးတင်' : m < 60 ? `${m} မိနစ်က` : m < 1440 ? `${Math.floor(m / 60)} နာရီက` : `${Math.floor(m / 1440)} ရက်က`;
 };
 const APP_URL = 'https://recap-studio-74n.pages.dev';
-const shareText = c => `🎬 Recap Studio${c.plan === 'premium' ? ' 💎 Premium' : ''}\nAccess Code: ${c.code}\nတစ်ရက် ${c.limit > 0 ? c.limit + ' ပုဒ်' : 'အကန့်အသတ်မရှိ'}${c.expires ? `\n${dateTxt(c.expires)} အထိ` : ''}\n${APP_URL}`;
+const shareText = c => `🎬 Recap Studio${c.plan === 'premium' ? ' 💎 Premium' : ''}\nAccess Code: ${c.code}\n${c.plan === 'premium' ? `Video ${c.credits || 0} ပုဒ်` : `တစ်ရက် ${c.limit > 0 ? c.limit + ' ပုဒ်' : 'အကန့်အသတ်မရှိ'}`}${c.expires ? `\n${dateTxt(c.expires)} အထိ` : ''}\n${APP_URL}`;
 async function shareCode(c) {
   const text = shareText(c);
   try { if (navigator.share) { await navigator.share({ text }); return; } } catch (e) { if (e && e.name === 'AbortError') return; }
@@ -1370,18 +1379,22 @@ async function pageAdmin() {
     <div class="kbox">
       <b>➕ Code အသစ် ထုတ်မည်</b>
       <input id="nName" placeholder="နာမည် (ဥပမာ မောင်မောင်)" maxlength="40" style="margin-top:10px" />
-      <p class="muted small" style="margin:10px 0 6px">တစ်ရက်ကို ထုတ်ခွင့်</p>
-      <div class="chips" id="nLimit">
-        ${[[1, '၁ ပုဒ်'], [2, '၂ ပုဒ်'], [3, '၃ ပုဒ်'], [5, '၅ ပုဒ်'], [0, '∞']].map(([v, t]) => `<button type="button" class="chip ${v === 2 ? 'on' : ''}" data-v="${v}">${t}</button>`).join('')}
-      </div>
       <p class="muted small" style="margin:10px 0 6px">အမျိုးအစား</p>
       <div class="chips" id="nPlan">
         <button type="button" class="chip on" data-v="free">🎟 Free</button>
         <button type="button" class="chip" data-v="premium">💎 Premium</button>
       </div>
-      <p class="muted small" style="margin:10px 0 6px">သက်တမ်း</p>
-      <div class="chips" id="nDays">
-        ${[[7, '၇ ရက်'], [30, '၃၀ ရက်'], [90, '၉၀ ရက်'], [0, 'မကုန်']].map(([v, t]) => `<button type="button" class="chip ${v === 0 ? 'on' : ''}" data-v="${v}">${t}</button>`).join('')}
+      <div id="nFree">
+      <p class="muted small" style="margin:10px 0 6px">တစ်ရက်ကို ထုတ်ခွင့်</p>
+      <div class="chips" id="nLimit">
+        ${[[1, '၁ ပုဒ်'], [2, '၂ ပုဒ်'], [3, '၃ ပုဒ်'], [5, '၅ ပုဒ်'], [0, '∞']].map(([v, t]) => `<button type="button" class="chip ${v === 2 ? 'on' : ''}" data-v="${v}">${t}</button>`).join('')}
+      </div>
+      </div>
+      <div id="nPrem" hidden>
+      <p class="muted small" style="margin:10px 0 6px">💎 Credit (ဝယ်တဲ့ Video ပုဒ်ရေ)</p>
+      <div class="chips" id="nCred">
+        ${[5, 10, 20, 30, 50].map(v => `<button type="button" class="chip ${v === 10 ? 'on' : ''}" data-v="${v}">${v} ပုဒ်</button>`).join('')}
+      </div>
       </div>
       <button class="btn primary block" id="nGo">Code ထုတ်မည်</button>
     </div>
@@ -1390,13 +1403,15 @@ async function pageAdmin() {
       <div class="kbox acode" data-c="${esc(c.code)}">
         <div class="krow"><b>${esc(c.name)}${c.plan === 'premium' ? ' <span class="pbadge">💎 Premium</span>' : ''}</b><span class="badge ${c.active && !(c.expires && c.expires < Date.now()) ? 'ok' : 'req'}">${!c.active ? 'ပိတ်ထား' : c.expires && c.expires < Date.now() ? 'သက်တမ်းကုန်' : 'ဖွင့်ထား'}</span></div>
         <div class="codeline"><b class="ccode">${esc(c.code)}</b><button class="ghost cshare" title="Share">📤</button></div>
-        <p class="muted small" style="margin:6px 0 0">ယနေ့ <b>${c.today || 0}</b>/${c.limit > 0 ? c.limit : '∞'} · စုစုပေါင်း ${c.total || 0} ပုဒ် · နောက်ဆုံး ${agoDays(c.last)}</p>
-        <p class="muted small" style="margin:4px 0 0">⏳ ${c.expires ? `${dateTxt(c.expires)} အထိ (${c.expires < Date.now() ? 'ကုန်ပြီ' : daysLeft(c.expires) + ' ရက် ကျန်'})` : 'သက်တမ်း မကုန်'}</p>
+        <p class="muted small" style="margin:6px 0 0">${c.plan === 'premium' ? '' : `ယနေ့ <b>${c.today || 0}</b>/${c.limit > 0 ? c.limit : '∞'} · `}စုစုပေါင်း ${c.total || 0} ပုဒ် · နောက်ဆုံး ${agoDays(c.last)}</p>
+        ${c.expires ? `<p class="muted small" style="margin:4px 0 0">⏳ ${dateTxt(c.expires)} အထိ (${c.expires < Date.now() ? 'ကုန်ပြီ' : daysLeft(c.expires) + ' ရက် ကျန်'}) <button class="ghost cnoexp">သက်တမ်း ဖြုတ်</button></p>` : ''}
+        ${c.plan === 'premium' ? `<p style="margin:8px 0 0">💎 <b class="ccred">Credit ${c.credits || 0} ပုဒ် ကျန်</b></p>
         <div class="two">
-          <button class="btn cplus30">⏳ +30 ရက်</button>
-          <button class="btn cplan">${c.plan === 'premium' ? '🎟 Free ပြောင်း' : '💎 Premium ပြောင်း'}</button>
-        </div>
-        <div class="krow" style="margin-top:10px">
+          <button class="btn cadd" data-n="5">➕ 5 ပုဒ်</button>
+          <button class="btn cadd" data-n="10">➕ 10 ပုဒ်</button>
+        </div>` : ''}
+        <button class="btn block cplan" style="margin-top:8px">${c.plan === 'premium' ? '🎟 Free ပြောင်း' : '💎 Premium ပြောင်း'}</button>
+        <div class="krow" style="margin-top:10px${c.plan === 'premium' ? ';display:none' : ''}">
           <span class="small">တစ်ရက် ထုတ်ခွင့်</span>
           <span class="limrow"><button class="ghost cminus">−</button><b class="clim">${c.limit > 0 ? c.limit : '∞'}</b><button class="ghost cplus">+</button></span>
         </div>
@@ -1409,14 +1424,14 @@ async function pageAdmin() {
 
     <button class="btn block" id="aout">Admin မှ ထွက်မည်</button>`;
 
-  let nLim = 2, nPlan = 'free', nDays = 0;
+  let nLim = 2, nPlan = 'free', nCred = 10;
   const chipGroup = (sel, set) => view.querySelectorAll(sel + ' .chip').forEach(b => { b.onclick = () => { set(b.dataset.v); view.querySelectorAll(sel + ' .chip').forEach(x => x.classList.toggle('on', x === b)); }; });
   chipGroup('#nLimit', v => { nLim = +v; });
-  chipGroup('#nPlan', v => { nPlan = v; });
-  chipGroup('#nDays', v => { nDays = +v; });
+  chipGroup('#nPlan', v => { nPlan = v; $('#nFree').hidden = v === 'premium'; $('#nPrem').hidden = v !== 'premium'; });
+  chipGroup('#nCred', v => { nCred = +v; });
   $('#nGo').onclick = async () => {
     $('#nGo').disabled = true;
-    const c = await L.adminCall({ action: 'create', name: $('#nName').value.trim(), limit: nLim, plan: nPlan, days: nDays }).catch(e => ({ error: e.message }));
+    const c = await L.adminCall({ action: 'create', name: $('#nName').value.trim(), limit: nLim, plan: nPlan, credits: nCred }).catch(e => ({ error: e.message }));
     if (c.code) { toast('✅ Code ' + c.code + ' ထုတ်ပြီးပါပြီ'); await pageAdmin(); shareCode(c); }
     else { toast('မရပါ: ' + (c.error || c.status)); $('#nGo').disabled = false; }
   };
@@ -1430,7 +1445,8 @@ async function pageAdmin() {
   view.querySelectorAll('.acode').forEach(el => {
     const code = el.dataset.c, c = byCode[code];
     el.querySelector('.cshare').onclick = () => shareCode(c);
-    el.querySelector('.cplus30').onclick = () => act({ action: 'update', code, addDays: 30 }, '⏳ သက်တမ်း ၃၀ ရက် တိုးပြီးပါပြီ');
+    el.querySelectorAll('.cadd').forEach(b => { b.onclick = () => act({ action: 'update', code, addCredits: +b.dataset.n }, `💎 Credit ${b.dataset.n} ပုဒ် ထည့်ပြီးပါပြီ`); });
+    const ne = el.querySelector('.cnoexp'); if (ne) ne.onclick = () => act({ action: 'update', code, noExpiry: true }, '⏳ သက်တမ်း ဖြုတ်ပြီးပါပြီ');
     el.querySelector('.cplan').onclick = () => act({ action: 'update', code, plan: c.plan === 'premium' ? 'free' : 'premium' }, c.plan === 'premium' ? '🎟 Free ပြောင်းပြီးပါပြီ' : '💎 Premium ပြောင်းပြီးပါပြီ');
     const setLim = v => act({ action: 'update', code, limit: v });
     el.querySelector('.cminus').onclick = () => setLim(c.limit === 0 ? 5 : Math.max(1, c.limit - 1));

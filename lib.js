@@ -27,25 +27,27 @@ async function accessPost(path, body, headers = {}) {
   let j = {}; try { j = await r.json(); } catch {}
   return { status: r.status, ...j };
 }
-// {open:true} = no access codes on this Worker; {error:'bad_code'|'expired'}; else {name, limit, used, left, plan, expires}
-// Premium codes also get a ticket for the premium routes (transcription with the owner's key, AI translation).
+// {open:true} = no access codes on this Worker; {error:'bad_code'|'expired'}; else {name, limit, used, left, plan, expires, credits}
+// Premium codes with credits also get a ticket for the premium routes (transcription with the owner's key, AI translation).
+// Premium is paid per video: job() names the video in hand (set by the app), its first premium use takes a credit.
 let pticket = '';
-export const premium = { get on() { return !!pticket; } };
+export const premium = { get on() { return !!pticket; }, job: () => '' };
 export async function accessCheck(code) {
-  const r = await accessPost('/auth/check', { code: code ?? access.code });
+  const r = await accessPost('/auth/check', { code: code ?? access.code, job: premium.job() });
   pticket = r.pticket || '';
   return r;
 }
 // call a premium route; an expired premium ticket (6 h) is renewed once
 async function premiumFetch(path, opts = {}) {
   for (let k = 0; k < 2; k++) {
-    const r = await fetch(cfg.workerUrl + path, { ...opts, headers: { ...(opts.headers || {}), 'x-ticket': pticket } });
+    const r = await fetch(cfg.workerUrl + path, { ...opts, headers: { ...(opts.headers || {}), 'x-ticket': pticket, 'x-job': premium.job() } });
     if (r.status === 403 && k === 0) { await accessCheck().catch(() => {}); if (pticket) continue; }
     return r;
   }
 }
 const PREMIUM_ERR = {
-  premium_only: 'Premium Code သက်တမ်း ကုန်သွားပါပြီ (သို့) Premium မဟုတ်ပါ',
+  premium_only: 'Premium Code မဟုတ်တော့ပါ (သို့) ပိတ်ထားပါတယ်',
+  no_credit: '💎 Premium Credit ကုန်သွားပါပြီ — Admin ဆီက ထပ်ဝယ်ပါ',
   premium_cap: 'ယနေ့အတွက် Premium အလိုအလျောက် သုံးခွင့် ပြည့်သွားပါပြီ — မနက်ဖြန် ပြန်သုံးပါ',
   no_gemini_key: 'Admin က Gemini key မထည့်ရသေးပါ',
   no_aai_key: 'Admin က AssemblyAI key မထည့်ရသေးပါ'
