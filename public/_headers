@@ -1,6 +1,7 @@
 # Cloudflare Pages: make the page "cross-origin isolated" so the optional
-# multi-core FFmpeg engine can use SharedArrayBuffer. "credentialless" keeps
-# Google Fonts, the CDN and the Worker loading as before.
+# multi-core FFmpeg engine can use SharedArrayBuffer. "require-corp" (not
+# "credentialless") because Safari / every iPhone browser only supports this one;
+# Google Fonts are loaded with crossorigin, the CDN and the Worker answer with CORS.
 /*
   Cross-Origin-Opener-Policy: same-origin
-  Cross-Origin-Embedder-Policy: credentialless
+  Cross-Origin-Embedder-Policy: require-corp
