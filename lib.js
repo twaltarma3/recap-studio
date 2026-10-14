@@ -742,8 +742,9 @@ export function outGeometry(sz, fx) {
   const W = even(sz.w), H = even(sz.h);
   const r = fx && RATIOS[fx.ratio];
   if (!r) {
-    // "fast" option: shrink a large original-ratio video to 1280 on the long side (same size the ratio presets use)
-    const k = fx && fx.fast ? Math.min(1, 1280 / Math.max(W, H)) : 1;
+    // "fast" option: shrink a large original-ratio video to 720p — at most 720 on the short side and 1280 on the
+    // long side (1920x1080 -> 1280x720, 1080x1080 -> 720x720, 1080x1920 -> 720x1280)
+    const k = fx && fx.fast ? Math.min(1, 1280 / Math.max(W, H), 720 / Math.min(W, H)) : 1;
     if (k < 1) return { W, H, OW: even(W * k), OH: even(H * k), ratio: false, scaled: true };
     return { W, H, OW: W, OH: H, ratio: false };
   }
@@ -1254,6 +1255,9 @@ export async function renderDub({ file, videoDur, segs, burmese, persona, pitch,
     let src = null;
     const sm = fhead.join('\n').match(/Stream #0:\d+[^\n]*?Video:[^\n]*?(\d{2,5})x(\d{2,5})[^\n]*?([\d.]+) fps/);
     if (sm) src = { w: +sm[1], h: +sm[2], fps: +sm[3] };
+    // what was actually written: size after 720p / ratio, frame rate after the 30 fps option (null = stream copy)
+    let outV = null;
+    if (src && fxFilter && !fxFailed) outV = { w: geo ? geo.OW : src.w, h: geo ? geo.OH : src.h, fps: fx && fx.cap30 ? 30 : src.fps };
     if (fx && fx.subs && fx.subs.on && !subs) fxFailed = true;
     try { f.off('log', onLog); } catch {}
     if (fx && fx.subs && fx.subs.on && !subs) diag = (diag ? diag + '\n' : '') + 'subtitle track build failed' + (subs === null ? '' : '');
@@ -1264,7 +1268,7 @@ export async function renderDub({ file, videoDur, segs, burmese, persona, pitch,
     lap('save');
     setFFProgress(null);
     onProgress(1, 'ပြီးပါပြီ 🎉');
-    return { video: new Blob([out.slice().buffer], { type: 'video/mp4' }), placed, fellBack, fxFailed, fontFailed, diag, geoOk: !!geo, ovlOk: ovl, subsOk: !!subs, stats: dubStats(placed, maxTempo), timing, tries, src, engine: engineInfo(), skipped: skipped.sort((a, b) => a - b) };
+    return { video: new Blob([out.slice().buffer], { type: 'video/mp4' }), placed, fellBack, fxFailed, fontFailed, diag, geoOk: !!geo, ovlOk: ovl, subsOk: !!subs, stats: dubStats(placed, maxTempo), timing, tries, src, engine: engineInfo(), out: outV, skipped: skipped.sort((a, b) => a - b) };
   } catch (e) {
     // failed part-way: free the leftover work files so a retry doesn't run out of memory
     try { f.off('log', onLog); } catch {}

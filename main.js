@@ -1079,7 +1079,7 @@ async function step4() {
       setQuota(a);
     }
     const persona = L.PERSONAS.find(p => p.id === state.personaId);
-    const { video, placed, fellBack, fxFailed, fontFailed, diag, geoOk, ovlOk, subsOk, stats, timing, tries, src, engine, skipped } = await L.renderDub({
+    const { video, placed, fellBack, fxFailed, fontFailed, diag, geoOk, ovlOk, subsOk, stats, timing, tries, src, out, engine, skipped } = await L.renderDub({
       file: state.file, videoDur: state.videoDur, segs: state.segs, burmese: state.burmese,
       persona, pitch: state.pitch, rate: state.rate,
       fx: {
@@ -1093,7 +1093,7 @@ async function step4() {
     });
     state.diag = `geo:${geoOk} subs:${subsOk} overlay:${ovlOk} fxFailed:${fxFailed}\n${diag || ''}`;
     const took = stopClock();
-    state.result = { video, url: URL.createObjectURL(video), srt: L.buildSrt(state.burmese, placed), stats, took, timing, tries, src, engine, skipped };
+    state.result = { video, url: URL.createObjectURL(video), srt: L.buildSrt(state.burmese, placed), stats, took, timing, tries, src, out, engine, skipped };
     showResult();
     H.histAdd({ name: state.file.name, video, srt: state.result.srt, size: video.size, dur: state.videoDur, took })
       .catch(() => toast('မှတ်တမ်းထဲ သိမ်းဖို့ ဖုန်းထဲ နေရာမလောက်ပါ — Video ကို Download လုပ်ထားပါ'));
@@ -1169,7 +1169,8 @@ function timingBlock() {
   const rows = STAGES.filter(([k]) => t[k] >= 0.05).map(([k, label]) => `
     <div class="trow"><span>${label}</span><b>${secTxt(t[k])}</b></div>
     <div class="tbar"><i style="width:${Math.max(2, Math.round((t[k] / max) * 100))}%"></i></div>`).join('');
-  const src = r.src ? `<p class="muted small" style="margin:10px 0 0">📹 မူရင်း Video: ${r.src.w}×${r.src.h} · ${Math.round(r.src.fps)} fps</p>` : '';
+  const o = r.out, same = o && r.src && o.w === r.src.w && o.h === r.src.h && Math.round(o.fps) === Math.round(r.src.fps);
+  const src = r.src ? `<p class="muted small" style="margin:10px 0 0">📹 မူရင်း Video: ${r.src.w}×${r.src.h} · ${Math.round(r.src.fps)} fps${o && !same ? ` → ထုတ်ထားတာ: ${o.w}×${o.h} · ${Math.round(o.fps)} fps` : ''}</p>` : '';
   const en = r.engine && r.engine.kind
     ? `<p class="muted small" style="margin:6px 0 0">⚙ Engine: ${r.engine.kind === 'mt' ? `⚡ Multi-core (core ${navigator.hardwareConcurrency || '?'} ခု)` : 'ပုံမှန် (single-core)'}${r.engine.fellBack ? ' — Multi-core အဆင်မပြေလို့' : ''}</p>` : '';
   const retry = r.tries > 1 ? `<p class="muted small" style="margin:6px 0 0">🔁 ပထမနည်း မရလို့ Video ကို ${r.tries} ကြိမ် ထုတ်ခဲ့ရပါတယ်</p>` : '';
