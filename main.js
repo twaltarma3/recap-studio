@@ -13,7 +13,7 @@ const state = {
   step: 1, showSrc: false, file: null, videoDur: 0, lang: 'auto', segs: [], sourceLines: [],
   burmese: [], personaId: 'TH', ...DEFAULTS, result: null, busy: false, origSegs: null,
   fxMirror: false, fxBlur: false, blurH: 15, blurY: 100, blurS: 50, blurO: 100, previewUrl: null, previewFor: null,
-  pStyle: 'recap', fxRatio: 'orig', fxFit: 'crop', fxZoom: 100, fxFast: true, fxFps30: true, wmOn: false, wmText: '', wmPos: 'br', wmSize: 4,
+  pStyle: 'recap', fxRatio: 'orig', fxFit: 'crop', fxZoom: 100, fxFast: true, fxFps30: true, fxUnlock: false, wmOn: false, wmText: '', wmPos: 'br', wmSize: 4,
   logoOn: false, logoData: null, logoPos: 'tr', logoSize: 14, tab: 'video',
   fxSubs: false, subS: 5, subY: 88, subC: '#ffffff', subO: '#000000', subFont: 'pt16', fontOk: false
 };
@@ -546,6 +546,12 @@ function previewBlock() {
         <button type="button" data-tab="extra">✨ Extras</button>
       </div>
       <div class="pane" data-pane="video">
+        <label style="display:flex;align-items:center;gap:10px;font-weight:600;margin-top:12px">
+          <input id="fxUnlock" type="checkbox" style="${chk}" ${state.fxUnlock ? 'checked' : ''} />
+          <span id="fxUnlockT">${state.fxUnlock ? '🔓' : '🔒'} အချိုး / Zoom / 720p / 30fps ပြင်မည်</span>
+        </label>
+        <p class="muted small" style="margin:4px 0 0">ပုံမှန် Setting (မူရင်းအချိုး · Zoom 100% · 720p · 30fps) နဲ့ သော့ခတ်ထားပါတယ်။ ပြောင်းချင်မှ ဖွင့်ပါ။</p>
+        <div id="lockBox" class="lockbox ${state.fxUnlock ? '' : 'locked'}" ${state.fxUnlock ? '' : 'inert'}>
         <b style="display:block;margin-top:14px">📐 အချိုး (Ratio)</b>
         <div class="chips" id="ratioChips">
           ${[['orig', 'မူရင်း'], ['9:16', '9:16'], ['3:4', '3:4'], ['16:9', '16:9'], ['1:1', '1:1']].map(([k, t]) => `<button type="button" class="chip" data-r="${k}">${t}</button>`).join('')}
@@ -568,6 +574,7 @@ function previewBlock() {
         🎞 30 fps နဲ့ ထုတ်မည်
       </label>
       <p class="muted small" style="margin:4px 0 0">မူရင်း 60 fps Video တွေကို 30 fps နဲ့ ထုတ်လို့ ၂ ဆလောက် ပိုမြန်ပါတယ် (TikTok/Facebook မှာ ကွာခြားမှု မသိသာပါ)။ 30 fps နဲ့အောက် Video တွေကို မထိပါ။</p>
+        </div>
       <label style="display:flex;align-items:center;gap:10px;font-weight:600;margin-top:12px">
         <input id="fxMirror" type="checkbox" style="${chk}" ${state.fxMirror ? 'checked' : ''} />
         ↔ Mirror (ဘယ်ညာ လှန်မည်)
@@ -740,6 +747,13 @@ function bindPreview() {
   };
   $('#fxFast').onchange = e => { state.fxFast = e.target.checked; };
   $('#fxFps30').onchange = e => { state.fxFps30 = e.target.checked; };
+  $('#fxUnlock').onchange = e => {
+    state.fxUnlock = e.target.checked;
+    const box = $('#lockBox');
+    box.classList.toggle('locked', !state.fxUnlock);
+    if (state.fxUnlock) box.removeAttribute('inert'); else box.setAttribute('inert', '');
+    $('#fxUnlockT').textContent = (state.fxUnlock ? '🔓' : '🔒') + ' အချိုး / Zoom / 720p / 30fps ပြင်မည်';
+  };
   $('#fxMirror').onchange = e => { state.fxMirror = e.target.checked; apply(); };
   $('#fxBlur').onchange = e => { state.fxBlur = e.target.checked; $('#blurBox').hidden = !state.fxBlur; apply(); };
   $('#blurH').oninput = e => { state.blurH = +e.target.value; $('#bhv').textContent = e.target.value + '%'; apply(); };
