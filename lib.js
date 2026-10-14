@@ -528,6 +528,37 @@ export function parseTranslations(raw) {
   return obj.translations.map(x => String(x ?? '').replace(/\s*\n\s*/g, ' ').trim());
 }
 
+/* ---------- cut a finished video (start / end) without re-encoding ---------- */
+// Stream copy: takes seconds and keeps the quality. The end is cut exactly; a cut at the start can land up
+// to a key frame earlier (about 1-2 s), because a copied video must begin on a key frame.
+export async function cutVideo(file, start, end, onProgress) {
+  const f = await getFFmpeg();
+  const ext = ((file.name || '').match(/\.([a-z0-9]{2,4})$/i) || [, 'mp4'])[1].toLowerCase();
+  const inName = 'cut_in.' + ext;
+  const keep = Math.max(0.5, end - start);
+  setFFProgress(p => onProgress && onProgress(p));
+  try {
+    await f.writeFile(inName, await fetchFile(file));
+    const tries = [['mp4', ['-movflags', '+faststart']], [ext === 'mp4' ? 'mkv' : ext, []]];
+    for (const [oext, extra] of tries) {
+      const out = 'cut_out.' + oext;
+      const args = [...(start > 0 ? ['-ss', start.toFixed(2)] : []), '-i', inName, '-t', keep.toFixed(2),
+        '-map', '0:v:0?', '-map', '0:a:0?', '-c', 'copy', '-avoid_negative_ts', 'make_zero', ...extra, out];
+      const code = await ffRun(f, args);
+      if (code === 0) {
+        const d = await f.readFile(out);
+        try { await f.deleteFile(out); } catch {}
+        return { blob: new Blob([d.slice().buffer], { type: oext === 'mp4' ? 'video/mp4' : 'video/x-matroska' }), ext: oext };
+      }
+      try { await f.deleteFile(out); } catch {}
+    }
+    throw new Error('Video ဖြတ်လို့ မရပါ (ဒီဖိုင်အမျိုးအစားကို မဖြတ်နိုင်ပါ)');
+  } finally {
+    setFFProgress(null);
+    try { await f.deleteFile(inName); } catch {}
+  }
+}
+
 /* ---------- TTS ---------- */
 // Microsoft often returns *no audio* to datacenter addresses (like the Worker's Cloudflare IP).
 // So the phone first talks to Edge TTS itself, using a signed address the Worker hands out
