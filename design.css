@@ -174,3 +174,19 @@ body .ditem.on span{background:var(--grad) !important;color:#fff !important}
 #nLimit{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
 #nLimit .chip{flex:1 1 0;min-width:48px}
 .chips:not([data-pos]):not(#ratioChips):not(#fitChips):not(#pStyle) .chip.on{background:var(--grad) !important;color:#fff !important;border-color:transparent !important;box-shadow:0 6px 16px rgba(124,58,237,.35) !important}
+
+/* ---------- thumbnail maker ---------- */
+.thumbp #tbMain{display:block;width:100%;max-width:360px;margin:12px auto 4px;border-radius:16px;box-shadow:0 12px 30px rgba(0,0,0,.5)}
+.thumbp .tstep{margin:16px 0 8px;font-weight:700;color:var(--text)}
+.tframes{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.tframes button{position:relative;padding:0;margin:0;border:2px solid transparent;border-radius:12px;overflow:hidden;background:#000;cursor:pointer;min-height:0}
+.tframes button img{display:block;width:100%;aspect-ratio:16/10;object-fit:cover}
+.tframes button small{position:absolute;right:4px;bottom:3px;font-size:11px;color:#fff;background:rgba(0,0,0,.6);padding:1px 5px;border-radius:6px}
+.tframes button.on{border-color:var(--violet);box-shadow:0 0 0 3px rgba(139,92,246,.35)}
+.tstyles{display:flex;flex-direction:column;gap:0}
+.tstyles button{display:flex;align-items:center;gap:14px;text-align:left;padding:10px 6px;margin:0;background:transparent;border:0;border-bottom:1px solid var(--stroke);border-radius:12px;color:var(--text);cursor:pointer;min-height:0}
+.tstyles button canvas{width:96px;height:128px;flex:none;border-radius:12px;box-shadow:0 6px 16px rgba(0,0,0,.4)}
+.tstyles button span{display:flex;flex-direction:column;gap:4px}
+.tstyles button small{color:var(--muted);font-size:13px;line-height:1.6}
+.tstyles button.on{background:var(--violet-soft);outline:2px solid rgba(139,92,246,.6)}
+.thumbp textarea,.thumbp input:not([type=range]){width:100%;margin:6px 0}

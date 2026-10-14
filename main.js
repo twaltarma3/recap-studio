@@ -5,6 +5,7 @@ import './design.css';
 import { startIcons } from './icons.js';
 import * as L from './lib.js';
 import * as H from './history.js';
+import * as T from './thumb.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 const DEFAULTS = { pitch: 10, rate: 20, keepTalk: 0, keepGap: 0.3, offset: 0, maxTempo: 2.0, dubGain: 1.8 };
@@ -12,7 +13,7 @@ const state = {
   step: 1, showSrc: false, file: null, videoDur: 0, lang: 'auto', segs: [], sourceLines: [],
   burmese: [], personaId: 'TH', ...DEFAULTS, result: null, busy: false, origSegs: null,
   fxMirror: false, fxBlur: false, blurH: 15, blurY: 100, blurS: 50, blurO: 100, previewUrl: null, previewFor: null,
-  pStyle: 'recap', fxRatio: 'orig', fxFit: 'crop', fxZoom: 100, fxFast: false, fxFps30: false, wmOn: false, wmText: '', wmPos: 'br', wmSize: 4,
+  pStyle: 'recap', fxRatio: 'orig', fxFit: 'crop', fxZoom: 100, fxFast: true, fxFps30: true, wmOn: false, wmText: '', wmPos: 'br', wmSize: 4,
   logoOn: false, logoData: null, logoPos: 'tr', logoSize: 14, tab: 'video',
   fxSubs: false, subS: 5, subY: 88, subC: '#ffffff', subO: '#000000', subFont: 'pt16', fontOk: false
 };
@@ -53,6 +54,7 @@ const esc = t => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;');
 // drop extra blank lines at the end (a stray Enter) so the line count still matches
 const trimTail = (lines, n) => { while (lines.length > n && lines[lines.length - 1] === '') lines.pop(); return lines; };
 function clearResult() {
+  state.thumb = null;                                                           // thumbnail belongs to that result
   if (state.result && state.result.url) URL.revokeObjectURL(state.result.url);   // free the old video from memory
   state.result = null;
 }
@@ -1187,6 +1189,7 @@ function showResult() {
     ${state.diag && /fxFailed:true|false\n[^]/.test(state.diag) && /fxFailed:true|failed|Error|error/i.test(state.diag) ? `<details style="margin:10px 0"><summary class="muted small">🛠 Effect log (အမှားရှာရန်)</summary><pre id="diagTxt" style="white-space:pre-wrap;font-size:11px;max-height:220px;overflow:auto">${esc(state.diag)}</pre><button class="btn block" id="diagCp" type="button">📋 Log ကူးမည်</button></details>` : ''}
     <button id="dl" class="btn primary">⬇ Video Download (.mp4)</button>
     <button id="srt" class="btn block">Download Subtitles (.srt)</button>
+    <div id="thumbBox"><button id="thumbGo" class="btn block">🖼 Thumbnail ပြုလုပ်မည် (3:4)</button></div>
     <div class="row" style="margin-top:14px">
       <button id="back" class="ghost">‹ အသံရွေးချယ်မှုသို့</button>
       <button id="again" class="ghost">Video အသစ်</button>
@@ -1200,6 +1203,8 @@ function showResult() {
     try { await navigator.clipboard.writeText(t); toast('Prompt ကူးပြီးပါပြီ — Gemini မှာ paste လုပ်ပါ'); } catch { toast('ကူးမရပါ'); }
   });
   $('#toStep2')?.addEventListener('click', () => { state.showSrc = true; go(2); });
+  $('#thumbGo').onclick = () => thumbPanel();
+  if (state.thumb && state.thumb.frames) thumbPanel();
   $('#back').onclick = () => { clearResult(); go(3); };
   $('#again').onclick = () => { clearResult(); Object.assign(state, { showSrc: false, file: null, segs: [], origSegs: null, burmese: [] }); go(1); };
 }
@@ -1363,7 +1368,110 @@ async function pageAdmin() {
   });
 }
 
+/* ---------------- Thumbnail (3:4) from a frame of the video ---------------- */
+let thumbDraw = 0;
+async function thumbPanel() {
+  const box = $('#thumbBox'); if (!box) return;
+  const th = state.thumb || (state.thumb = {
+    frames: null, dur: 0, t: 0, img: null, focus: 50,
+    style: (() => { try { return localStorage.getItem('thumbStyle') || 'blue'; } catch { return 'blue'; } })(),
+    title: '', sub: ''
+  });
+  if (!th.frames) {
+    // the original upload (no subtitles burned in); if the phone can't decode it, the finished video
+    const srcs = [state.file && URL.createObjectURL(state.file), state.result && state.result.url].filter(Boolean);
+    box.innerHTML = `<div class="panel"><b>🖼 Thumbnail</b><p class="muted small" id="tbMsg">Video ထဲက ပုံလှလှလေးတွေ ရှာနေပါတယ်…</p><div class="bar"><i id="tbFill"></i></div></div>`;
+    let err = null;
+    for (const src of srcs) {
+      try {
+        const r = await T.pickFrames(src, { onProgress: p => { const f = $('#tbFill'); if (f) f.style.width = Math.round(p * 100) + '%'; } });
+        th.frames = r.frames; th.dur = r.dur; th.src = src; th.t = r.frames[0].t;
+        th.img = await T.grabFrame(src, th.t);
+        break;
+      } catch (e) { err = e; }
+    }
+    if (!th.frames) { box.innerHTML = `<div class="err">${esc((err && err.message) || 'ပုံထုတ်လို့ မရပါ')}</div><button id="thumbGo" class="btn block">ပြန်ကြိုးစားမည်</button>`; $('#thumbGo').onclick = () => thumbPanel(); return; }
+  }
+  await L.ensureSubFont('pt16').catch(() => {});
+  if (!$('#thumbBox')) return;
+  box.innerHTML = `
+    <div class="panel thumbp">
+      <b>🖼 Thumbnail (3:4)</b>
+      <canvas id="tbMain" width="540" height="720"></canvas>
+      <p class="tstep">၁) ပုံရွေးပါ <span class="muted small">— စိတ်ဝင်စားစရာ အကောင်းဆုံး ၆ ပုံ</span></p>
+      <div class="tframes">${th.frames.map((f, i) => `<button type="button" data-i="${i}" class="${Math.abs(f.t - th.t) < 0.01 ? 'on' : ''}"><img src="${f.img}" alt="" /><small>${fmtDur(f.t)}</small></button>`).join('')}</div>
+      <label class="small muted" style="display:block;margin-top:8px">⏱ အချိန် ကိုယ်တိုင်ရွေး: <b id="tbTv">${fmtDur(th.t)}</b></label>
+      <input id="tbT" type="range" min="0" max="${th.dur.toFixed(1)}" step="0.1" value="${th.t.toFixed(1)}" />
+      <label class="small muted" style="display:block;margin-top:6px">↔ ပုံနေရာ ရွှေ့ရန် (ဘယ် / ညာ)</label>
+      <input id="tbF" type="range" min="0" max="100" step="1" value="${th.focus}" />
+      <p class="tstep">၂) ခေါင်းစဉ်</p>
+      <textarea id="tbTitle" rows="2" placeholder="ဥပမာ  ဘုရင်မရဲ့ လျှို့ဝှက်ချက်">${esc(th.title)}</textarea>
+      <input id="tbSub" placeholder="ခေါင်းစဉ်ငယ် (မထည့်လည်းရ)" value="${esc(th.sub)}" />
+      <button type="button" class="btn block" id="tbPrompt">🤖 Gemini ခေါင်းစဉ် Prompt ကူးမည်</button>
+      <p class="muted small" style="margin:6px 0 0">Gemini ပေးတဲ့ <b>"1. ခေါင်းစဉ် | ခေါင်းစဉ်ငယ်"</b> တစ်ကြောင်းကို ခေါင်းစဉ်အကွက်ထဲ paste လုပ်ရင် အလိုလို ခွဲထည့်ပေးပါမယ်။</p>
+      <p class="tstep">၃) Style ရွေးပါ</p>
+      <div class="tstyles">${T.STYLES.map(s => `
+        <button type="button" data-s="${s.id}" class="${s.id === th.style ? 'on' : ''}">
+          <canvas width="135" height="180"></canvas>
+          <span><b>${s.name}</b><small>${s.desc}</small></span>
+        </button>`).join('')}</div>
+      <button type="button" class="btn primary block" id="tbDl">⬇ Thumbnail Download (.jpg)</button>
+    </div>`;
+
+  const opts = () => ({ style: th.style, title: th.title, sub: th.sub, focus: th.focus / 100, font: 'pt16' });
+  const redraw = (minis = false) => {
+    cancelAnimationFrame(thumbDraw);
+    thumbDraw = requestAnimationFrame(() => {
+      const c = $('#tbMain'); if (!c) return;
+      T.drawThumb(c.getContext('2d'), c.width, c.height, th.img, opts());
+      if (minis) view.querySelectorAll('.tstyles button').forEach(b => {
+        const m = b.querySelector('canvas');
+        T.drawThumb(m.getContext('2d'), m.width, m.height, th.img, { ...opts(), style: b.dataset.s });
+      });
+    });
+  };
+  redraw(true);
+
+  const setFrame = async t => {
+    th.t = t; $('#tbTv').textContent = fmtDur(t);
+    view.querySelectorAll('.tframes button').forEach(b => b.classList.toggle('on', Math.abs(th.frames[+b.dataset.i].t - t) < 0.01));
+    try { th.img = await T.grabFrame(th.src, t); } catch { toast('ဒီနေရာက ပုံ ယူလို့မရပါ'); return; }
+    redraw(true);
+  };
+  view.querySelectorAll('.tframes button').forEach(b => { b.onclick = () => { const t = th.frames[+b.dataset.i].t; $('#tbT').value = t.toFixed(1); setFrame(t); }; });
+  $('#tbT').oninput = e => { $('#tbTv').textContent = fmtDur(+e.target.value); };
+  $('#tbT').onchange = e => setFrame(+e.target.value);
+  $('#tbF').oninput = e => { th.focus = +e.target.value; redraw(true); };
+  $('#tbTitle').oninput = e => {
+    let v = e.target.value.replace(/^\s*\d+\s*[.)။]\s*/, '');
+    if (v.includes('|')) {                                   // pasted "ခေါင်းစဉ် | ခေါင်းစဉ်ငယ်"
+      const [a, ...b] = v.split('|');
+      v = a.trim(); th.sub = b.join(' ').trim(); $('#tbSub').value = th.sub;
+      e.target.value = v;
+    }
+    th.title = v; redraw(true);
+  };
+  $('#tbSub').oninput = e => { th.sub = e.target.value; redraw(true); };
+  $('#tbPrompt').onclick = async () => {
+    try { await navigator.clipboard.writeText(T.titlePrompt(state.burmese)); toast('Prompt ကူးပြီးပါပြီ — Gemini မှာ paste လုပ်ပါ'); } catch { toast('ကူးမရပါ'); }
+  };
+  view.querySelectorAll('.tstyles button').forEach(b => {
+    b.onclick = () => {
+      th.style = b.dataset.s; try { localStorage.setItem('thumbStyle', th.style); } catch {}
+      view.querySelectorAll('.tstyles button').forEach(x => x.classList.toggle('on', x === b));
+      redraw();
+      $('#tbMain').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    };
+  });
+  $('#tbDl').onclick = async () => {
+    const blob = await T.thumbBlob(th.img, opts());
+    if (!blob) { toast('ပုံ ထုတ်လို့ မရပါ'); return; }
+    download(blob, state.file.name.replace(/\.[^.]+$/, '') + '_thumbnail.jpg');
+  };
+}
+
 /* ---------------- start ---------------- */
+if (import.meta.env.DEV) window.__recap = { state, go };     // for local UI tests only (not in the built app)
 startIcons();
 buildMenu();
 (async () => {
