@@ -41,8 +41,9 @@ const toCanvas = (v, w) => {
 
 // how good a frame looks as a thumbnail: sharp, colourful, not too dark / bright
 function score(c) {
-  const { width: w, height: h } = c;
-  const d = c.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, w, h).data;
+  // only the middle of the picture: burned-in captions at the top / bottom would look "sharp" and win
+  const w = c.width, y0 = Math.floor(c.height * 0.1), h = Math.max(4, Math.floor(c.height * 0.72) - y0);
+  const d = c.getContext('2d', { willReadFrequently: true }).getImageData(0, y0, w, h).data;
   let sumL = 0, sharp = 0, n = 0, rgS = 0, rgQ = 0, ybS = 0, ybQ = 0;
   const L = new Float32Array(w * h);
   for (let i = 0, p = 0; i < d.length; i += 4, p++) {
@@ -131,11 +132,13 @@ function fitText(ctx, text, family, maxW, start, min, maxLines) {
   ctx.font = `700 ${min}px ${family}`;
   return { size: min, lines: wrap(ctx, text, maxW).slice(0, maxLines) };
 }
-function drawCover(ctx, img, W, H, focus = 0.5) {
-  const s = Math.max(W / img.width, H / img.height);
-  const dw = img.width * s, dh = img.height * s;
+// cover-fit the frame; cutTop / cutBottom (0..0.45) leave out the video's own captions / subtitles
+function drawCover(ctx, img, W, H, focus = 0.5, cutTop = 0, cutBottom = 0) {
+  const sy = img.height * cutTop, sh = Math.max(img.height * 0.3, img.height * (1 - cutTop - cutBottom));
+  const s = Math.max(W / img.width, H / sh);
+  const dw = img.width * s, dh = sh * s;
   const x = (W - dw) * Math.max(0, Math.min(1, focus)), y = (H - dh) / 2;
-  ctx.drawImage(img, x, y, dw, dh);
+  ctx.drawImage(img, 0, sy, img.width, sh, x, y, dw, dh);
 }
 const rrect = (ctx, x, y, w, h, r) => { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); };
 
@@ -152,6 +155,7 @@ function drawLines(ctx, lines, cx, y, size, paint) {
  */
 export function drawThumb(ctx, w, h, img, o) {
   const u = w / THUMB_W;                                   // all sizes below are for 1080 wide
+  const tu = u * (o.scale || 1);                           // text sizes follow the size slider
   const fam = subFontFamily(o.font || 'pt16');
   const title = (o.title || '').trim() || 'ခေါင်းစဉ် ဒီမှာ ရေးပါ';
   const sub = (o.sub || '').trim();
@@ -169,7 +173,7 @@ export function drawThumb(ctx, w, h, img, o) {
     recap: 'saturate(0.8) contrast(1.08)'
   };
   ctx.filter = filters[style] || 'none';
-  if (img) drawCover(ctx, img, w, h, o.focus);
+  if (img) drawCover(ctx, img, w, h, o.focus, o.cutTop || 0, o.cutBottom || 0);
   else { ctx.fillStyle = '#222'; ctx.fillRect(0, 0, w, h); }
   ctx.filter = 'none';
 
@@ -179,12 +183,12 @@ export function drawThumb(ctx, w, h, img, o) {
     // soft dark fade under the title so it reads on any picture
     ctx.fillStyle = grad(h * 0.6, h, [[0, 'rgba(0,10,40,0)'], [1, 'rgba(0,10,40,.55)']]); ctx.fillRect(0, h * 0.6, w, h * 0.4);
     const maxW = w - 90 * u;
-    let { size, lines } = fitText(ctx, title, fam, maxW, 112 * u, 50 * u, 3);
+    let { size, lines } = fitText(ctx, title, fam, maxW, 81 * tu, 40 * tu, 3);
     // the last line is the "punch": bigger, as long as it still fits
     let big = size;
     if (lines.length > 1) {
       const last = lines[lines.length - 1];
-      for (big = Math.round(size * 1.45); big > size; big -= 4 * u) { ctx.font = `700 ${big}px ${fam}`; if (ctx.measureText(last).width <= maxW) break; }
+      for (big = Math.round(size * 1.3); big > size; big -= 4 * u) { ctx.font = `700 ${big}px ${fam}`; if (ctx.measureText(last).width <= maxW) break; }
     }
     const sizes = lines.map((_, i) => (i === lines.length - 1 && lines.length > 1 ? big : size));
     const gaps = sizes.map(sz => sz * 1.5);
@@ -213,7 +217,7 @@ export function drawThumb(ctx, w, h, img, o) {
     ctx.fillStyle = flare; ctx.fillRect(w / 2 - 90 * u, ly - 90 * u, 180 * u, 180 * u);
     ctx.restore();
     if (sub) {
-      ctx.font = `700 ${44 * u}px ${fam}`;
+      ctx.font = `700 ${37 * tu}px ${fam}`;
       ctx.strokeStyle = '#1238d6'; ctx.lineWidth = 10 * u; ctx.strokeText(sub, w / 2, h - 90 * u, w - 120 * u);
       ctx.fillStyle = '#fff'; ctx.fillText(sub, w / 2, h - 90 * u, w - 120 * u);
     }
@@ -227,7 +231,7 @@ export function drawThumb(ctx, w, h, img, o) {
     // gold frame
     ctx.strokeStyle = '#d4a63a'; ctx.lineWidth = 12 * u; ctx.strokeRect(30 * u, 30 * u, w - 60 * u, h - 60 * u);
     ctx.strokeStyle = 'rgba(255,224,138,.6)'; ctx.lineWidth = 3 * u; ctx.strokeRect(52 * u, 52 * u, w - 104 * u, h - 104 * u);
-    const { size, lines } = fitText(ctx, title, fam, w - 200 * u, 124 * u, 56 * u, 3);
+    const { size, lines } = fitText(ctx, title, fam, w - 200 * u, 89 * tu, 45 * tu, 3);
     const lh = size * 1.55, top = h - 150 * u - (lines.length - 1) * lh - (sub ? 70 * u : 0);
     const g = grad(top - size, top + lines.length * lh, [[0, '#fff3c4'], [0.5, '#ffd34d'], [1, '#c98b12']]);
     drawLines(ctx, lines, w / 2, top, size, (l, x, y) => {
@@ -235,7 +239,7 @@ export function drawThumb(ctx, w, h, img, o) {
       ctx.strokeStyle = '#000'; ctx.lineWidth = 14 * u; ctx.strokeText(l, x, y);
       ctx.shadowBlur = 0; ctx.fillStyle = g; ctx.fillText(l, x, y);
     });
-    if (sub) { ctx.font = `700 ${46 * u}px ${fam}`; ctx.fillStyle = '#f2f2f2'; ctx.fillText(sub, w / 2, h - 110 * u); }
+    if (sub) { ctx.font = `700 ${39 * tu}px ${fam}`; ctx.fillStyle = '#f2f2f2'; ctx.fillText(sub, w / 2, h - 110 * u); }
   }
 
   if (style === 'pop') {
@@ -243,14 +247,14 @@ export function drawThumb(ctx, w, h, img, o) {
     gl.addColorStop(0, 'rgba(255,170,90,.45)'); gl.addColorStop(1, 'rgba(255,80,160,0)');
     ctx.globalCompositeOperation = 'screen'; ctx.fillStyle = gl; ctx.fillRect(0, 0, w, h); ctx.globalCompositeOperation = 'source-over';
     ctx.fillStyle = grad(0, h * 0.42, [[0, 'rgba(70,0,60,.55)'], [1, 'rgba(70,0,60,0)']]); ctx.fillRect(0, 0, w, h * 0.42);
-    const { size, lines } = fitText(ctx, title, fam, w - 140 * u, 136 * u, 60 * u, 3);
+    const { size, lines } = fitText(ctx, title, fam, w - 140 * u, 98 * tu, 48 * tu, 3);
     drawLines(ctx, lines, w / 2, 90 * u + size, size, (l, x, y) => {
       ctx.strokeStyle = '#fff'; ctx.lineWidth = 34 * u; ctx.strokeText(l, x, y);
       ctx.strokeStyle = '#e0137a'; ctx.lineWidth = 18 * u; ctx.strokeText(l, x, y);
       ctx.fillStyle = '#ffe14d'; ctx.fillText(l, x, y);
     });
     if (sub) {
-      ctx.font = `700 ${50 * u}px ${fam}`;
+      ctx.font = `700 ${42 * tu}px ${fam}`;
       const tw = Math.min(w - 120 * u, ctx.measureText(sub).width + 80 * u);
       rrect(ctx, (w - tw) / 2, h - 190 * u, tw, 100 * u, 50 * u); ctx.fillStyle = '#fff'; ctx.fill();
       ctx.fillStyle = '#e0137a'; ctx.fillText(sub, w / 2, h - 122 * u, w - 160 * u);
@@ -259,14 +263,14 @@ export function drawThumb(ctx, w, h, img, o) {
 
   if (style === 'doc') {
     ctx.font = `700 ${100 * u}px ${fam}`;
-    const { size, lines } = fitText(ctx, title, fam, w - 120 * u, 104 * u, 52 * u, 3);
+    const { size, lines } = fitText(ctx, title, fam, w - 120 * u, 75 * tu, 42 * tu, 3);
     const lh = size * 1.55, band = 70 * u + lines.length * lh;
     ctx.fillStyle = 'rgba(0,0,0,.8)'; ctx.fillRect(0, 0, w, band);
     ctx.fillStyle = '#ffd400'; ctx.fillRect(0, band, w, 8 * u);
     drawLines(ctx, lines, w / 2, 40 * u + size, size, (l, x, y) => { ctx.fillStyle = '#ffd400'; ctx.fillText(l, x, y); });
     ctx.fillStyle = grad(h * 0.7, h, [[0, 'rgba(0,0,0,0)'], [1, 'rgba(0,0,0,.6)']]); ctx.fillRect(0, h * 0.7, w, h * 0.3);
     const strip = sub || 'ဇာတ်လမ်း အပြည့်အစုံ';
-    ctx.font = `700 ${50 * u}px ${fam}`;
+    ctx.font = `700 ${42 * tu}px ${fam}`;
     ctx.fillStyle = '#d90429'; ctx.fillRect(0, h - 170 * u, w, 110 * u);
     ctx.fillStyle = '#fff'; ctx.fillText(strip, w / 2, h - 100 * u, w - 80 * u);
   }
@@ -290,7 +294,7 @@ export function drawThumb(ctx, w, h, img, o) {
     ctx.fillStyle = glow; ctx.fillRect(0, 0, w, h);
     ctx.restore();
     ctx.fillStyle = grad(h * 0.45, h, [[0, 'rgba(10,6,0,0)'], [1, 'rgba(10,6,0,.85)']]); ctx.fillRect(0, h * 0.45, w, h * 0.55);
-    const { size, lines } = fitText(ctx, title, fam, w - 160 * u, 128 * u, 58 * u, 3);
+    const { size, lines } = fitText(ctx, title, fam, w - 160 * u, 92 * tu, 46 * tu, 3);
     const lh = size * 1.55, top = h * 0.66 - ((lines.length - 1) * lh) / 2;
     const g = grad(top - size, top + lines.length * lh, [[0, '#ffffff'], [0.45, '#ffe6a6'], [1, '#d99a1e']]);
     drawLines(ctx, lines, w / 2, top, size, (l, x, y) => {
@@ -298,7 +302,7 @@ export function drawThumb(ctx, w, h, img, o) {
       ctx.strokeStyle = 'rgba(40,20,0,.9)'; ctx.lineWidth = 10 * u; ctx.strokeText(l, x, y);
       ctx.shadowBlur = 0; ctx.fillStyle = g; ctx.fillText(l, x, y);
     });
-    if (sub) { ctx.font = `700 ${46 * u}px ${fam}`; ctx.fillStyle = '#fff'; ctx.fillText(sub, w / 2, h - 110 * u, w - 120 * u); }
+    if (sub) { ctx.font = `700 ${39 * tu}px ${fam}`; ctx.fillStyle = '#fff'; ctx.fillText(sub, w / 2, h - 110 * u, w - 120 * u); }
   }
 
   if (style === 'recap') {
@@ -310,11 +314,11 @@ export function drawThumb(ctx, w, h, img, o) {
     const bw = ctx.measureText('အကျဉ်းချုပ်').width + 50 * u;
     rrect(ctx, 50 * u, 50 * u, bw, 76 * u, 14 * u); ctx.fillStyle = '#e50914'; ctx.fill();
     ctx.fillStyle = '#fff'; ctx.fillText('အကျဉ်းချုပ်', 50 * u + bw / 2, 104 * u);
-    const { size, lines } = fitText(ctx, title, fam, w - 200 * u, 108 * u, 52 * u, 3);
+    const { size, lines } = fitText(ctx, title, fam, w - 200 * u, 78 * tu, 42 * tu, 3);
     const lh = size * 1.55, boxH = 60 * u + lines.length * lh, boxY = h - 120 * u - boxH;
     rrect(ctx, 60 * u, boxY, w - 120 * u, boxH, 26 * u); ctx.fillStyle = '#e50914'; ctx.fill();
     drawLines(ctx, lines, w / 2, boxY + 20 * u + size, size, (l, x, y) => { ctx.fillStyle = '#fff'; ctx.fillText(l, x, y); });
-    if (sub) { ctx.font = `700 ${46 * u}px ${fam}`; ctx.fillStyle = '#dbe8ff'; ctx.fillText(sub, w / 2, boxY - 34 * u, w - 140 * u); }
+    if (sub) { ctx.font = `700 ${39 * tu}px ${fam}`; ctx.fillStyle = '#dbe8ff'; ctx.fillText(sub, w / 2, boxY - 34 * u, w - 140 * u); }
   }
   ctx.restore();
 }
@@ -344,4 +348,26 @@ export function titlePrompt(burmese) {
 
 ဇာတ်ကြောင်း:
 ${script}`;
+}
+
+// the chosen frame alone (3:4, captions cut off, no title) — to attach in Gemini for an AI re-creation
+export function cleanFrameBlob(img, o) {
+  const c = document.createElement('canvas'); c.width = THUMB_W; c.height = THUMB_H;
+  drawCover(c.getContext('2d'), img, THUMB_W, THUMB_H, o.focus, o.cutTop || 0, o.cutBottom || 0);
+  return new Promise(r => c.toBlob(r, 'image/jpeg', 0.92));
+}
+
+export const AI_LOOKS = [
+  { id: 'cinema', name: 'ရုပ်ရှင်ဆန်ဆန် (Cinematic)', en: 'an ultra-realistic cinematic movie still, dramatic lighting, shallow depth of field, rich warm colours, 8k detail' },
+  { id: '3d', name: '3D ကာတွန်း', en: 'a high-quality 3D animated movie style (Pixar / Disney look), big expressive eyes, soft global illumination, vibrant colours' },
+  { id: 'dark', name: 'မှောင်ညို ထူးဆန်း', en: 'a dark mysterious thriller look, deep shadows, moody teal and orange grading, mist and rim light' },
+  { id: 'epic', name: 'Epic အလင်းတန်း', en: 'an epic fantasy look, golden god rays, glowing particles, majestic atmosphere, high contrast' }
+];
+export function imagePrompt(look, story) {
+  const l = AI_LOOKS.find(x => x.id === look) || AI_LOOKS[0];
+  return `Use the attached movie frame as reference. Re-create the same scene as ${l.en}.
+Keep the same characters (faces, hair, clothes, age), their pose, emotion and the setting, but make it more striking and eye-catching, like a viral YouTube / TikTok movie-recap thumbnail.
+Vertical 3:4 image. The main character's face large and sharp in the upper two thirds; keep the bottom third simple so a title can be placed there.
+Do NOT add any text, letters, subtitles, captions, watermark or logo, and remove any text that is in the reference frame.${story ? `
+Story context (Burmese): ${story.slice(0, 400)}` : ''}`;
 }

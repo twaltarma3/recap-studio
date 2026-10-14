@@ -190,3 +190,9 @@ body .ditem.on span{background:var(--grad) !important;color:#fff !important}
 .tstyles button small{color:var(--muted);font-size:13px;line-height:1.6}
 .tstyles button.on{background:var(--violet-soft);outline:2px solid rgba(139,92,246,.6)}
 .thumbp textarea,.thumbp input:not([type=range]){width:100%;margin:6px 0}
+
+.tai{margin-top:14px;padding:12px;border-radius:16px;border:1px solid rgba(139,92,246,.35);background:var(--violet-soft)}
+.tai summary{font-weight:700;cursor:pointer;color:var(--text)}
+.tai .chips{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 10px}
+.tai .chip{flex:1 1 45%}
+.thumbp textarea#tbTitle{min-height:0 !important;height:96px}

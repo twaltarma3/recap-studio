@@ -1373,7 +1373,7 @@ let thumbDraw = 0;
 async function thumbPanel() {
   const box = $('#thumbBox'); if (!box) return;
   const th = state.thumb || (state.thumb = {
-    frames: null, dur: 0, t: 0, img: null, focus: 50,
+    frames: null, dur: 0, t: 0, img: null, focus: 50, scale: 100, cutTop: 0, cutBottom: 18, ai: false, look: 'cinema',
     style: (() => { try { return localStorage.getItem('thumbStyle') || 'blue'; } catch { return 'blue'; } })(),
     title: '', sub: ''
   });
@@ -1404,9 +1404,27 @@ async function thumbPanel() {
       <input id="tbT" type="range" min="0" max="${th.dur.toFixed(1)}" step="0.1" value="${th.t.toFixed(1)}" />
       <label class="small muted" style="display:block;margin-top:6px">↔ ပုံနေရာ ရွှေ့ရန် (ဘယ် / ညာ)</label>
       <input id="tbF" type="range" min="0" max="100" step="1" value="${th.focus}" />
+      <div class="tcuts" ${th.ai ? 'hidden' : ''}>
+        <label class="small muted" style="display:block;margin-top:6px">✂ Video ထဲက စာတန်း ဖြတ်ထုတ်ရန် — အောက်ခြေ <b id="tbCbV">${th.cutBottom}%</b></label>
+        <input id="tbCb" type="range" min="0" max="40" step="1" value="${th.cutBottom}" />
+        <label class="small muted" style="display:block;margin-top:6px">✂ အပေါ်ဘက် <b id="tbCtV">${th.cutTop}%</b></label>
+        <input id="tbCt" type="range" min="0" max="40" step="1" value="${th.cutTop}" />
+      </div>
+
+      <details class="tai" ${th.ai ? 'open' : ''}>
+        <summary>🎨 AI နဲ့ ပုံစံတူ ပုံအသစ် ဖန်တီးမည် <span class="badge">Gemini · အခမဲ့</span></summary>
+        <p class="muted small" style="margin:8px 0">ရွေးထားတဲ့ အခန်းကို Gemini က ပုံစံတူ ပုံအသစ် ပြန်ဆွဲပေးပါမယ် (ဇာတ်ကားထဲက ပုံ တိုက်ရိုက် မဟုတ်တော့ပါ)။</p>
+        <div class="chips" id="tbLook">${T.AI_LOOKS.map(l => `<button type="button" class="chip ${l.id === th.look ? 'on' : ''}" data-l="${l.id}">${l.name}</button>`).join('')}</div>
+        <button type="button" class="btn block" id="tbAiGet">① ပုံ + Prompt ယူမည်</button>
+        <p class="muted small" style="margin:6px 0">② <b>Gemini app</b> ဖွင့် → 📎 နဲ့ ဒေါင်းထားတဲ့ပုံ ထည့် → Prompt ကို paste လုပ်ပြီး ပို့ → ထွက်လာတဲ့ ပုံကို Download လုပ်ပါ</p>
+        <label class="btn primary block" style="display:block;text-align:center;cursor:pointer">③ Gemini ပုံကို ထည့်မည်<input id="tbAiIn" type="file" accept="image/*" hidden /></label>
+        ${th.ai ? '<button type="button" class="btn block" id="tbAiOff">↩ ဇာတ်ကားထဲက ပုံ ပြန်သုံးမည်</button>' : ''}
+      </details>
       <p class="tstep">၂) ခေါင်းစဉ်</p>
       <textarea id="tbTitle" rows="2" placeholder="ဥပမာ  ဘုရင်မရဲ့ လျှို့ဝှက်ချက်">${esc(th.title)}</textarea>
       <input id="tbSub" placeholder="ခေါင်းစဉ်ငယ် (မထည့်လည်းရ)" value="${esc(th.sub)}" />
+      <label class="small muted" style="display:block;margin-top:6px">🔠 စာလုံးအရွယ် <b id="tbSzV">${th.scale}%</b></label>
+      <input id="tbSz" type="range" min="60" max="140" step="5" value="${th.scale}" />
       <button type="button" class="btn block" id="tbPrompt">🤖 Gemini ခေါင်းစဉ် Prompt ကူးမည်</button>
       <p class="muted small" style="margin:6px 0 0">Gemini ပေးတဲ့ <b>"1. ခေါင်းစဉ် | ခေါင်းစဉ်ငယ်"</b> တစ်ကြောင်းကို ခေါင်းစဉ်အကွက်ထဲ paste လုပ်ရင် အလိုလို ခွဲထည့်ပေးပါမယ်။</p>
       <p class="tstep">၃) Style ရွေးပါ</p>
@@ -1418,7 +1436,8 @@ async function thumbPanel() {
       <button type="button" class="btn primary block" id="tbDl">⬇ Thumbnail Download (.jpg)</button>
     </div>`;
 
-  const opts = () => ({ style: th.style, title: th.title, sub: th.sub, focus: th.focus / 100, font: 'pt16' });
+  const opts = () => ({ style: th.style, title: th.title, sub: th.sub, focus: th.focus / 100, font: 'pt16', scale: th.scale / 100,
+    cutTop: th.ai ? 0 : th.cutTop / 100, cutBottom: th.ai ? 0 : th.cutBottom / 100 });
   const redraw = (minis = false) => {
     cancelAnimationFrame(thumbDraw);
     thumbDraw = requestAnimationFrame(() => {
@@ -1436,6 +1455,7 @@ async function thumbPanel() {
     th.t = t; $('#tbTv').textContent = fmtDur(t);
     view.querySelectorAll('.tframes button').forEach(b => b.classList.toggle('on', Math.abs(th.frames[+b.dataset.i].t - t) < 0.01));
     try { th.img = await T.grabFrame(th.src, t); } catch { toast('ဒီနေရာက ပုံ ယူလို့မရပါ'); return; }
+    if (th.ai) { th.ai = false; th.frameImg = null; thumbPanel(); return; }
     redraw(true);
   };
   view.querySelectorAll('.tframes button').forEach(b => { b.onclick = () => { const t = th.frames[+b.dataset.i].t; $('#tbT').value = t.toFixed(1); setFrame(t); }; });
@@ -1452,6 +1472,29 @@ async function thumbPanel() {
     th.title = v; redraw(true);
   };
   $('#tbSub').oninput = e => { th.sub = e.target.value; redraw(true); };
+  $('#tbSz').oninput = e => { th.scale = +e.target.value; $('#tbSzV').textContent = th.scale + '%'; redraw(true); };
+  $('#tbCb').oninput = e => { th.cutBottom = +e.target.value; $('#tbCbV').textContent = th.cutBottom + '%'; redraw(true); };
+  $('#tbCt').oninput = e => { th.cutTop = +e.target.value; $('#tbCtV').textContent = th.cutTop + '%'; redraw(true); };
+  view.querySelectorAll('#tbLook .chip').forEach(b => {
+    b.onclick = () => { th.look = b.dataset.l; view.querySelectorAll('#tbLook .chip').forEach(x => x.classList.toggle('on', x === b)); };
+  });
+  $('#tbAiGet').onclick = async () => {
+    try { await navigator.clipboard.writeText(T.imagePrompt(th.look, (th.title || '') + ' ' + (th.sub || ''))); } catch {}
+    const blob = await T.cleanFrameBlob(th.frameImg || th.img, opts());
+    if (blob) download(blob, state.file.name.replace(/\.[^.]+$/, '') + '_scene.jpg');
+    toast('ပုံ ဒေါင်းပြီး Prompt ကူးပြီးပါပြီ — Gemini မှာ ပုံ ထည့်ပြီး paste လုပ်ပါ');
+  };
+  $('#tbAiIn').onchange = async e => {
+    const f = e.target.files[0]; if (!f) return;
+    try {
+      const bmp = await createImageBitmap(f);
+      const c = document.createElement('canvas'); c.width = bmp.width; c.height = bmp.height; c.getContext('2d').drawImage(bmp, 0, 0);
+      if (!th.ai) th.frameImg = th.img;                  // keep the movie frame to go back to
+      th.img = c; th.ai = true; th.focus = 50;
+      thumbPanel();
+    } catch { toast('ဒီပုံကို ဖွင့်လို့ မရပါ'); }
+  };
+  $('#tbAiOff')?.addEventListener('click', () => { th.img = th.frameImg || th.img; th.ai = false; thumbPanel(); });
   $('#tbPrompt').onclick = async () => {
     try { await navigator.clipboard.writeText(T.titlePrompt(state.burmese)); toast('Prompt ကူးပြီးပါပြီ — Gemini မှာ paste လုပ်ပါ'); } catch { toast('ကူးမရပါ'); }
   };
