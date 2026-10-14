@@ -18,8 +18,13 @@ const state = {
   fxSubs: false, subS: 5, subY: 88, subC: '#ffffff', subO: '#000000', subFont: 'pt16', fontOk: false
 };
 // access codes: on only when the Worker has them set up (accessCheck answers something other than {open:true})
-const acc = { on: false, ok: false, name: '', limit: 0, used: 0, left: -1 };
-const setQuota = r => Object.assign(acc, { ok: true, name: r.name || '', limit: r.limit || 0, used: r.used || 0, left: r.left ?? -1 });
+const acc = { on: false, ok: false, name: '', limit: 0, used: 0, left: -1, plan: 'free', expires: 0 };
+const setQuota = r => Object.assign(acc, { ok: true, name: r.name || '', limit: r.limit || 0, used: r.used || 0, left: r.left ?? -1,
+  ...(r.plan ? { plan: r.plan, expires: r.expires || 0 } : {}) });
+const isPremium = () => acc.on && acc.ok && acc.plan === 'premium';
+const dateTxt = ms => { const d = new Date(ms); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+const daysLeft = ms => Math.max(0, Math.ceil((ms - Date.now()) / 86400000));
+const planTxt = () => isPremium() ? `💎 Premium${acc.expires ? ` · ${daysLeft(acc.expires)} ရက် ကျန်` : ''}` : '';
 const quotaTxt = () => acc.limit > 0 ? `ယနေ့ ကျန် ${acc.left}/${acc.limit} ပုဒ်` : 'အကန့်အသတ် မရှိ';
 const STEPS = ['ဗီဒီယိုတင်', 'မူရင်းစာသား', 'ဘာသာပြန်', 'ရလဒ်'];
 const view = $('#view');
@@ -115,7 +120,7 @@ function buildMenu() {
     <nav id="drawer">
       <div class="dhead"><b>Menu</b><button class="ghost" id="dclose">✕</button></div>
       <button class="ditem" data-p="free"><span>🎬</span><b>Free Recap</b><small>Gemini နဲ့ ကိုယ်တိုင် ဘာသာပြန်</small></button>
-      <button class="ditem" data-p="premium"><span>✨</span><b>Premium Recap</b><small>မကြာမီ</small></button>
+      <button class="ditem" data-p="premium"><span>💎</span><b>Premium</b><small>Auto ဘာသာပြန် · Key မလို</small></button>
       <button class="ditem" data-p="keys"><span>⚙</span><b>API Key Settings</b><small>AssemblyAI Key · FFmpeg Engine</small></button>
       <button class="ditem" data-p="guide"><span>📖</span><b>အသုံးပြုပုံ လမ်းညွှန်</b><small>အဆင့်လိုက် ရှင်းလင်းချက်</small></button>
       <button class="ditem" data-p="history"><span>🗂</span><b>မှတ်တမ်း (History)</b><small>နောက်ဆုံး ထုတ်ထားတဲ့ Video ၂ ခု</small></button>
@@ -327,10 +332,26 @@ async function pageHistory() {
 
 /* ---------------- Premium (placeholder) ---------------- */
 function pagePremium() {
+  const on = isPremium();
+  const row = (icon, t, d) => `<li><span>${icon}</span><div><b>${t}</b><small>${d}</small></div></li>`;
   view.innerHTML = `
-    <h2>Premium Recap</h2>
-    <p class="muted">ဒီအပိုင်းကို မကြာမီ ထည့်သွင်းပါမည်။</p>
-    <button class="btn primary" id="toFree">Free Recap သို့ သွားမည်</button>`;
+    <h2>💎 Premium</h2>
+    ${on ? `<div class="tip">✅ <b>Premium သုံးနေပါတယ်</b>${acc.expires ? ` — ${dateTxt(acc.expires)} အထိ (${daysLeft(acc.expires)} ရက် ကျန်)` : ''}</div>`
+      : '<p class="muted">Video ထုတ်တဲ့ အလုပ်ရှုပ်တဲ့ အဆင့်တွေကို App က အလိုအလျောက် လုပ်ပေးပါတယ်။</p>'}
+    <ul class="plist">
+      ${row('🔑', 'AssemblyAI Key မလို', 'Key ဖွင့်စရာ၊ ထည့်စရာ မလိုဘဲ စာသားထုတ်လို့ရ')}
+      ${row('✨', 'Auto ဘာသာပြန်', 'Gemini မှာ Copy/Paste မလုပ်ရတော့ဘဲ ခလုတ်တစ်ချက်နဲ့ မြန်မာလို ဘာသာပြန်')}
+      ${row('🖼', 'Auto Thumbnail ခေါင်းစဉ်', 'ဇာတ်ကြောင်းကနေ ခေါင်းစဉ် ၅ ခု ထုတ်ပေး — ရွေးပြီး ChatGPT ကို တန်းပို့')}
+      ${row('🎟', 'တစ်ရက် ပုဒ်ရေ ပိုရ', 'Free ထက် Video ပိုထုတ်လို့ရ')}
+    </ul>
+    ${on ? '<button class="btn primary block" id="toFree">🎬 Video ထုတ်မည်</button>'
+      : `<div class="kbox"><b>Premium ဘယ်လိုရမလဲ</b>
+          <ol class="muted small" style="margin:8px 0 0;padding-left:20px;line-height:1.9">
+            <li>Admin ကို ဆက်သွယ်ပြီး ငွေလွှဲပါ (KPay / Wave)</li>
+            <li>💎 Premium Code ရပါမယ်</li>
+            <li>☰ Menu → 🔑 Access Code → <b>Code ပြောင်းမည်</b> ကနေ Code အသစ် ထည့်ပါ</li>
+          </ol></div>
+        <button class="btn block" id="toFree">Free နဲ့ ဆက်သုံးမည်</button>`}`;
   $('#toFree').onclick = () => openPage('free');
 }
 
@@ -344,8 +365,9 @@ function pageKeys() {
     <div class="kbox">
       <div class="krow">
         <b>AssemblyAI API Key<br><span class="muted small" style="font-weight:400">(အသံဖိုင် စာသားပြောင်းရန်)</span></b>
-        <div class="badges"><span class="badge req">Required</span><span class="badge" id="aaiBadge"></span></div>
+        <div class="badges"><span class="badge ${L.premium.on ? 'ok' : 'req'}">${L.premium.on ? '💎 Premium — Key မလို' : 'Required'}</span><span class="badge" id="aaiBadge"></span></div>
       </div>
+      ${L.premium.on ? '<p class="tip small" style="margin:8px 0 0">💎 Premium Code နဲ့ ဝင်ထားလို့ AssemblyAI key မထည့်လည်း စာသားထုတ်လို့ရပါတယ်။</p>' : ''}
       <p style="margin:8px 0 10px"><a class="link small" href="https://www.assemblyai.com/dashboard/signup" target="_blank" rel="noopener">Get Free Key ↗</a></p>
       <div class="keyfield">
         <input id="kAai" type="password" autocomplete="off" placeholder="AssemblyAI API Key" />
@@ -873,7 +895,7 @@ function bindLinkBox() {
 function step1() {
   view.innerHTML = `
     <h2>Video တင်ပါ</h2>
-    ${acc.on && acc.ok ? `<p class="muted small quota">🎟 ${esc(acc.name)} · <b>${quotaTxt()}</b></p>` : ''}
+    ${acc.on && acc.ok ? `<p class="muted small quota">🎟 ${esc(acc.name)} · <b>${quotaTxt()}</b>${isPremium() ? ` · <span class="pbadge">${planTxt()}</span>` : ''}</p>` : ''}
     <label class="drop ${state.file ? 'has' : ''}" for="f">
       <input id="f" type="file" accept="video/*" hidden />
       <b>${state.file ? esc(state.file.name) : 'နှိပ်၍ Video File ရွေးချယ်ပါ'}</b>
@@ -903,7 +925,7 @@ function step1() {
   bindLinkBox();
   if (state.file) bindPreview();
   $('#next').onclick = () => {
-    if (!L.cfg.aaiKey) { toast('API Key အရင်ထည့်ပါ'); openPage('keys'); return; }
+    if (!L.cfg.aaiKey && !L.premium.on) { toast('API Key အရင်ထည့်ပါ'); openPage('keys'); return; }
     state.segs.length ? go(2) : transcribeFlow();
   };
 }
@@ -943,6 +965,8 @@ function step2() {
     <p class="muted">စာကြောင်းတစ်ကြောင်းလျှင် အချိန်တစ်ခု ကိုက်ထားသည်။ စာကြောင်းအရေအတွက် မပြောင်းပါနှင့်။ (${state.segs.length} lines)</p>
     <textarea id="src">${esc(state.segs.map(s => s.text).join('\n'))}</textarea>
     <div class="chips" id="pStyle" style="margin:0 0 8px"><button type="button" class="chip" data-s="recap">🔥 Recap (လှုပ်ရှား)</button><button type="button" class="chip" data-s="chat">💬 ရိုးရိုးစကားပြော</button></div>
+    ${isPremium() ? `<button id="autoTr" class="btn primary block">✨ Auto ဘာသာပြန်မည် <span class="pbadge">💎 Premium</span></button>
+    <p class="muted small" style="margin:4px 0 10px">ခလုတ်တစ်ချက်နဲ့ AI က မြန်မာလို ဘာသာပြန်ပေးပါမယ် (စာကြောင်းများရင် ၁ မိနစ်လောက် ကြာနိုင်ပါတယ်)။</p>` : ''}
     <button id="copy" class="btn block">📋 Copy Full Prompt</button>
     <div class="panel">
       <b>🤖 Gemini App ဖြင့် ဘာသာပြန်ရန် (Free)</b>
@@ -974,6 +998,18 @@ function step2() {
     try { await navigator.clipboard.writeText(text); toast('Prompt ကူးပြီးပါပြီ'); }
     catch { $('#json').value = text; toast('ကူးမရပါ — အောက်ကနေ ရွေးကူးပါ'); }
   };
+  $('#autoTr')?.addEventListener('click', async () => {
+    if (!syncSrc()) return;
+    const b = $('#autoTr'); b.disabled = true; state.busy = true;
+    const old = b.innerHTML; b.textContent = '✨ ဘာသာပြန်နေပါတယ်… (ခဏစောင့်ပါ)';
+    try {
+      const text = await L.premiumAI(L.buildPrompt(state.segs, state.pStyle), true);
+      const t = L.parseTranslations(text);
+      $('#json').value = JSON.stringify({ translations: t }, null, 1);
+      toast(t.length === state.segs.length ? `✅ ဘာသာပြန်ပြီးပါပြီ (${t.length} ကြောင်း) — စစ်ပြီး Next နှိပ်ပါ` : `⚠ ${t.length}/${state.segs.length} ကြောင်းပဲ ရပါတယ် — ထပ်နှိပ်ကြည့်ပါ`);
+    } catch (e) { toast(e.message.slice(0, 120)); }
+    b.innerHTML = old; b.disabled = false; state.busy = false;
+  });
   $('#next').onclick = () => {
     try {
       const t = L.parseTranslations($('#json').value);
@@ -1092,6 +1128,7 @@ async function step4() {
       const a = await L.accessStart(`${state.file.name}|${state.file.size}`);
       if (a.error === 'limit') throw Object.assign(new Error(`ယနေ့အတွက် Video ${a.limit} ပုဒ် ထုတ်ပြီးပါပြီ`), { limit: true });
       if (a.error === 'bad_code') { acc.ok = false; throw Object.assign(new Error('Access Code မမှန်တော့ပါ (ပိတ်ထား / ဖျက်ထား)'), { badCode: true }); }
+      if (a.error === 'expired') { acc.ok = false; throw Object.assign(new Error(`Code သက်တမ်း ကုန်သွားပါပြီ (${dateTxt(a.expires)})`), { badCode: true }); }
       if (!a.ticket) throw new Error('Access စစ်လို့မရပါ (' + (a.status || 'network') + ')');
       setQuota(a);
     }
@@ -1232,6 +1269,7 @@ function pageCode() {
     <div class="kbox">
       <div class="krow"><b>${esc(acc.name)}</b><span class="badge ok">Active</span></div>
       <p class="muted small" style="margin:8px 0 0">Code: <b>${esc(L.access.code)}</b></p>
+      ${isPremium() ? `<p style="margin:10px 0 0"><span class="pbadge">💎 Premium</span>${acc.expires ? ` <span class="muted small">· ${dateTxt(acc.expires)} အထိ (${daysLeft(acc.expires)} ရက် ကျန်)</span>` : ''}</p>` : ''}
       <p style="margin:10px 0 0">🎟 <b>${quotaTxt()}</b></p>
       <p class="muted small" style="margin:6px 0 0">Video တစ်ပုဒ် ထုတ်တိုင်း တစ်ခါ ရေတွက်ပါတယ်။ Video တစ်ပုဒ်တည်းကို ယနေ့ထဲ ပြန်ထုတ်ရင် ထပ်မရေတွက်ပါ။ မြန်မာစံတော်ချိန် ည ၁၂ နာရီမှာ ပြန်စပါတယ်။</p>
     </div>
@@ -1262,10 +1300,11 @@ function pageCode() {
     try {
       const r = await L.accessCheck(code);
       if (r.open) { acc.on = false; acc.ok = true; openPage('free'); return; }
+      if (r.error === 'expired') throw new Error(`Code သက်တမ်း ကုန်သွားပါပြီ (${dateTxt(r.expires)}) — သက်တမ်းတိုးဖို့ Admin ကို ဆက်သွယ်ပါ`);
       if (r.error) throw new Error('Code မမှန်ပါ (သို့) ပိတ်ထားပါတယ်');
       L.access.code = code; setQuota(r);
       toast(`✅ ${r.name} — ${quotaTxt()}`);
-      openPage(L.cfg.aaiKey ? 'free' : 'keys');
+      openPage(L.cfg.aaiKey || L.premium.on ? 'free' : 'keys');
     } catch (e) {
       err.hidden = false; err.textContent = e.message === 'Failed to fetch' ? 'ချိတ်ဆက်မရပါ — Internet စစ်ပါ' : e.message;
     }
@@ -1282,7 +1321,7 @@ const agoDays = t => {
   return m < 1 ? 'အခုလေးတင်' : m < 60 ? `${m} မိနစ်က` : m < 1440 ? `${Math.floor(m / 60)} နာရီက` : `${Math.floor(m / 1440)} ရက်က`;
 };
 const APP_URL = 'https://recap-studio-74n.pages.dev';
-const shareText = c => `🎬 Recap Studio\nAccess Code: ${c.code}\nတစ်ရက် ${c.limit > 0 ? c.limit + ' ပုဒ်' : 'အကန့်အသတ်မရှိ'}\n${APP_URL}`;
+const shareText = c => `🎬 Recap Studio${c.plan === 'premium' ? ' 💎 Premium' : ''}\nAccess Code: ${c.code}\nတစ်ရက် ${c.limit > 0 ? c.limit + ' ပုဒ်' : 'အကန့်အသတ်မရှိ'}${c.expires ? `\n${dateTxt(c.expires)} အထိ` : ''}\n${APP_URL}`;
 async function shareCode(c) {
   const text = shareText(c);
   try { if (navigator.share) { await navigator.share({ text }); return; } } catch (e) { if (e && e.name === 'AbortError') return; }
@@ -1335,14 +1374,28 @@ async function pageAdmin() {
       <div class="chips" id="nLimit">
         ${[[1, '၁ ပုဒ်'], [2, '၂ ပုဒ်'], [3, '၃ ပုဒ်'], [5, '၅ ပုဒ်'], [0, '∞']].map(([v, t]) => `<button type="button" class="chip ${v === 2 ? 'on' : ''}" data-v="${v}">${t}</button>`).join('')}
       </div>
+      <p class="muted small" style="margin:10px 0 6px">အမျိုးအစား</p>
+      <div class="chips" id="nPlan">
+        <button type="button" class="chip on" data-v="free">🎟 Free</button>
+        <button type="button" class="chip" data-v="premium">💎 Premium</button>
+      </div>
+      <p class="muted small" style="margin:10px 0 6px">သက်တမ်း</p>
+      <div class="chips" id="nDays">
+        ${[[7, '၇ ရက်'], [30, '၃၀ ရက်'], [90, '၉၀ ရက်'], [0, 'မကုန်']].map(([v, t]) => `<button type="button" class="chip ${v === 0 ? 'on' : ''}" data-v="${v}">${t}</button>`).join('')}
+      </div>
       <button class="btn primary block" id="nGo">Code ထုတ်မည်</button>
     </div>
 
     <div id="codes">${r.codes.length ? r.codes.map(c => `
       <div class="kbox acode" data-c="${esc(c.code)}">
-        <div class="krow"><b>${esc(c.name)}</b><span class="badge ${c.active ? 'ok' : 'req'}">${c.active ? 'ဖွင့်ထား' : 'ပိတ်ထား'}</span></div>
+        <div class="krow"><b>${esc(c.name)}${c.plan === 'premium' ? ' <span class="pbadge">💎 Premium</span>' : ''}</b><span class="badge ${c.active && !(c.expires && c.expires < Date.now()) ? 'ok' : 'req'}">${!c.active ? 'ပိတ်ထား' : c.expires && c.expires < Date.now() ? 'သက်တမ်းကုန်' : 'ဖွင့်ထား'}</span></div>
         <div class="codeline"><b class="ccode">${esc(c.code)}</b><button class="ghost cshare" title="Share">📤</button></div>
         <p class="muted small" style="margin:6px 0 0">ယနေ့ <b>${c.today || 0}</b>/${c.limit > 0 ? c.limit : '∞'} · စုစုပေါင်း ${c.total || 0} ပုဒ် · နောက်ဆုံး ${agoDays(c.last)}</p>
+        <p class="muted small" style="margin:4px 0 0">⏳ ${c.expires ? `${dateTxt(c.expires)} အထိ (${c.expires < Date.now() ? 'ကုန်ပြီ' : daysLeft(c.expires) + ' ရက် ကျန်'})` : 'သက်တမ်း မကုန်'}</p>
+        <div class="two">
+          <button class="btn cplus30">⏳ +30 ရက်</button>
+          <button class="btn cplan">${c.plan === 'premium' ? '🎟 Free ပြောင်း' : '💎 Premium ပြောင်း'}</button>
+        </div>
         <div class="krow" style="margin-top:10px">
           <span class="small">တစ်ရက် ထုတ်ခွင့်</span>
           <span class="limrow"><button class="ghost cminus">−</button><b class="clim">${c.limit > 0 ? c.limit : '∞'}</b><button class="ghost cplus">+</button></span>
@@ -1356,11 +1409,14 @@ async function pageAdmin() {
 
     <button class="btn block" id="aout">Admin မှ ထွက်မည်</button>`;
 
-  let nLim = 2;
-  view.querySelectorAll('#nLimit .chip').forEach(b => { b.onclick = () => { nLim = +b.dataset.v; view.querySelectorAll('#nLimit .chip').forEach(x => x.classList.toggle('on', x === b)); }; });
+  let nLim = 2, nPlan = 'free', nDays = 0;
+  const chipGroup = (sel, set) => view.querySelectorAll(sel + ' .chip').forEach(b => { b.onclick = () => { set(b.dataset.v); view.querySelectorAll(sel + ' .chip').forEach(x => x.classList.toggle('on', x === b)); }; });
+  chipGroup('#nLimit', v => { nLim = +v; });
+  chipGroup('#nPlan', v => { nPlan = v; });
+  chipGroup('#nDays', v => { nDays = +v; });
   $('#nGo').onclick = async () => {
     $('#nGo').disabled = true;
-    const c = await L.adminCall({ action: 'create', name: $('#nName').value.trim(), limit: nLim }).catch(e => ({ error: e.message }));
+    const c = await L.adminCall({ action: 'create', name: $('#nName').value.trim(), limit: nLim, plan: nPlan, days: nDays }).catch(e => ({ error: e.message }));
     if (c.code) { toast('✅ Code ' + c.code + ' ထုတ်ပြီးပါပြီ'); await pageAdmin(); shareCode(c); }
     else { toast('မရပါ: ' + (c.error || c.status)); $('#nGo').disabled = false; }
   };
@@ -1374,6 +1430,8 @@ async function pageAdmin() {
   view.querySelectorAll('.acode').forEach(el => {
     const code = el.dataset.c, c = byCode[code];
     el.querySelector('.cshare').onclick = () => shareCode(c);
+    el.querySelector('.cplus30').onclick = () => act({ action: 'update', code, addDays: 30 }, '⏳ သက်တမ်း ၃၀ ရက် တိုးပြီးပါပြီ');
+    el.querySelector('.cplan').onclick = () => act({ action: 'update', code, plan: c.plan === 'premium' ? 'free' : 'premium' }, c.plan === 'premium' ? '🎟 Free ပြောင်းပြီးပါပြီ' : '💎 Premium ပြောင်းပြီးပါပြီ');
     const setLim = v => act({ action: 'update', code, limit: v });
     el.querySelector('.cminus').onclick = () => setLim(c.limit === 0 ? 5 : Math.max(1, c.limit - 1));
     el.querySelector('.cplus').onclick = () => setLim(c.limit === 0 ? 0 : c.limit >= 10 ? 0 : c.limit + 1);
@@ -1410,6 +1468,9 @@ async function thumbPanel() {
       <p class="tstep">၁) ဇာတ်ကောင်ပုံ တစ်ပုံ ရွေးပါ</p>
       ${th.faces ? '' : '<p class="muted small">မျက်နှာ ရှင်းရှင်း မတွေ့လို့ ပုံအကြည်ဆုံးတွေကို ပြထားပါတယ်။</p>'}
       <div class="tshots">${th.shots.map((f, i) => `<button type="button" data-i="${i}" class="${i === th.sel ? 'on' : ''}"><img src="${f.img}" alt="" /><small>${fmtDur(f.t)}</small></button>`).join('')}</div>
+      ${isPremium() ? `<p class="tstep">✨ ခေါင်းစဉ် ရွေးပါ <span class="pbadge">💎 Premium</span></p>
+      <div id="tbTitles">${(th.titles || []).length ? '' : '<button type="button" class="btn block" id="tbMkTitles">✨ ခေါင်းစဉ် ၅ ခု ထုတ်မည်</button>'}</div>
+      <p class="muted small" style="margin:4px 0 0">ခေါင်းစဉ် ရွေးထားရင် ChatGPT က ထပ်မမေးဘဲ ပုံကို တန်းဆွဲပေးပါမယ်။</p>` : ''}
       <p class="tstep">၂) ပုံ ဒေါင်းပြီး Prompt ကူးပါ</p>
       <button type="button" class="btn primary block" id="tbGet">📋 ပုံ ဒေါင်း + Prompt ကူးမည်</button>
       <p class="tstep">၃) ChatGPT မှာ ပုံ ထုတ်ပါ</p>
@@ -1425,10 +1486,26 @@ async function thumbPanel() {
   view.querySelectorAll('.tshots button').forEach(b => {
     b.onclick = () => { th.sel = +b.dataset.i; view.querySelectorAll('.tshots button').forEach(x => x.classList.toggle('on', x === b)); };
   });
+  const paintTitles = () => {
+    const box = $('#tbTitles'); if (!box || !(th.titles || []).length) return;
+    box.innerHTML = `<div class="ttitles">${th.titles.map((t, i) => `<button type="button" data-i="${i}" class="${i === th.titleSel ? 'on' : ''}">${esc(t)}</button>`).join('')}</div>
+      <button type="button" class="btn block" id="tbMkTitles" style="margin-top:8px">🔄 ခေါင်းစဉ် အသစ်ထုတ်မည်</button>`;
+    box.querySelectorAll('.ttitles button').forEach(b => { b.onclick = () => { th.titleSel = th.titleSel === +b.dataset.i ? -1 : +b.dataset.i; paintTitles(); }; });
+    $('#tbMkTitles').onclick = mkTitles;
+  };
+  const mkTitles = async () => {
+    const b = $('#tbMkTitles'); if (b) { b.disabled = true; b.textContent = '✨ ခေါင်းစဉ် ရေးနေပါတယ်…'; }
+    try { th.titles = T.parseTitles(await L.premiumAI(T.titlesPrompt(state.burmese), true)); th.titleSel = 0; }
+    catch (e) { toast(e.message.slice(0, 120)); }
+    if ((th.titles || []).length) paintTitles(); else if (b) { b.disabled = false; b.textContent = '✨ ခေါင်းစဉ် ၅ ခု ထုတ်မည်'; }
+  };
+  $('#tbMkTitles')?.addEventListener('click', mkTitles);
+  paintTitles();
   $('#tbGet').onclick = async () => {
     const b = $('#tbGet'); b.disabled = true;
     let copied = false;
-    try { await navigator.clipboard.writeText(T.chatgptPrompt(state.burmese)); copied = true; } catch {}
+    const chosen = isPremium() && th.titles && th.titleSel >= 0 ? th.titles[th.titleSel] : '';
+    try { await navigator.clipboard.writeText(chosen ? T.chatgptPromptWithTitle(chosen) : T.chatgptPrompt(state.burmese)); copied = true; } catch {}
     try {
       const blob = await T.shotBlob(th.src, th.shots[th.sel]);
       if (blob) download(blob, state.file.name.replace(/\.[^.]+$/, '') + '_character.jpg');
@@ -1519,10 +1596,10 @@ buildMenu();
   // does this Worker use access codes, and is the saved code still good?
   view.innerHTML = '<p class="muted" style="margin-top:30px;text-align:center">ဖွင့်နေပါတယ်…</p>';
   const r = await L.accessCheck().catch(() => null);
-  if (r && (r.name || r.error === 'bad_code')) {      // an older Worker without codes answers 404: stay open
+  if (r && (r.name || r.error === 'bad_code' || r.error === 'expired')) {      // an older Worker without codes answers 404: stay open
     acc.on = true;
     if (r.name) setQuota(r);
   }
-  if (!L.cfg.aaiKey && (!acc.on || acc.ok)) page = 'keys';
+  if (!L.cfg.aaiKey && !L.premium.on && (!acc.on || acc.ok)) page = 'keys';
   render();
 })();

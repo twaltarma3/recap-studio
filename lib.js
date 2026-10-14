@@ -27,8 +27,36 @@ async function accessPost(path, body, headers = {}) {
   let j = {}; try { j = await r.json(); } catch {}
   return { status: r.status, ...j };
 }
-// {open:true} = no access codes on this Worker; {error:'bad_code'}; else {name, limit, used, left}
-export const accessCheck = code => accessPost('/auth/check', { code: code ?? access.code });
+// {open:true} = no access codes on this Worker; {error:'bad_code'|'expired'}; else {name, limit, used, left, plan, expires}
+// Premium codes also get a ticket for the premium routes (transcription with the owner's key, AI translation).
+let pticket = '';
+export const premium = { get on() { return !!pticket; } };
+export async function accessCheck(code) {
+  const r = await accessPost('/auth/check', { code: code ?? access.code });
+  pticket = r.pticket || '';
+  return r;
+}
+// call a premium route; an expired premium ticket (6 h) is renewed once
+async function premiumFetch(path, opts = {}) {
+  for (let k = 0; k < 2; k++) {
+    const r = await fetch(cfg.workerUrl + path, { ...opts, headers: { ...(opts.headers || {}), 'x-ticket': pticket } });
+    if (r.status === 403 && k === 0) { await accessCheck().catch(() => {}); if (pticket) continue; }
+    return r;
+  }
+}
+const PREMIUM_ERR = {
+  premium_only: 'Premium Code သက်တမ်း ကုန်သွားပါပြီ (သို့) Premium မဟုတ်ပါ',
+  premium_cap: 'ယနေ့အတွက် Premium အလိုအလျောက် သုံးခွင့် ပြည့်သွားပါပြီ — မနက်ဖြန် ပြန်သုံးပါ',
+  no_gemini_key: 'Admin က Gemini key မထည့်ရသေးပါ',
+  no_aai_key: 'Admin က AssemblyAI key မထည့်ရသေးပါ'
+};
+// Premium: Gemini answers a prompt on the Worker (json = ask for a JSON reply)
+export async function premiumAI(prompt, json = false) {
+  const r = await premiumFetch('/premium/ai', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ prompt, json }) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok || !j.text) throw new Error(PREMIUM_ERR[j.error] || ('AI မအောင်မြင်ပါ: ' + (j.detail || j.error || r.status)));
+  return j.text;
+}
 // uses one of today's videos (same job again = free); returns {ticket, left, ...} or {error:'limit'|'bad_code'}
 export async function accessStart(job) {
   const r = await accessPost('/auth/start', { code: access.code, job });
@@ -310,6 +338,15 @@ export async function loadTikTok(link, onProg) {
 
 /* ---------- AssemblyAI (through the worker) ---------- */
 async function aai(path, opts = {}) {
+  // Premium: the Worker uses the owner's AssemblyAI key, so the user needs none
+  if (premium.on) {
+    const r = await premiumFetch('/premium/aai' + path, opts);
+    if (!r.ok) {
+      const t = await r.text(); let j = {}; try { j = JSON.parse(t); } catch {}
+      throw new Error(PREMIUM_ERR[j.error] || `Server ${r.status}: ${t}`);
+    }
+    return r.json();
+  }
   if (!cfg.workerUrl || !cfg.aaiKey) throw new Error('API Key Settings ထဲမှာ AssemblyAI key ကို အရင်ထည့်ပါ');
   const r = await fetch(`${cfg.workerUrl}/aai${path}`, {
     ...opts,

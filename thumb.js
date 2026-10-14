@@ -118,6 +118,34 @@ export async function shotBlob(src, shot) {
 }
 
 // what the user pastes into ChatGPT together with the picture
+// Premium: 5 Burmese titles from Gemini (one per line)
+export function titlesPrompt(burmese) {
+  const story = burmese.filter(Boolean).join(' ').slice(0, 6000);
+  return `Read this Burmese movie-recap story and write 5 short, catchy Burmese thumbnail titles for YouTube / TikTok.
+Rules: spoken Burmese (not formal written style), about 12-25 characters each, makes people curious, no spoilers, no emoji, no hashtags, no numbering, no quotes.
+Return ONLY a JSON object: {"titles": ["...", "...", "...", "...", "..."]}
+
+Story:
+${story}`;
+}
+export function parseTitles(text) {
+  try {
+    const a = text.indexOf('{'), b = text.lastIndexOf('}');
+    const t = JSON.parse(text.slice(a, b + 1)).titles;
+    if (Array.isArray(t)) return t.map(x => String(x).trim()).filter(Boolean).slice(0, 5);
+  } catch {}
+  return text.split('\n').map(x => x.replace(/^\s*[\d.)\-•]+\s*/, '').replace(/^["“]|["”]$/g, '').trim()).filter(Boolean).slice(0, 5);
+}
+// prompt with the title already chosen: ChatGPT goes straight to drawing
+export function chatgptPromptWithTitle(title) {
+  return `I attached a frame from a movie. Create a YouTube / TikTok movie-recap thumbnail now (no questions):
+- Re-create the main character from the attached frame as a high-quality 3D animated movie character (Pixar / Disney style): same face features, hair, clothes, expression and setting, but more dramatic and eye-catching, cinematic lighting, sharp details.
+- Vertical 3:4, the highest resolution you can (Full HD quality or better).
+- Put this Burmese title on the image, exactly as written, correct Myanmar Unicode spelling, big bold readable letters in an eye-catching design (strong outline / glow), not covering the face:
+${title}
+- No other text, subtitles, watermark or logo. Remove any text that is in the attached frame.`;
+}
+
 export function chatgptPrompt(burmese) {
   const story = burmese.filter(Boolean).join(' ').slice(0, 1800);
   return `I attached a frame from a movie. I am making a Burmese (Myanmar) movie-recap video about it and need a YouTube / TikTok thumbnail.
