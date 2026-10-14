@@ -13,7 +13,7 @@ const state = {
   step: 1, showSrc: false, file: null, videoDur: 0, lang: 'auto', segs: [], sourceLines: [],
   burmese: [], personaId: 'TH', ...DEFAULTS, result: null, busy: false, origSegs: null,
   fxMirror: false, fxBlur: false, blurH: 15, blurY: 100, blurS: 50, blurO: 100, previewUrl: null, previewFor: null,
-  pStyle: 'recap', fxRatio: 'orig', fxFit: 'crop', fxZoom: 100, fxFast: true, fxFps30: true, trimEnd: 0, trimFor: '', wmOn: false, wmText: '', wmPos: 'br', wmSize: 4,
+  pStyle: 'recap', fxRatio: 'orig', fxFit: 'crop', fxZoom: 100, fxFast: true, fxFps30: true, wmOn: false, wmText: '', wmPos: 'br', wmSize: 4,
   logoOn: false, logoData: null, logoPos: 'tr', logoSize: 14, tab: 'video',
   fxSubs: false, subS: 5, subY: 88, subC: '#ffffff', subO: '#000000', subFont: 'pt16', fontOk: false
 };
@@ -558,9 +558,6 @@ function previewBlock() {
         </div>
         <div class="row" style="margin-top:14px"><b>🔍 Zoom</b><span id="fxZoomV">${state.fxZoom}%</span></div>
         ${pmRow('fxZoom', 100, 250, 10, state.fxZoom)}
-        <div class="row" style="margin-top:14px"><b>✂ နောက်ဆုံးပိုင်း ဖြတ်မည်</b><span id="trimEndV"></span></div>
-        ${pmRow('trimEnd', 0, trimMax(), 0.5, state.trimEnd)}
-        <p class="muted small" style="margin:4px 0 0">ဇာတ်ကားနာမည်၊ ကြော်ငြာ စတဲ့ မလိုတာတွေ အဆုံးမှာ ပါရင် ဖြတ်ပါ။ ဖြတ်မယ့်နေရာကို Preview မှာ ပြပေးပါမယ် — ဖြတ်လိုက်တဲ့အပိုင်းမှာ မြန်မာအသံ / စာတန်း မထည့်ပါ။</p>
       <label style="display:flex;align-items:center;gap:10px;font-weight:600;margin-top:12px">
         <input id="fxFast" type="checkbox" style="${chk}" ${state.fxFast ? 'checked' : ''} />
         ⚡ မြန်မြန်ထုတ် (720p)
@@ -658,11 +655,6 @@ function previewBlock() {
     </div>`;
 }
 
-// "cut the ending": seconds removed from the end of the video (reset when another video is chosen)
-const trimMax = () => Math.max(1, Math.min(120, Math.floor((state.videoDur || 0) * 0.5)));
-const trimTxt = () => state.trimEnd > 0
-  ? `နောက်ဆုံး ${state.trimEnd} စက္ကန့် → ${fmtDur(Math.max(0, (state.videoDur || 0) - state.trimEnd))}`
-  : 'မဖြတ်ပါ';
 function bindPreview() {
   const v = $('#pvVid'), ov = $('#pvBlur');
   if (!v || !ov) return;
@@ -728,9 +720,6 @@ function bindPreview() {
   $('#pvPlay').onclick = () => { v.paused ? v.play() : v.pause(); };
   v.onclick = () => $('#pvPlay').click();
   v.onplay = () => { $('#pvPlay').textContent = '⏸'; };
-  v.addEventListener('timeupdate', () => {
-    if (state.trimEnd > 0 && v.duration && !v.paused && v.currentTime >= v.duration - state.trimEnd) { v.pause(); toast('✂ ဒီနေရာမှာ Video ဆုံးပါမယ်'); }
-  });
   v.onpause = () => { $('#pvPlay').textContent = '▶'; };
   v.ontimeupdate = () => {
     if (v.duration) $('#pvSeek').value = Math.round((v.currentTime / v.duration) * 1000);
@@ -766,21 +755,6 @@ function bindPreview() {
   };
   bindPM('blurS', 'blurS', 5, 100, 5);
   bindPM('fxZoom', 'fxZoom', 100, 250, 10);
-  {
-    const key = state.file ? state.file.name + '|' + state.file.size : '';
-    if (state.trimFor !== key) { state.trimFor = key; state.trimEnd = 0; }
-    const mx = trimMax();
-    const setTrim = x => {
-      state.trimEnd = Math.max(0, Math.min(mx, Math.round(x * 2) / 2));
-      $('#trimEnd').value = state.trimEnd; $('#trimEndV').textContent = trimTxt();
-      const pv = $('#pvVid');                                  // show where the video will end
-      if (pv && pv.duration && state.trimEnd > 0) { pv.pause(); pv.currentTime = Math.max(0, pv.duration - state.trimEnd); }
-    };
-    $('#trimEnd').max = mx; $('#trimEndV').textContent = trimTxt();
-    $('#trimEnd').oninput = e => setTrim(+e.target.value);
-    $('#trimEndM').onclick = () => setTrim(state.trimEnd - 0.5);
-    $('#trimEndP').onclick = () => setTrim(state.trimEnd + 0.5);
-  }
   bindPM('wmSize', 'wmSize', 2, 10, 1);
   bindPM('logoSize', 'logoSize', 5, 40, 1);
   bindPM('blurO', 'blurO', 20, 100, 5);
@@ -1109,7 +1083,7 @@ async function step4() {
     }
     const persona = L.PERSONAS.find(p => p.id === state.personaId);
     const { video, placed, fellBack, fxFailed, fontFailed, diag, geoOk, ovlOk, subsOk, stats, timing, tries, src, out, engine, skipped } = await L.renderDub({
-      file: state.file, videoDur: state.videoDur, segs: state.segs, burmese: state.burmese, trimEnd: state.trimEnd,
+      file: state.file, videoDur: state.videoDur, segs: state.segs, burmese: state.burmese,
       persona, pitch: state.pitch, rate: state.rate,
       fx: {
         ratio: state.fxRatio, fit: state.fxFit, zoom: state.fxZoom, fast: state.fxFast, fps30: state.fxFps30,
