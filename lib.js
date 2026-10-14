@@ -754,6 +754,8 @@ export function outGeometry(sz, fx) {
 }
 
 /* ---- video filter graph: ratio -> mirror -> zoom -> blurred band -> burned-in subtitles -> watermark/logo ---- */
+// Scaling uses fast_bilinear (bilinear for the zoom-in): ffmpeg's default bicubic is so slow in WebAssembly that
+// shrinking to 720p made the multi-core encode slower than not shrinking at all.
 // subs: {y} (input 2 = png sequence); g: geometry from outGeometry(); ovl: input index of the watermark/logo png (0 = none)
 function buildFx(fx, subs, g, ovl = 0) {
   const mirror = !!(fx && fx.mirror), blur = !!(fx && fx.blur);
@@ -764,23 +766,23 @@ function buildFx(fx, subs, g, ovl = 0) {
   let cur = '[0:v]', n = 0;
   const lbl = () => `[t${n++}]`;
   if (fx && fx.cap30) { const o = lbl(); gr.push(`${cur}fps=30${o}`); cur = o; }        // 60 fps source -> 30 fps (half the frames to encode)
-  if (!geo && g && g.scaled) { const o = lbl(); gr.push(`${cur}scale=${g.OW}:${g.OH}${o}`); cur = o; }
+  if (!geo && g && g.scaled) { const o = lbl(); gr.push(`${cur}scale=${g.OW}:${g.OH}:flags=fast_bilinear${o}`); cur = o; }
   if (geo) {
     const o = lbl();
     if (fx.fit === 'pad') {
       gr.push(`${cur}split[p1][p2]`);
-      gr.push(`[p1]scale=${g.OW}:${g.OH}:force_original_aspect_ratio=increase,crop=${g.OW}:${g.OH},scale=${even(g.OW / 6)}:${even(g.OH / 6)},gblur=sigma=6:steps=2,scale=${g.OW}:${g.OH}[pbg]`);
-      gr.push(`[p2]scale=${g.OW}:${g.OH}:force_original_aspect_ratio=decrease[pfg]`);
+      gr.push(`[p1]scale=${g.OW}:${g.OH}:force_original_aspect_ratio=increase:flags=fast_bilinear,crop=${g.OW}:${g.OH},scale=${even(g.OW / 6)}:${even(g.OH / 6)}:flags=fast_bilinear,gblur=sigma=6:steps=2,scale=${g.OW}:${g.OH}:flags=fast_bilinear[pbg]`);
+      gr.push(`[p2]scale=${g.OW}:${g.OH}:force_original_aspect_ratio=decrease:flags=fast_bilinear[pfg]`);
       gr.push(`[pbg][pfg]overlay=x=(W-w)/2:y=(H-h)/2${o}`);
     } else {
-      gr.push(`${cur}scale=${g.OW}:${g.OH}:force_original_aspect_ratio=increase,crop=${g.OW}:${g.OH}${o}`);
+      gr.push(`${cur}scale=${g.OW}:${g.OH}:force_original_aspect_ratio=increase:flags=fast_bilinear,crop=${g.OW}:${g.OH}${o}`);
     }
     cur = o;
   }
   if (mirror) { const o = lbl(); gr.push(`${cur}hflip${o}`); cur = o; }
   if (doZoom) {
     const o = lbl();
-    gr.push(`${cur}crop=${even(g.OW / zoom)}:${even(g.OH / zoom)},scale=${g.OW}:${g.OH}${o}`);
+    gr.push(`${cur}crop=${even(g.OW / zoom)}:${even(g.OH / zoom)},scale=${g.OW}:${g.OH}:flags=bilinear${o}`);
     cur = o;
   }
   if (blur) {
