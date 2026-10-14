@@ -13,7 +13,7 @@ const state = {
   step: 1, showSrc: false, file: null, videoDur: 0, lang: 'auto', segs: [], sourceLines: [],
   burmese: [], personaId: 'TH', ...DEFAULTS, result: null, busy: false, origSegs: null,
   fxMirror: false, fxBlur: false, blurH: 15, blurY: 100, blurS: 50, blurO: 100, previewUrl: null, previewFor: null,
-  pStyle: 'recap', fxRatio: 'orig', fxFit: 'crop', fxZoom: 100, fxFast: true, fxFps30: true, wmOn: false, wmText: '', wmPos: 'br', wmSize: 4,
+  pStyle: 'recap', fxRatio: 'orig', fxFit: 'crop', fxZoom: 100, fxFast: true, fxFps30: true, fxUnlock: false, wmOn: false, wmText: '', wmPos: 'br', wmSize: 4,
   logoOn: false, logoData: null, logoPos: 'tr', logoSize: 14, tab: 'video',
   fxSubs: false, subS: 5, subY: 88, subC: '#ffffff', subO: '#000000', subFont: 'pt16', fontOk: false
 };
@@ -84,7 +84,7 @@ function render() {
     [null, step1, step2, step3, step4][state.step]();
   } else {
     stp.style.display = 'none';
-    ({ premium: pagePremium, keys: pageKeys, guide: pageGuide, history: pageHistory, code: pageCode, admin: pageAdmin }[page])();
+    ({ premium: pagePremium, keys: pageKeys, guide: pageGuide, history: pageHistory, code: pageCode, admin: pageAdmin, cut: pageCut }[page])();
   }
   syncMenu();
 }
@@ -119,6 +119,7 @@ function buildMenu() {
       <button class="ditem" data-p="keys"><span>⚙</span><b>API Key Settings</b><small>AssemblyAI Key · FFmpeg Engine</small></button>
       <button class="ditem" data-p="guide"><span>📖</span><b>အသုံးပြုပုံ လမ်းညွှန်</b><small>အဆင့်လိုက် ရှင်းလင်းချက်</small></button>
       <button class="ditem" data-p="history"><span>🗂</span><b>မှတ်တမ်း (History)</b><small>နောက်ဆုံး ထုတ်ထားတဲ့ Video ၂ ခု</small></button>
+      <button class="ditem" data-p="cut"><span>✂</span><b>Video ဖြတ်မည်</b><small>အစ / အဆုံး ကို ပြန်မပေါင်းဘဲ အမြန်ဖြတ်</small></button>
       <button class="ditem" data-p="code" id="dCode" hidden><span>🔑</span><b>Access Code</b><small id="dCodeTxt">…</small></button>
       <button class="ditem" data-p="admin" id="dAdmin" hidden><span>🛡</span><b>Admin</b><small>Code ထုတ်ရန် · Limit စီမံရန်</small></button>
     </nav>`);
@@ -545,6 +546,12 @@ function previewBlock() {
         <button type="button" data-tab="extra">✨ Extras</button>
       </div>
       <div class="pane" data-pane="video">
+        <label style="display:flex;align-items:center;gap:10px;font-weight:600;margin-top:12px">
+          <input id="fxUnlock" type="checkbox" style="${chk}" ${state.fxUnlock ? 'checked' : ''} />
+          <span id="fxUnlockT">${state.fxUnlock ? '🔓' : '🔒'} အချိုး / Zoom / 720p / 30fps ပြင်မည်</span>
+        </label>
+        <p class="muted small" style="margin:4px 0 0">ပုံမှန် Setting (မူရင်းအချိုး · Zoom 100% · 720p · 30fps) နဲ့ သော့ခတ်ထားပါတယ်။ ပြောင်းချင်မှ ဖွင့်ပါ။</p>
+        <div id="lockBox" class="lockbox ${state.fxUnlock ? '' : 'locked'}" ${state.fxUnlock ? '' : 'inert'}>
         <b style="display:block;margin-top:14px">📐 အချိုး (Ratio)</b>
         <div class="chips" id="ratioChips">
           ${[['orig', 'မူရင်း'], ['9:16', '9:16'], ['3:4', '3:4'], ['16:9', '16:9'], ['1:1', '1:1']].map(([k, t]) => `<button type="button" class="chip" data-r="${k}">${t}</button>`).join('')}
@@ -567,6 +574,7 @@ function previewBlock() {
         🎞 30 fps နဲ့ ထုတ်မည်
       </label>
       <p class="muted small" style="margin:4px 0 0">မူရင်း 60 fps Video တွေကို 30 fps နဲ့ ထုတ်လို့ ၂ ဆလောက် ပိုမြန်ပါတယ် (TikTok/Facebook မှာ ကွာခြားမှု မသိသာပါ)။ 30 fps နဲ့အောက် Video တွေကို မထိပါ။</p>
+        </div>
       <label style="display:flex;align-items:center;gap:10px;font-weight:600;margin-top:12px">
         <input id="fxMirror" type="checkbox" style="${chk}" ${state.fxMirror ? 'checked' : ''} />
         ↔ Mirror (ဘယ်ညာ လှန်မည်)
@@ -739,6 +747,13 @@ function bindPreview() {
   };
   $('#fxFast').onchange = e => { state.fxFast = e.target.checked; };
   $('#fxFps30').onchange = e => { state.fxFps30 = e.target.checked; };
+  $('#fxUnlock').onchange = e => {
+    state.fxUnlock = e.target.checked;
+    const box = $('#lockBox');
+    box.classList.toggle('locked', !state.fxUnlock);
+    if (state.fxUnlock) box.removeAttribute('inert'); else box.setAttribute('inert', '');
+    $('#fxUnlockT').textContent = (state.fxUnlock ? '🔓' : '🔒') + ' အချိုး / Zoom / 720p / 30fps ပြင်မည်';
+  };
   $('#fxMirror').onchange = e => { state.fxMirror = e.target.checked; apply(); };
   $('#fxBlur').onchange = e => { state.fxBlur = e.target.checked; $('#blurBox').hidden = !state.fxBlur; apply(); };
   $('#blurH').oninput = e => { state.blurH = +e.target.value; $('#bhv').textContent = e.target.value + '%'; apply(); };
@@ -1420,6 +1435,79 @@ async function thumbPanel() {
       toast(copied ? '✅ ပုံ ဒေါင်းပြီး Prompt ကူးပြီးပါပြီ — ChatGPT ဖွင့်ပါ' : 'ပုံ ဒေါင်းပြီးပါပြီ — Prompt ကူးမရလို့ ထပ်နှိပ်ပါ');
     } catch { toast('ပုံ ထုတ်လို့ မရပါ'); }
     b.disabled = false;
+  };
+}
+
+/* ---------------- Cut a finished video (start / end), no re-encoding ---------------- */
+const cutState = { file: null, url: null, dur: 0, s: 0, e: 0 };
+function pageCut() {
+  const c = cutState;
+  const maxCut = () => Math.max(0.5, Math.floor((c.dur || 0) * 0.9 * 2) / 2);
+  view.innerHTML = `
+    <h2>✂ Video ဖြတ်မည်</h2>
+    <p class="muted small">ထုတ်ပြီးသား Video (ဒါမှမဟုတ် ဖုန်းထဲက ဘယ် Video မဆို) ရဲ့ အစ / အဆုံး ကို ပြန်မပေါင်းဘဲ စက္ကန့်ပိုင်းအတွင်း ဖြတ်ပေးပါတယ်။ အရည်အသွေး မကျပါ။</p>
+    <label class="drop ${c.file ? 'has' : ''}" for="cutF">
+      <input id="cutF" type="file" accept="video/*" hidden />
+      <b>${c.file ? esc(c.file.name) : 'နှိပ်၍ Video ရွေးပါ'}</b>
+      <span class="muted small">${c.file ? (c.file.size / 1048576).toFixed(1) + ' MB · ' + fmtDur(c.dur) : 'MP4, MOV, WEBM, MKV'}</span>
+    </label>
+    ${c.file ? `
+    <video id="cutV" src="${c.url}" controls playsinline preload="metadata" style="width:100%;border-radius:16px;margin:10px 0;background:#000"></video>
+    <div class="kbox">
+      <div class="row"><b>⏮ အစကနေ ဖြတ်မည်</b><span id="cutSV"></span></div>
+      ${pmRow('cutS', 0, maxCut(), 0.5, c.s)}
+      <div class="row" style="margin-top:14px"><b>⏭ အဆုံးကနေ ဖြတ်မည်</b><span id="cutEV"></span></div>
+      ${pmRow('cutE', 0, maxCut(), 0.5, c.e)}
+      <p class="small" style="margin:12px 0 0">⏱ ကြာချိန်: <b>${fmtDur(c.dur)}</b> → <b id="cutLen"></b></p>
+      <p class="muted small" style="margin:6px 0 0">💡 အဆုံးကို အတိအကျ ဖြတ်ပါတယ်။ အစကို ဖြတ်ရင် ၁–၂ စက္ကန့် စောနိုင်ပါတယ် (Video ရဲ့ keyframe ကြောင့်)။</p>
+    </div>
+    <div id="cutProg" hidden>${bar()}</div>
+    <button class="btn primary block" id="cutGo">✂ ဖြတ်ပြီး Download လုပ်မည်</button>` : ''}`;
+
+  $('#cutF').onchange = async e => {
+    const f = e.target.files[0]; if (!f) return;
+    if (c.url) URL.revokeObjectURL(c.url);
+    Object.assign(c, { file: f, url: URL.createObjectURL(f), s: 0, e: 0, dur: 0 });
+    c.dur = await L.videoDuration(f).catch(() => 0);
+    if (!c.dur) toast('Video အရှည် ဖတ်မရပါ — ဒီဖုန်းက ဒီဖိုင်ကို မဖွင့်နိုင်ပါ');
+    pageCut();
+  };
+  if (!c.file) return;
+
+  const v = $('#cutV');
+  const show = which => {
+    const len = Math.max(0, c.dur - c.s - c.e);
+    $('#cutSV').textContent = c.s ? `${c.s} စက္ကန့်` : 'မဖြတ်ပါ';
+    $('#cutEV').textContent = c.e ? `${c.e} စက္ကန့်` : 'မဖြတ်ပါ';
+    $('#cutLen').textContent = fmtDur(len);
+    $('#cutGo').disabled = !(c.s || c.e) || len < 1;
+    if (which && v.duration) { v.pause(); v.currentTime = which === 's' ? c.s : Math.max(0, v.duration - c.e); }
+  };
+  const bind = (id, key) => {
+    const set = x => {
+      const other = key === 's' ? c.e : c.s;
+      c[key] = Math.max(0, Math.min(maxCut(), Math.max(0, c.dur - other - 1), Math.round(x * 2) / 2));
+      $('#' + id).value = c[key]; show(key);
+    };
+    $('#' + id).oninput = e => set(+e.target.value);
+    $('#' + id + 'M').onclick = () => set(c[key] - 0.5);
+    $('#' + id + 'P').onclick = () => set(c[key] + 0.5);
+  };
+  bind('cutS', 's'); bind('cutE', 'e'); show();
+  v.addEventListener('timeupdate', () => {                      // playing stops where the cut video will end
+    if (c.e > 0 && v.duration && !v.paused && v.currentTime >= v.duration - c.e) v.pause();
+  });
+
+  $('#cutGo').onclick = async () => {
+    const btn = $('#cutGo'); btn.disabled = true; state.busy = true;
+    $('#cutProg').hidden = false; setProg(0, 'ဖြတ်နေပါတယ်…');
+    try {
+      const r = await L.cutVideo(c.file, c.s, c.dur - c.e, p => setProg(Math.min(0.99, p), 'ဖြတ်နေပါတယ်…'));
+      setProg(1, 'ပြီးပါပြီ');
+      download(r.blob, c.file.name.replace(/\.[^.]+$/, '') + '_cut.' + r.ext);
+      toast('✅ ဖြတ်ပြီးပါပြီ — Download လုပ်ထားပါတယ်');
+    } catch (e) { toast(e.message || 'ဖြတ်လို့ မရပါ'); }
+    state.busy = false; btn.disabled = false;
   };
 }
 
