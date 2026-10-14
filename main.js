@@ -28,7 +28,17 @@ const premPlan = () => acc.on && acc.ok && acc.plan === 'premium';
 const isPremium = () => premPlan() && (acc.credits > 0 || L.premium.on);
 const dateTxt = ms => { const d = new Date(ms); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 const daysLeft = ms => Math.max(0, Math.ceil((ms - Date.now()) / 86400000));
-const creditTxt = n => `Credit ${n} ပုဒ် ကျန်`;
+const fmtN = n => Number(n || 0).toLocaleString('en-US');
+const creditTxt = n => `Credit ${fmtN(n)} ကျန် (≈ ${Math.floor((n || 0) / L.CPM)} မိနစ်)`;
+const mmss = s => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`;
+// premium: what this video will cost, shown before transcription / render
+function costLine(el, secs) {
+  if (!el || !premPlan() || !secs) return;
+  const need = L.creditCost(secs), short = need > acc.credits;
+  el.hidden = false;
+  el.className = short ? 'err small' : 'muted small';
+  el.innerHTML = `💎 ${mmss(secs)} video = <b>${fmtN(need)} credit</b>${short ? ` — ကျန် ${fmtN(acc.credits)} ပဲ ရှိပါတယ် (ဒီ Video ကို အရင်ကလုပ်ပြီးသားဆိုရင် ထပ်မနှုတ်ပါ)` : ` · ကျန် ${fmtN(acc.credits)}`}`;
+}
 const quotaTxt = () => premPlan() ? creditTxt(acc.credits) : acc.limit > 0 ? `ယနေ့ ကျန် ${acc.left}/${acc.limit} ပုဒ်` : 'အကန့်အသတ် မရှိ';
 const STEPS = ['ဗီဒီယိုတင်', 'မူရင်းစာသား', 'ဘာသာပြန်', 'ရလဒ်'];
 const view = $('#view');
@@ -347,12 +357,13 @@ function pagePremium() {
       ${row('🔑', 'AssemblyAI Key မလို', 'Key ဖွင့်စရာ၊ ထည့်စရာ မလိုဘဲ စာသားထုတ်လို့ရ')}
       ${row('✨', 'Auto ဘာသာပြန်', 'Gemini မှာ Copy/Paste မလုပ်ရတော့ဘဲ ခလုတ်တစ်ချက်နဲ့ မြန်မာလို ဘာသာပြန်')}
       ${row('🖼', 'Auto Thumbnail ခေါင်းစဉ်', 'ဇာတ်ကြောင်းကနေ ခေါင်းစဉ် ၅ ခု ထုတ်ပေး — ရွေးပြီး ChatGPT ကို တန်းပို့')}
-      ${row('🎟', 'တစ်ရက် ကန့်သတ်ချက် မရှိ', 'ဝယ်ထားတဲ့ Credit ရှိသလောက် ထုတ်လို့ရ — Video တစ်ပုဒ် = Credit ၁ ခု (တစ်ပုဒ်တည်း ပြန်ထုတ်ရင် မနှုတ်)')}
+      ${row('🎟', 'တစ်ရက် ကန့်သတ်ချက် မရှိ', `ဝယ်ထားတဲ့ Credit ရှိသလောက် ထုတ်လို့ရ — ၁ မိနစ် = ${L.CPM} credit (စက္ကန့်နဲ့ တွက်၊ ဥပမာ 1:30 = ${L.creditCost(90)})၊ Video တစ်ပုဒ်တည်း ပြန်ထုတ်ရင် မနှုတ်`)}
+      ${row('📝', 'Caption + Hashtag', 'TikTok / Facebook မှာ တင်ဖို့ စာနဲ့ Hashtag ကို AI က ရေးပေး')}
     </ul>
     ${on ? '<button class="btn primary block" id="toFree">🎬 Video ထုတ်မည်</button>'
       : `<div class="kbox"><b>Premium ဘယ်လိုရမလဲ</b>
           <ol class="muted small" style="margin:8px 0 0;padding-left:20px;line-height:1.9">
-            <li>Admin ကို ဆက်သွယ်ပြီး လိုချင်တဲ့ Video ပုဒ်ရေအတွက် ငွေလွှဲပါ (KPay / Wave)</li>
+            <li>Admin ကို ဆက်သွယ်ပြီး လိုချင်တဲ့ Credit Package အတွက် ငွေလွှဲပါ (KPay / Wave)</li>
             <li>💎 Premium Code (သို့) Credit ထပ်ဖြည့်ပေးပါမယ်</li>
             <li>☰ Menu → 🔑 Access Code → <b>Code ပြောင်းမည်</b> ကနေ Code အသစ် ထည့်ပါ</li>
           </ol></div>
@@ -918,6 +929,7 @@ function step1() {
       <p class="muted small" style="margin:6px 2px 0">Link ရနိုင်တာ: <b>TikTok</b> · YouTube Video တွေကို ဖုန်းထဲ အရင်ဒေါင်းပြီး ဖိုင်အနေနဲ့ တင်ပါ</p>
     </div>
     ${state.file ? previewBlock() : ''}
+    <p id="cost" hidden></p>
     <label>မူရင်းစကားပြောဘာသာ
       <select id="lang">
         ${[['zh', 'Chinese 中文'], ['en', 'English'], ['ja', 'Japanese'], ['ko', 'Korean'], ['hi', 'Hindi'], ['auto', 'Auto detect']]
@@ -929,6 +941,10 @@ function step1() {
   $('#lang').onchange = e => { state.lang = e.target.value; };
   bindLinkBox();
   if (state.file) bindPreview();
+  if (state.file && premPlan()) {
+    const f = state.file;
+    L.videoDuration(f).then(d => { if (state.file === f && d) { state.videoDur = d; costLine($('#cost'), d); } }).catch(() => {});
+  }
   $('#next').onclick = () => {
     if (!L.cfg.aaiKey && !L.premium.on) { toast('API Key အရင်ထည့်ပါ'); openPage('keys'); return; }
     state.segs.length ? go(2) : transcribeFlow();
@@ -1064,7 +1080,9 @@ function step3() {
         <input id="dgain" type="range" min="100" max="250" value="${Math.round(state.dubGain * 100)}" />
       </details>
     </div>
+    <p id="cost" hidden></p>
     <button id="next" class="btn primary">အသံထုတ်ပြီး Video ပေါင်းမည်</button>`;
+  costLine($('#cost'), state.videoDur);
 
   const read = () => {
     const lines = trimTail($('#mm').value.split('\n').map(x => x.trim()), state.segs.length);
@@ -1131,8 +1149,8 @@ async function step4() {
   try {
     if (acc.on) {
       // one use per video per day; re-rendering the same file again today is free
-      const a = await L.accessStart(jobId());
-      if (a.error === 'no_credit') { setQuota(a); throw Object.assign(new Error('💎 Premium Credit ကုန်သွားပါပြီ — Admin ဆီက ထပ်ဝယ်ပါ'), { limit: true }); }
+      const a = await L.accessStart(jobId(), state.videoDur);
+      if (a.error === 'no_credit') { setQuota(a); throw Object.assign(new Error(`💎 ဒီ Video အတွက် Credit ${fmtN(a.need)} လိုပါတယ် (ကျန် ${fmtN(a.credits)}) — Admin ဆီက ထပ်ဖြည့်ပါ`), { limit: true }); }
       if (a.error === 'limit') throw Object.assign(new Error(`ယနေ့အတွက် Video ${a.limit} ပုဒ် ထုတ်ပြီးပါပြီ`), { limit: true });
       if (a.error === 'bad_code') { acc.ok = false; throw Object.assign(new Error('Access Code မမှန်တော့ပါ (ပိတ်ထား / ဖျက်ထား)'), { badCode: true }); }
       if (a.error === 'expired') { acc.ok = false; throw Object.assign(new Error(`Code သက်တမ်း ကုန်သွားပါပြီ (${dateTxt(a.expires)})`), { badCode: true }); }
@@ -1279,7 +1297,7 @@ function pageCode() {
       ${premPlan() ? `<p style="margin:10px 0 0"><span class="pbadge">💎 Premium</span>${acc.expires ? ` <span class="muted small">· ${dateTxt(acc.expires)} အထိ</span>` : ''}</p>` : ''}
       <p style="margin:10px 0 0">🎟 <b>${quotaTxt()}</b></p>
       <p class="muted small" style="margin:6px 0 0">${premPlan()
-        ? 'Video တစ်ပုဒ် စာသားထုတ်တာ (သို့) ထုတ်တာ စလုပ်တိုင်း Credit ၁ ခု နှုတ်ပါတယ်။ Video တစ်ပုဒ်တည်းကို ပြန်လုပ်ရင် ထပ်မနှုတ်ပါ။'
+        ? `Video အရှည်နဲ့ တွက်ပါတယ် — ၁ မိနစ် = ${L.CPM} credit (စက္ကန့်နဲ့)။ Video တစ်ပုဒ်တည်းကို ပြန်လုပ်ရင် ထပ်မနှုတ်ပါ။`
         : 'Video တစ်ပုဒ် ထုတ်တိုင်း တစ်ခါ ရေတွက်ပါတယ်။ Video တစ်ပုဒ်တည်းကို ယနေ့ထဲ ပြန်ထုတ်ရင် ထပ်မရေတွက်ပါ။ မြန်မာစံတော်ချိန် ည ၁၂ နာရီမှာ ပြန်စပါတယ်။'}</p>
     </div>
     <button class="btn primary block" id="toFree">🎬 Video ထုတ်မည်</button>
@@ -1330,7 +1348,8 @@ const agoDays = t => {
   return m < 1 ? 'အခုလေးတင်' : m < 60 ? `${m} မိနစ်က` : m < 1440 ? `${Math.floor(m / 60)} နာရီက` : `${Math.floor(m / 1440)} ရက်က`;
 };
 const APP_URL = 'https://recap-studio-74n.pages.dev';
-const shareText = c => `🎬 Recap Studio${c.plan === 'premium' ? ' 💎 Premium' : ''}\nAccess Code: ${c.code}\n${c.plan === 'premium' ? `Video ${c.credits || 0} ပုဒ်` : `တစ်ရက် ${c.limit > 0 ? c.limit + ' ပုဒ်' : 'အကန့်အသတ်မရှိ'}`}${c.expires ? `\n${dateTxt(c.expires)} အထိ` : ''}\n${APP_URL}`;
+const CRED_PACKS = [7000, 15000, 25000];      // credit packages Admin hands out (≈ 87 / 187 / 312 minutes)
+const shareText = c => `🎬 Recap Studio${c.plan === 'premium' ? ' 💎 Premium' : ''}\nAccess Code: ${c.code}\n${c.plan === 'premium' ? `Credit ${fmtN(c.credits)} (≈ ${Math.floor((c.credits || 0) / L.CPM)} မိနစ်)` : `တစ်ရက် ${c.limit > 0 ? c.limit + ' ပုဒ်' : 'အကန့်အသတ်မရှိ'}`}${c.expires ? `\n${dateTxt(c.expires)} အထိ` : ''}\n${APP_URL}`;
 async function shareCode(c) {
   const text = shareText(c);
   try { if (navigator.share) { await navigator.share({ text }); return; } } catch (e) { if (e && e.name === 'AbortError') return; }
@@ -1391,9 +1410,9 @@ async function pageAdmin() {
       </div>
       </div>
       <div id="nPrem" hidden>
-      <p class="muted small" style="margin:10px 0 6px">💎 Credit (ဝယ်တဲ့ Video ပုဒ်ရေ)</p>
+      <p class="muted small" style="margin:10px 0 6px">💎 Credit Package (၁ မိနစ် = ${L.CPM} credit)</p>
       <div class="chips" id="nCred">
-        ${[5, 10, 20, 30, 50].map(v => `<button type="button" class="chip ${v === 10 ? 'on' : ''}" data-v="${v}">${v} ပုဒ်</button>`).join('')}
+        ${CRED_PACKS.map(v => `<button type="button" class="chip ${v === CRED_PACKS[1] ? 'on' : ''}" data-v="${v}">${fmtN(v)}</button>`).join('')}
       </div>
       </div>
       <button class="btn primary block" id="nGo">Code ထုတ်မည်</button>
@@ -1405,10 +1424,9 @@ async function pageAdmin() {
         <div class="codeline"><b class="ccode">${esc(c.code)}</b><button class="ghost cshare" title="Share">📤</button></div>
         <p class="muted small" style="margin:6px 0 0">${c.plan === 'premium' ? '' : `ယနေ့ <b>${c.today || 0}</b>/${c.limit > 0 ? c.limit : '∞'} · `}စုစုပေါင်း ${c.total || 0} ပုဒ် · နောက်ဆုံး ${agoDays(c.last)}</p>
         ${c.expires ? `<p class="muted small" style="margin:4px 0 0">⏳ ${dateTxt(c.expires)} အထိ (${c.expires < Date.now() ? 'ကုန်ပြီ' : daysLeft(c.expires) + ' ရက် ကျန်'}) <button class="ghost cnoexp">သက်တမ်း ဖြုတ်</button></p>` : ''}
-        ${c.plan === 'premium' ? `<p style="margin:8px 0 0">💎 <b class="ccred">Credit ${c.credits || 0} ပုဒ် ကျန်</b></p>
-        <div class="two">
-          <button class="btn cadd" data-n="5">➕ 5 ပုဒ်</button>
-          <button class="btn cadd" data-n="10">➕ 10 ပုဒ်</button>
+        ${c.plan === 'premium' ? `<p style="margin:8px 0 0">💎 <b class="ccred">${creditTxt(c.credits)}</b></p>
+        <div class="chips">
+          ${CRED_PACKS.map(v => `<button type="button" class="chip cadd" data-n="${v}">➕ ${fmtN(v)}</button>`).join('')}
         </div>` : ''}
         <button class="btn block cplan" style="margin-top:8px">${c.plan === 'premium' ? '🎟 Free ပြောင်း' : '💎 Premium ပြောင်း'}</button>
         <div class="krow" style="margin-top:10px${c.plan === 'premium' ? ';display:none' : ''}">
@@ -1424,7 +1442,7 @@ async function pageAdmin() {
 
     <button class="btn block" id="aout">Admin မှ ထွက်မည်</button>`;
 
-  let nLim = 2, nPlan = 'free', nCred = 10;
+  let nLim = 2, nPlan = 'free', nCred = CRED_PACKS[1];
   const chipGroup = (sel, set) => view.querySelectorAll(sel + ' .chip').forEach(b => { b.onclick = () => { set(b.dataset.v); view.querySelectorAll(sel + ' .chip').forEach(x => x.classList.toggle('on', x === b)); }; });
   chipGroup('#nLimit', v => { nLim = +v; });
   chipGroup('#nPlan', v => { nPlan = v; $('#nFree').hidden = v === 'premium'; $('#nPrem').hidden = v !== 'premium'; });
@@ -1445,7 +1463,7 @@ async function pageAdmin() {
   view.querySelectorAll('.acode').forEach(el => {
     const code = el.dataset.c, c = byCode[code];
     el.querySelector('.cshare').onclick = () => shareCode(c);
-    el.querySelectorAll('.cadd').forEach(b => { b.onclick = () => act({ action: 'update', code, addCredits: +b.dataset.n }, `💎 Credit ${b.dataset.n} ပုဒ် ထည့်ပြီးပါပြီ`); });
+    el.querySelectorAll('.cadd').forEach(b => { b.onclick = () => act({ action: 'update', code, addCredits: +b.dataset.n }, `💎 Credit ${fmtN(b.dataset.n)} ထည့်ပြီးပါပြီ`); });
     const ne = el.querySelector('.cnoexp'); if (ne) ne.onclick = () => act({ action: 'update', code, noExpiry: true }, '⏳ သက်တမ်း ဖြုတ်ပြီးပါပြီ');
     el.querySelector('.cplan').onclick = () => act({ action: 'update', code, plan: c.plan === 'premium' ? 'free' : 'premium' }, c.plan === 'premium' ? '🎟 Free ပြောင်းပြီးပါပြီ' : '💎 Premium ပြောင်းပြီးပါပြီ');
     const setLim = v => act({ action: 'update', code, limit: v });
@@ -1498,7 +1516,12 @@ async function thumbPanel() {
         <li>ထွက်လာတဲ့ 3D ပုံကို Download လုပ်ပြီး သုံးပါ</li>
       </ol>
       <p class="warn small" style="margin-top:10px">💡 ChatGPT က မြန်မာစာလုံးကို တစ်ခါတလေ မှားရေးတတ်ပါတယ်။ မှားနေရင် <b>"ခေါင်းစဉ်စာလုံး မှန်အောင် ပြန်ထုတ်ပေးပါ"</b> လို့ ထပ်ပြောပါ။</p>
-    </div>`;
+    </div>
+    ${isPremium() ? `<div class="panel">
+      <b>📝 Caption + Hashtag <span class="pbadge">💎 Premium</span></b>
+      <p class="muted small" style="margin:4px 0 8px">TikTok / Facebook မှာ Video တင်တဲ့အခါ ရေးဖို့ စာ</p>
+      <div id="tbCap"></div>
+    </div>` : ''}`;
   view.querySelectorAll('.tshots button').forEach(b => {
     b.onclick = () => { th.sel = +b.dataset.i; view.querySelectorAll('.tshots button').forEach(x => x.classList.toggle('on', x === b)); };
   });
@@ -1517,6 +1540,21 @@ async function thumbPanel() {
   };
   $('#tbMkTitles')?.addEventListener('click', mkTitles);
   paintTitles();
+  const paintCap = () => {
+    const box = $('#tbCap'); if (!box) return;
+    box.innerHTML = th.caption ? `<textarea id="capTxt" rows="7" readonly>${esc(th.caption)}</textarea>
+      <div class="two"><button type="button" class="btn primary" id="capCopy">📋 ကူးမည်</button><button type="button" class="btn" id="capMk">🔄 အသစ်ရေးမည်</button></div>`
+      : '<button type="button" class="btn block" id="capMk">📝 Caption + Hashtag ရေးမည်</button>';
+    $('#capMk').onclick = async () => {
+      const b = $('#capMk'); b.disabled = true; b.textContent = '📝 ရေးနေပါတယ်…';
+      try { th.caption = T.parseCaption(await L.premiumAI(T.captionPrompt(state.burmese), true)); }
+      catch (e) { toast(e.message.slice(0, 120)); }
+      paintCap();
+    };
+    const c = $('#capCopy');
+    if (c) c.onclick = async () => { try { await navigator.clipboard.writeText(th.caption); toast('✅ ကူးပြီးပါပြီ'); } catch { $('#capTxt').select(); toast('ကူးမရပါ — ကိုယ်တိုင် ရွေးကူးပါ'); } };
+  };
+  paintCap();
   $('#tbGet').onclick = async () => {
     const b = $('#tbGet'); b.disabled = true;
     let copied = false;

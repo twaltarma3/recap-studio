@@ -29,7 +29,10 @@ async function accessPost(path, body, headers = {}) {
 }
 // {open:true} = no access codes on this Worker; {error:'bad_code'|'expired'}; else {name, limit, used, left, plan, expires, credits}
 // Premium codes with credits also get a ticket for the premium routes (transcription with the owner's key, AI translation).
-// Premium is paid per video: job() names the video in hand (set by the app), its first premium use takes a credit.
+// Premium is paid by video length (CPM credits a minute): job() names the video in hand (set by the app),
+// its first premium use pays for it.
+export const CPM = 80;
+export const creditCost = secs => Math.max(1, Math.ceil(Math.max(0, secs || 0) * CPM / 60));
 let pticket = '';
 export const premium = { get on() { return !!pticket; }, job: () => '' };
 export async function accessCheck(code) {
@@ -47,7 +50,7 @@ async function premiumFetch(path, opts = {}) {
 }
 const PREMIUM_ERR = {
   premium_only: 'Premium Code မဟုတ်တော့ပါ (သို့) ပိတ်ထားပါတယ်',
-  no_credit: '💎 Premium Credit ကုန်သွားပါပြီ — Admin ဆီက ထပ်ဝယ်ပါ',
+  no_credit: '💎 Credit မလောက်တော့ပါ — Admin ဆီက ထပ်ဖြည့်ပါ',
   premium_cap: 'ယနေ့အတွက် Premium အလိုအလျောက် သုံးခွင့် ပြည့်သွားပါပြီ — မနက်ဖြန် ပြန်သုံးပါ',
   no_gemini_key: 'Admin က Gemini key မထည့်ရသေးပါ',
   no_aai_key: 'Admin က AssemblyAI key မထည့်ရသေးပါ'
@@ -60,8 +63,8 @@ export async function premiumAI(prompt, json = false) {
   return j.text;
 }
 // uses one of today's videos (same job again = free); returns {ticket, left, ...} or {error:'limit'|'bad_code'}
-export async function accessStart(job) {
-  const r = await accessPost('/auth/start', { code: access.code, job });
+export async function accessStart(job, secs = 0) {
+  const r = await accessPost('/auth/start', { code: access.code, job, secs });
   if (r.ticket) ticket = r.ticket;
   return r;
 }
@@ -342,9 +345,12 @@ export async function loadTikTok(link, onProg) {
 async function aai(path, opts = {}) {
   // Premium: the Worker uses the owner's AssemblyAI key, so the user needs none
   if (premium.on) {
+    // the Worker charges by length: 16 kHz mono 16-bit WAV is 32000 bytes a second (it also reads content-length)
+    if (opts.body instanceof Blob) opts = { ...opts, headers: { ...(opts.headers || {}), 'x-secs': String(Math.max(0, (opts.body.size - 44) / 32000)) } };
     const r = await premiumFetch('/premium/aai' + path, opts);
     if (!r.ok) {
       const t = await r.text(); let j = {}; try { j = JSON.parse(t); } catch {}
+      if (j.error === 'no_credit' && j.need) throw new Error(`💎 ဒီ Video အတွက် Credit ${j.need.toLocaleString()} လိုပါတယ် (ကျန် ${(j.credits || 0).toLocaleString()}) — Admin ဆီက ထပ်ဖြည့်ပါ`);
       throw new Error(PREMIUM_ERR[j.error] || `Server ${r.status}: ${t}`);
     }
     return r.json();

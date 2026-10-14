@@ -136,6 +136,25 @@ export function parseTitles(text) {
   } catch {}
   return text.split('\n').map(x => x.replace(/^\s*[\d.)\-•]+\s*/, '').replace(/^["“]|["”]$/g, '').trim()).filter(Boolean).slice(0, 5);
 }
+// Premium: post caption + hashtags for TikTok / Facebook
+export function captionPrompt(burmese) {
+  const story = burmese.filter(Boolean).join(' ').slice(0, 6000);
+  return `Read this Burmese movie-recap story and write the post text for uploading the video to TikTok / Facebook.
+Rules: spoken Burmese, 2-3 short lines that hook people without spoilers, at most 2 fitting emoji, then 8-12 hashtags (mix Burmese and English, e.g. #movierecap #ဇာတ်လမ်းအကျဉ်း, plus the genre).
+Return ONLY a JSON object: {"caption": "...", "hashtags": ["#...", "#..."]}
+
+Story:
+${story}`;
+}
+export function parseCaption(text) {
+  try {
+    const a = text.indexOf('{'), b = text.lastIndexOf('}');
+    const o = JSON.parse(text.slice(a, b + 1));
+    const tags = (Array.isArray(o.hashtags) ? o.hashtags : []).map(t => '#' + String(t).trim().replace(/^#+/, '').replace(/\s+/g, '')).filter(t => t.length > 1);
+    if (o.caption) return String(o.caption).trim() + (tags.length ? '\n\n' + tags.join(' ') : '');
+  } catch {}
+  return text.trim();
+}
 // prompt with the title already chosen: ChatGPT goes straight to drawing
 export function chatgptPromptWithTitle(title) {
   return `I attached a frame from a movie. Create a YouTube / TikTok movie-recap thumbnail now (no questions):
