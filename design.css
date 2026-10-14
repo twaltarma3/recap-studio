@@ -173,4 +173,4 @@ body .ditem.on span{background:var(--grad) !important;color:#fff !important}
 .acode .two{margin-top:10px}
 #nLimit{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
 #nLimit .chip{flex:1 1 0;min-width:48px}
-#nLimit .chip.on{background:var(--grad) !important;color:#fff !important;border-color:transparent !important;box-shadow:0 6px 16px rgba(124,58,237,.35) !important}
+.chips:not([data-pos]):not(#ratioChips):not(#fitChips):not(#pStyle) .chip.on{background:var(--grad) !important;color:#fff !important;border-color:transparent !important;box-shadow:0 6px 16px rgba(124,58,237,.35) !important}
