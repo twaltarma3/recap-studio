@@ -1373,8 +1373,8 @@ let thumbDraw = 0;
 async function thumbPanel() {
   const box = $('#thumbBox'); if (!box) return;
   const th = state.thumb || (state.thumb = {
-    frames: null, dur: 0, t: 0, img: null, focus: 50, scale: 100, cutTop: 0, cutBottom: 18, ai: false, look: 'cinema',
-    style: (() => { try { return localStorage.getItem('thumbStyle') || 'blue'; } catch { return 'blue'; } })(),
+    frames: null, dur: 0, t: 0, img: null, focus: 50, scale: 100, cutTop: 0, cutBottom: 18, ai: false,
+    style: (() => { try { const v = localStorage.getItem('thumbStyle'); return T.STYLES.some(x => x.id === v) ? v : 'blue'; } catch { return 'blue'; } })(),
     title: '', sub: ''
   });
   if (!th.frames) {
@@ -1412,12 +1412,11 @@ async function thumbPanel() {
       </div>
 
       <details class="tai" ${th.ai ? 'open' : ''}>
-        <summary>🎨 AI နဲ့ ပုံစံတူ ပုံအသစ် ဖန်တီးမည် <span class="badge">Gemini · အခမဲ့</span></summary>
-        <p class="muted small" style="margin:8px 0">ရွေးထားတဲ့ အခန်းကို Gemini က ပုံစံတူ ပုံအသစ် ပြန်ဆွဲပေးပါမယ် (ဇာတ်ကားထဲက ပုံ တိုက်ရိုက် မဟုတ်တော့ပါ)။</p>
-        <div class="chips" id="tbLook">${T.AI_LOOKS.map(l => `<button type="button" class="chip ${l.id === th.look ? 'on' : ''}" data-l="${l.id}">${l.name}</button>`).join('')}</div>
+        <summary>🎨 AI နဲ့ 3D ကာတွန်း ပုံ ဖန်တီးမည် <span class="badge">ChatGPT</span></summary>
+        <p class="muted small" style="margin:8px 0">ရွေးထားတဲ့ အခန်းကို ChatGPT က 3D ကာတွန်း ပုံစံ ပုံအသစ် ပြန်ဆွဲပေးပါမယ် (ဇာတ်ကားထဲက ပုံ တိုက်ရိုက် မဟုတ်တော့ပါ)။</p>
         <button type="button" class="btn block" id="tbAiGet">① ပုံ + Prompt ယူမည်</button>
-        <p class="muted small" style="margin:6px 0">② <b>Gemini app</b> ဖွင့် → 📎 နဲ့ ဒေါင်းထားတဲ့ပုံ ထည့် → Prompt ကို paste လုပ်ပြီး ပို့ → ထွက်လာတဲ့ ပုံကို Download လုပ်ပါ</p>
-        <label class="btn primary block" style="display:block;text-align:center;cursor:pointer">③ Gemini ပုံကို ထည့်မည်<input id="tbAiIn" type="file" accept="image/*" hidden /></label>
+        <p class="muted small" style="margin:6px 0">② <b>ChatGPT</b> ဖွင့် → <b>+</b> နဲ့ ဒေါင်းထားတဲ့ပုံ ထည့် → Prompt ကို paste လုပ်ပြီး ပို့ → ထွက်လာတဲ့ ပုံကို Download လုပ်ပါ</p>
+        <label class="btn primary block" style="display:block;text-align:center;cursor:pointer">③ ChatGPT ပုံကို ထည့်မည်<input id="tbAiIn" type="file" accept="image/*" hidden /></label>
         ${th.ai ? '<button type="button" class="btn block" id="tbAiOff">↩ ဇာတ်ကားထဲက ပုံ ပြန်သုံးမည်</button>' : ''}
       </details>
       <p class="tstep">၂) ခေါင်းစဉ်</p>
@@ -1475,14 +1474,11 @@ async function thumbPanel() {
   $('#tbSz').oninput = e => { th.scale = +e.target.value; $('#tbSzV').textContent = th.scale + '%'; redraw(true); };
   $('#tbCb').oninput = e => { th.cutBottom = +e.target.value; $('#tbCbV').textContent = th.cutBottom + '%'; redraw(true); };
   $('#tbCt').oninput = e => { th.cutTop = +e.target.value; $('#tbCtV').textContent = th.cutTop + '%'; redraw(true); };
-  view.querySelectorAll('#tbLook .chip').forEach(b => {
-    b.onclick = () => { th.look = b.dataset.l; view.querySelectorAll('#tbLook .chip').forEach(x => x.classList.toggle('on', x === b)); };
-  });
   $('#tbAiGet').onclick = async () => {
-    try { await navigator.clipboard.writeText(T.imagePrompt(th.look, (th.title || '') + ' ' + (th.sub || ''))); } catch {}
+    try { await navigator.clipboard.writeText(T.imagePrompt((th.title || '') + ' ' + (th.sub || ''))); } catch {}
     const blob = await T.cleanFrameBlob(th.frameImg || th.img, opts());
     if (blob) download(blob, state.file.name.replace(/\.[^.]+$/, '') + '_scene.jpg');
-    toast('ပုံ ဒေါင်းပြီး Prompt ကူးပြီးပါပြီ — Gemini မှာ ပုံ ထည့်ပြီး paste လုပ်ပါ');
+    toast('ပုံ ဒေါင်းပြီး Prompt ကူးပြီးပါပြီ — ChatGPT မှာ ပုံ ထည့်ပြီး paste လုပ်ပါ');
   };
   $('#tbAiIn').onchange = async e => {
     const f = e.target.files[0]; if (!f) return;

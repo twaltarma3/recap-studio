@@ -6,9 +6,6 @@ export const THUMB_W = 1080, THUMB_H = 1440;
 export const STYLES = [
   { id: 'blue', name: 'ဇာတ်လမ်း ခေါင်းစဉ် (အပြာအနား)', desc: 'ပုံအပြည့်၊ အဖြူစာလုံး အပြာအနားထူ၊ နောက်ဆုံးစာကြောင်း ပိုကြီး' },
   { id: 'mystery', name: 'အနက်နောက်ခံ ထူးဆန်း', desc: 'မှောင်မှောင်၊ ရွှေရောင်ဘောင်၊ အောက်ဘက် ရွှေစာလုံးကြီး' },
-  { id: 'pop', name: 'ရောင်စုံ Pop', desc: 'အရောင်တောက်တောက်၊ အဝါစာလုံး ပန်းနုရောင်အနား' },
-  { id: 'doc', name: 'Documentary စွန့်စားခန်း', desc: 'အပေါ် ခေါင်းစဉ်ဘား၊ အောက် အနီရောင်စာတန်း' },
-  { id: 'epic', name: 'လျှို့ဝှက် Epic', desc: 'အလင်းတန်းများ၊ ရွှေ+ဖြူ ခေါင်းစဉ် အလယ်' },
   { id: 'recap', name: 'ရုပ်ရှင် Recap', desc: 'အပြာရောင် tone၊ အနီရောင် ခေါင်းစဉ်ဘောက်စ်' }
 ];
 
@@ -167,9 +164,6 @@ export function drawThumb(ctx, w, h, img, o) {
   const filters = {
     blue: 'saturate(1.18) contrast(1.06) brightness(1.03)',
     mystery: 'brightness(0.72) contrast(1.2) saturate(0.85)',
-    pop: 'saturate(1.55) contrast(1.15) brightness(1.06)',
-    doc: 'contrast(1.12) saturate(0.95)',
-    epic: 'brightness(0.82) contrast(1.15) saturate(1.1) sepia(0.25)',
     recap: 'saturate(0.8) contrast(1.08)'
   };
   ctx.filter = filters[style] || 'none';
@@ -242,69 +236,6 @@ export function drawThumb(ctx, w, h, img, o) {
     if (sub) { ctx.font = `700 ${39 * tu}px ${fam}`; ctx.fillStyle = '#f2f2f2'; ctx.fillText(sub, w / 2, h - 110 * u); }
   }
 
-  if (style === 'pop') {
-    const gl = ctx.createRadialGradient(w * 0.8, h * 0.15, 0, w * 0.8, h * 0.15, w * 0.9);
-    gl.addColorStop(0, 'rgba(255,170,90,.45)'); gl.addColorStop(1, 'rgba(255,80,160,0)');
-    ctx.globalCompositeOperation = 'screen'; ctx.fillStyle = gl; ctx.fillRect(0, 0, w, h); ctx.globalCompositeOperation = 'source-over';
-    ctx.fillStyle = grad(0, h * 0.42, [[0, 'rgba(70,0,60,.55)'], [1, 'rgba(70,0,60,0)']]); ctx.fillRect(0, 0, w, h * 0.42);
-    const { size, lines } = fitText(ctx, title, fam, w - 140 * u, 98 * tu, 48 * tu, 3);
-    drawLines(ctx, lines, w / 2, 90 * u + size, size, (l, x, y) => {
-      ctx.strokeStyle = '#fff'; ctx.lineWidth = 34 * u; ctx.strokeText(l, x, y);
-      ctx.strokeStyle = '#e0137a'; ctx.lineWidth = 18 * u; ctx.strokeText(l, x, y);
-      ctx.fillStyle = '#ffe14d'; ctx.fillText(l, x, y);
-    });
-    if (sub) {
-      ctx.font = `700 ${42 * tu}px ${fam}`;
-      const tw = Math.min(w - 120 * u, ctx.measureText(sub).width + 80 * u);
-      rrect(ctx, (w - tw) / 2, h - 190 * u, tw, 100 * u, 50 * u); ctx.fillStyle = '#fff'; ctx.fill();
-      ctx.fillStyle = '#e0137a'; ctx.fillText(sub, w / 2, h - 122 * u, w - 160 * u);
-    }
-  }
-
-  if (style === 'doc') {
-    ctx.font = `700 ${100 * u}px ${fam}`;
-    const { size, lines } = fitText(ctx, title, fam, w - 120 * u, 75 * tu, 42 * tu, 3);
-    const lh = size * 1.55, band = 70 * u + lines.length * lh;
-    ctx.fillStyle = 'rgba(0,0,0,.8)'; ctx.fillRect(0, 0, w, band);
-    ctx.fillStyle = '#ffd400'; ctx.fillRect(0, band, w, 8 * u);
-    drawLines(ctx, lines, w / 2, 40 * u + size, size, (l, x, y) => { ctx.fillStyle = '#ffd400'; ctx.fillText(l, x, y); });
-    ctx.fillStyle = grad(h * 0.7, h, [[0, 'rgba(0,0,0,0)'], [1, 'rgba(0,0,0,.6)']]); ctx.fillRect(0, h * 0.7, w, h * 0.3);
-    const strip = sub || 'ဇာတ်လမ်း အပြည့်အစုံ';
-    ctx.font = `700 ${42 * tu}px ${fam}`;
-    ctx.fillStyle = '#d90429'; ctx.fillRect(0, h - 170 * u, w, 110 * u);
-    ctx.fillStyle = '#fff'; ctx.fillText(strip, w / 2, h - 100 * u, w - 80 * u);
-  }
-
-  if (style === 'epic') {
-    // light rays from the top centre
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
-    const ox = w / 2, oy = -h * 0.08;
-    for (let i = 0; i < 14; i++) {
-      const a = Math.PI / 2 + (i - 6.5) * 0.075, spread = 0.022 + (i % 3) * 0.01;
-      const len = h * 1.25;
-      const g = ctx.createLinearGradient(ox, oy, ox + Math.cos(a) * len, oy + Math.sin(a) * len);
-      g.addColorStop(0, `rgba(255,226,160,${0.22 + (i % 2) * 0.08})`); g.addColorStop(1, 'rgba(255,200,120,0)');
-      ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(ox, oy);
-      ctx.lineTo(ox + Math.cos(a - spread) * len, oy + Math.sin(a - spread) * len);
-      ctx.lineTo(ox + Math.cos(a + spread) * len, oy + Math.sin(a + spread) * len); ctx.closePath(); ctx.fill();
-    }
-    const glow = ctx.createRadialGradient(ox, h * 0.08, 0, ox, h * 0.08, w * 0.55);
-    glow.addColorStop(0, 'rgba(255,230,170,.55)'); glow.addColorStop(1, 'rgba(255,230,170,0)');
-    ctx.fillStyle = glow; ctx.fillRect(0, 0, w, h);
-    ctx.restore();
-    ctx.fillStyle = grad(h * 0.45, h, [[0, 'rgba(10,6,0,0)'], [1, 'rgba(10,6,0,.85)']]); ctx.fillRect(0, h * 0.45, w, h * 0.55);
-    const { size, lines } = fitText(ctx, title, fam, w - 160 * u, 92 * tu, 46 * tu, 3);
-    const lh = size * 1.55, top = h * 0.66 - ((lines.length - 1) * lh) / 2;
-    const g = grad(top - size, top + lines.length * lh, [[0, '#ffffff'], [0.45, '#ffe6a6'], [1, '#d99a1e']]);
-    drawLines(ctx, lines, w / 2, top, size, (l, x, y) => {
-      ctx.shadowColor = 'rgba(255,200,90,.9)'; ctx.shadowBlur = 45 * u;
-      ctx.strokeStyle = 'rgba(40,20,0,.9)'; ctx.lineWidth = 10 * u; ctx.strokeText(l, x, y);
-      ctx.shadowBlur = 0; ctx.fillStyle = g; ctx.fillText(l, x, y);
-    });
-    if (sub) { ctx.font = `700 ${39 * tu}px ${fam}`; ctx.fillStyle = '#fff'; ctx.fillText(sub, w / 2, h - 110 * u, w - 120 * u); }
-  }
-
   if (style === 'recap') {
     ctx.globalCompositeOperation = 'overlay'; ctx.fillStyle = 'rgba(30,107,214,.55)'; ctx.fillRect(0, 0, w, h);
     ctx.globalCompositeOperation = 'source-over';
@@ -350,22 +281,15 @@ export function titlePrompt(burmese) {
 ${script}`;
 }
 
-// the chosen frame alone (3:4, captions cut off, no title) — to attach in Gemini for an AI re-creation
+// the chosen frame alone (3:4, captions cut off, no title) — to attach in ChatGPT for a 3D-cartoon re-creation
 export function cleanFrameBlob(img, o) {
   const c = document.createElement('canvas'); c.width = THUMB_W; c.height = THUMB_H;
   drawCover(c.getContext('2d'), img, THUMB_W, THUMB_H, o.focus, o.cutTop || 0, o.cutBottom || 0);
   return new Promise(r => c.toBlob(r, 'image/jpeg', 0.92));
 }
 
-export const AI_LOOKS = [
-  { id: 'cinema', name: 'ရုပ်ရှင်ဆန်ဆန် (Cinematic)', en: 'an ultra-realistic cinematic movie still, dramatic lighting, shallow depth of field, rich warm colours, 8k detail' },
-  { id: '3d', name: '3D ကာတွန်း', en: 'a high-quality 3D animated movie style (Pixar / Disney look), big expressive eyes, soft global illumination, vibrant colours' },
-  { id: 'dark', name: 'မှောင်ညို ထူးဆန်း', en: 'a dark mysterious thriller look, deep shadows, moody teal and orange grading, mist and rim light' },
-  { id: 'epic', name: 'Epic အလင်းတန်း', en: 'an epic fantasy look, golden god rays, glowing particles, majestic atmosphere, high contrast' }
-];
-export function imagePrompt(look, story) {
-  const l = AI_LOOKS.find(x => x.id === look) || AI_LOOKS[0];
-  return `Use the attached movie frame as reference. Re-create the same scene as ${l.en}.
+export function imagePrompt(story) {
+  return `Use the attached movie frame as reference. Re-create the same scene as a high-quality 3D animated movie style image (Pixar / Disney look): big expressive eyes, soft global illumination, vibrant colours, cinematic lighting.
 Keep the same characters (faces, hair, clothes, age), their pose, emotion and the setting, but make it more striking and eye-catching, like a viral YouTube / TikTok movie-recap thumbnail.
 Vertical 3:4 image. The main character's face large and sharp in the upper two thirds; keep the bottom third simple so a title can be placed there.
 Do NOT add any text, letters, subtitles, captions, watermark or logo, and remove any text that is in the reference frame.${story ? `
