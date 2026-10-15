@@ -1440,6 +1440,13 @@ async function pageAdmin() {
         <button class="btn danger block cdel">🗑 ဖျက်မည်</button>
       </div>`).join('') : '<p class="muted">Code မရှိသေးပါ — အပေါ်မှာ ထုတ်ပါ။</p>'}</div>
 
+    <div class="kbox">
+      <b>🤖 Telegram ရောင်းချ Bot</b>
+      <p class="muted small" style="margin:6px 0 10px">Cloudflare မှာ <b>TG_TOKEN</b> (Secret) နဲ့ <b>PAY_INFO</b> ထည့်ပြီးရင် ဒီခလုတ်ကို တစ်ခါ နှိပ်ပါ</p>
+      <button class="btn block" id="tgGo">🔗 Telegram Bot ချိတ်မည်</button>
+      <p class="small" id="tgMsg" hidden style="margin:10px 0 0"></p>
+    </div>
+
     <button class="btn block" id="aout">Admin မှ ထွက်မည်</button>`;
 
   let nLim = 2, nPlan = 'free', nCred = CRED_PACKS[1];
@@ -1454,6 +1461,16 @@ async function pageAdmin() {
     else { toast('မရပါ: ' + (c.error || c.status)); $('#nGo').disabled = false; }
   };
   $('#aout').onclick = () => { L.access.adminPass = ''; syncMenu(); openPage(acc.ok || !acc.on ? 'free' : 'code'); };
+  $('#tgGo').onclick = async () => {
+    const b = $('#tgGo'), m = $('#tgMsg'); b.disabled = true;
+    const x = await L.adminCall({ action: 'tgSetup' }).catch(e => ({ error: e.message }));
+    const why = { no_tg_token: 'Cloudflare မှာ TG_TOKEN (Secret) မထည့်ရသေးပါ', bad_tg_token: 'TG_TOKEN မမှန်ပါ — @BotFather က Token ကို ပြန်ကူးပါ' };
+    m.hidden = false;
+    m.innerHTML = x.ok
+      ? `✅ <b>@${esc(x.bot)}</b> ချိတ်ပြီးပါပြီ<br>${x.admins ? `Admin ${x.admins} ယောက် မှတ်ထားပြီး` : `👉 Telegram မှာ <b>@${esc(x.bot)}</b> ကိုဖွင့်ပြီး <code>/admin သင့်Admin password</code> ပို့ပါ (Order တွေ သင့်ဆီ ရောက်လာဖို့)`}`
+      : '❌ ' + esc(why[x.error] || x.error || x.status);
+    b.disabled = false;
+  };
 
   const byCode = Object.fromEntries(r.codes.map(c => [c.code, c]));
   const act = async (body, msg) => {
