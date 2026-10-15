@@ -1492,7 +1492,7 @@ async function pageAdmin() {
   aiInfo();
   const saveKey = async key => {
     const x = await L.adminCall({ action: 'geminiKey', key }).catch(e => ({ error: e.message }));
-    toast(x.ok ? (key ? '✅ Gemini key သိမ်းပြီးပါပြီ' : '🗑 App ထဲက key ဖျက်ပြီးပါပြီ') : x.error === 'bad_key' ? 'Key ပုံစံ မမှန်ပါ — AIza… နဲ့စတဲ့ key ကို အကုန် ကူးထည့်ပါ' : 'မရပါ: ' + (x.error || x.status));
+    toast(x.ok ? (key ? '✅ Gemini key သိမ်းပြီးပါပြီ' : '🗑 App ထဲက key ဖျက်ပြီးပါပြီ') : x.error === 'bad_key' ? 'Key ပုံစံ မမှန်ပါ — Google AI Studio က key ကို Copy ခလုတ်နဲ့ အကုန် ကူးထည့်ပါ' : 'မရပါ: ' + (x.error || x.status));
     if (x.ok) { $('#gkIn').value = ''; aiInfo(); }
   };
   $('#gkSave').onclick = () => { const k = $('#gkIn').value.trim(); if (k) saveKey(k); };
