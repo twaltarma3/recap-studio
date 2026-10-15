@@ -1477,9 +1477,8 @@ async function pageAdmin() {
   // AI test: the same prompt as Auto translate, on every model, so the owner can pick the best Burmese
   const aiInfo = async () => {
     const x = await L.adminCall({ action: 'aiInfo' }).catch(() => ({}));
-    $('#aiStat').innerHTML = x.ai ? `✅ Workers AI ချိတ်ထားပြီး · သုံးနေတာ: <b>${esc((x.model || '').split('/').pop())}</b>`
-      : x.gemini ? '⚠ Workers AI မချိတ်ရသေးပါ (Gemini သုံးနေ) — Cloudflare → recap-proxy → Settings → Bindings → Add → <b>Workers AI</b> → Name: <b>AI</b>'
-      : '⚠ AI မချိတ်ရသေးပါ — Cloudflare → recap-proxy → Settings → Bindings → Add → <b>Workers AI</b> → Name: <b>AI</b>';
+    $('#aiStat').innerHTML = x.ai || x.gemini ? `✅ သုံးနေတာ: <b>${esc((x.model || '').split('/').pop())}</b>${x.ai ? '' : ' · Workers AI မချိတ်ရသေး'}${x.gemini ? '' : ' · GEMINI_KEY မထည့်ရသေး'}`
+      : '⚠ AI မချိတ်ရသေးပါ — Cloudflare → recap-proxy → Settings → Bindings → Add → <b>Workers AI</b> → Name: <b>AI</b> (သို့) GEMINI_KEY ထည့်ပါ';
     return x;
   };
   aiInfo();
@@ -1489,7 +1488,7 @@ async function pageAdmin() {
     if (!lines.length) return;
     const prompt = L.buildPrompt(lines.map((text, i) => ({ start: i * 3, end: i * 3 + 2.8, text })), 'recap');
     const out = $('#aiOut'), b = $('#aiGo'); b.disabled = true; out.innerHTML = '';
-    for (const model of (info.ai ? info.models : [null])) {
+    for (const model of (info.models || []).filter(m => m === 'gemini' ? info.gemini : info.ai)) {
       const name = model ? model.split('/').pop() : 'Gemini';
       const box = document.createElement('div'); box.className = 'aires';
       box.innerHTML = `<b>${esc(name)}</b> <span class="muted small">ဘာသာပြန်နေပါတယ်…</span>`;
