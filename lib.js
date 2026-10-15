@@ -63,6 +63,34 @@ export async function premiumAI(prompt, json = false) {
   if (!r.ok || !j.text) throw new Error(PREMIUM_ERR[j.error] || ('AI မအောင်မြင်ပါ: ' + (j.detail || j.error || r.status)));
   return j.text;
 }
+// Premium: translate all lines in small batches, so the AI keeps the line count (big batches drop lines).
+// A batch that comes back with the wrong count is asked again, then split in half; a line that still fails stays empty.
+export async function autoTranslate(segs, style, onProgress) {
+  const out = new Array(segs.length).fill('');
+  let done = 0;
+  const run = async (from, to, tries = 0) => {
+    const part = segs.slice(from, to);
+    let t = [];
+    try { t = parseTranslations(await premiumAI(buildPrompt(part, style), true)); }
+    catch (e) { if (PREMIUM_STOP.test(e.message)) throw e; }
+    if (t.length === part.length) {
+      t.forEach((x, i) => { out[from + i] = x; });
+      done += part.length; if (onProgress) onProgress(done / segs.length);
+      return;
+    }
+    if (tries < 1) return run(from, to, tries + 1);
+    if (part.length > 1) { const mid = from + Math.ceil(part.length / 2); await run(from, mid); return run(mid, to); }
+    done += 1; if (onProgress) onProgress(done / segs.length);
+  };
+  const BATCH = 12, starts = [];
+  for (let i = 0; i < segs.length; i += BATCH) starts.push(i);
+  for (let k = 0; k < starts.length; k += 3) {             // 3 batches at a time
+    await Promise.all(starts.slice(k, k + 3).map(i => run(i, Math.min(segs.length, i + BATCH))));
+  }
+  return out;
+}
+// errors worth stopping for (no point retrying): credits, caps, setup
+const PREMIUM_STOP = /Credit|Premium|Admin|ယနေ့/;
 // uses one of today's videos (same job again = free); returns {ticket, left, ...} or {error:'limit'|'bad_code'}
 export async function accessStart(job, secs = 0) {
   const r = await accessPost('/auth/start', { code: access.code, job, secs });

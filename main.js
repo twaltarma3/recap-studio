@@ -1023,12 +1023,12 @@ function step2() {
   $('#autoTr')?.addEventListener('click', async () => {
     if (!syncSrc()) return;
     const b = $('#autoTr'); b.disabled = true; state.busy = true;
-    const old = b.innerHTML; b.textContent = '✨ ဘာသာပြန်နေပါတယ်… (ခဏစောင့်ပါ)';
+    const old = b.innerHTML; b.textContent = '✨ ဘာသာပြန်နေပါတယ်… 0%';
     try {
-      const text = await L.premiumAI(L.buildPrompt(state.segs, state.pStyle), true);
-      const t = L.parseTranslations(text);
+      const t = await L.autoTranslate(state.segs, state.pStyle, p => { b.textContent = `✨ ဘာသာပြန်နေပါတယ်… ${Math.round(p * 100)}%`; });
       $('#json').value = JSON.stringify({ translations: t }, null, 1);
-      toast(t.length === state.segs.length ? `✅ ဘာသာပြန်ပြီးပါပြီ (${t.length} ကြောင်း) — စစ်ပြီး Next နှိပ်ပါ` : `⚠ ${t.length}/${state.segs.length} ကြောင်းပဲ ရပါတယ် — ထပ်နှိပ်ကြည့်ပါ`);
+      const miss = t.filter(x => !x).length;
+      toast(miss ? `⚠ ${miss} ကြောင်း ဘာသာမပြန်နိုင်ပါ — အဆင့် ၃ မှာ ဖြည့်ပါ (သို့) ထပ်နှိပ်ပါ` : `✅ ဘာသာပြန်ပြီးပါပြီ (${t.length} ကြောင်း) — စစ်ပြီး Next နှိပ်ပါ`);
     } catch (e) { toast(e.message.slice(0, 120)); }
     b.innerHTML = old; b.disabled = false; state.busy = false;
   });
