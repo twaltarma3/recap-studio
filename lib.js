@@ -60,15 +60,23 @@ const PREMIUM_ERR = {
 export async function premiumAI(prompt, json = false) {
   const r = await premiumFetch('/premium/ai', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ prompt, json }) });
   const j = await r.json().catch(() => ({}));
-  if (!r.ok || !j.text) throw new Error(PREMIUM_ERR[j.error] || ('AI မအောင်မြင်ပါ: ' + (j.detail || j.error || r.status)));
+  if (!r.ok || !j.text) {
+    if (/ 429:/.test(j.detail || '')) throw new Error('AI ရဲ့ အခမဲ့ quota ပြည့်သွားပါပြီ — ခဏနေ (သို့) မနက်ဖြန် ပြန်စမ်းပါ (Admin: Google AI Studio မှာ Billing ဖွင့်ရင် မကုန်တော့ပါ)');
+    throw new Error(PREMIUM_ERR[j.error] || ('AI မအောင်မြင်ပါ: ' + (j.detail || j.error || r.status)));
+  }
   return j.text;
 }
-// Premium: translate all lines in small batches, so the AI keeps the line count (big batches drop lines).
+// Premium: one call for all lines first (a strong model like Gemini gets it right at once); if the count comes back
+// wrong, translate in small batches, so the AI keeps the line count (weaker models drop lines in big batches).
 // A batch that comes back with the wrong count is asked again, then split in half; a line that still fails stays empty.
 // An error from the AI itself (location, key, credits, network) stops everything at once and is shown.
 export async function autoTranslate(segs, style, onProgress) {
   const out = new Array(segs.length).fill('');
   let done = 0;
+  const tryAll = async () => {
+    const text = await premiumAI(buildPrompt(segs, style), true);
+    try { const t = parseTranslations(text); return t.length === segs.length ? t : null; } catch { return null; }
+  };
   const run = async (from, to, tries = 0) => {
     const part = segs.slice(from, to);
     const text = await premiumAI(buildPrompt(part, style), true);
@@ -83,6 +91,10 @@ export async function autoTranslate(segs, style, onProgress) {
     if (part.length > 1) { const mid = from + Math.ceil(part.length / 2); await run(from, mid); return run(mid, to); }
     done += 1; if (onProgress) onProgress(done / segs.length);
   };
+  {
+    const t = await tryAll();
+    if (t) { if (onProgress) onProgress(1); return t; }
+  }
   const BATCH = 12, starts = [];
   for (let i = 0; i < segs.length; i += BATCH) starts.push(i);
   for (let k = 0; k < starts.length; k += 3) {             // 3 batches at a time
