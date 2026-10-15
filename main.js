@@ -1348,7 +1348,12 @@ const agoDays = t => {
   return m < 1 ? 'အခုလေးတင်' : m < 60 ? `${m} မိနစ်က` : m < 1440 ? `${Math.floor(m / 60)} နာရီက` : `${Math.floor(m / 1440)} ရက်က`;
 };
 const APP_URL = 'https://recap-studio-74n.pages.dev';
-const CRED_PACKS = [7000, 15000, 25000];      // credit packages Admin hands out (≈ 87 / 187 / 312 minutes)
+const CRED_PACKS = [7000, 15000, 25000];
+const AI_SAMPLE = `我去，你都干了什么？
+你这么大声干嘛？不知道叫醒别人要温柔一些。
+哦，现在不是讨论这的时候。你这家伙到底做了什么？
+我们可是夫妻。不是你说的，我们之间要慢慢培养感情吗？
+她发现自己被骗了，决定离开这个家。`;      // credit packages Admin hands out (≈ 87 / 187 / 312 minutes)
 const shareText = c => `🎬 Recap Studio${c.plan === 'premium' ? ' 💎 Premium' : ''}\nAccess Code: ${c.code}\n${c.plan === 'premium' ? `Credit ${fmtN(c.credits)} (≈ ${Math.floor((c.credits || 0) / L.CPM)} မိနစ်)` : `တစ်ရက် ${c.limit > 0 ? c.limit + ' ပုဒ်' : 'အကန့်အသတ်မရှိ'}`}${c.expires ? `\n${dateTxt(c.expires)} အထိ` : ''}\n${APP_URL}`;
 async function shareCode(c) {
   const text = shareText(c);
@@ -1441,6 +1446,14 @@ async function pageAdmin() {
       </div>`).join('') : '<p class="muted">Code မရှိသေးပါ — အပေါ်မှာ ထုတ်ပါ။</p>'}</div>
 
     <div class="kbox">
+      <b>🧪 AI ဘာသာပြန် စမ်းမည်</b>
+      <p class="muted small" style="margin:6px 0 10px" id="aiStat">…</p>
+      <textarea id="aiSrc" rows="5">${esc(AI_SAMPLE)}</textarea>
+      <button class="btn block" id="aiGo" style="margin-top:8px">▶ Model အားလုံး စမ်းမည်</button>
+      <div id="aiOut"></div>
+    </div>
+
+    <div class="kbox">
       <b>🤖 Telegram ရောင်းချ Bot</b>
       <p class="muted small" style="margin:6px 0 10px">Cloudflare မှာ <b>TG_TOKEN</b> (Secret) နဲ့ <b>PAY_INFO</b> ထည့်ပြီးရင် ဒီခလုတ်ကို တစ်ခါ နှိပ်ပါ</p>
       <button class="btn block" id="tgGo">🔗 Telegram Bot ချိတ်မည်</button>
@@ -1461,6 +1474,37 @@ async function pageAdmin() {
     else { toast('မရပါ: ' + (c.error || c.status)); $('#nGo').disabled = false; }
   };
   $('#aout').onclick = () => { L.access.adminPass = ''; syncMenu(); openPage(acc.ok || !acc.on ? 'free' : 'code'); };
+  // AI test: the same prompt as Auto translate, on every model, so the owner can pick the best Burmese
+  const aiInfo = async () => {
+    const x = await L.adminCall({ action: 'aiInfo' }).catch(() => ({}));
+    $('#aiStat').innerHTML = x.ai ? `✅ Workers AI ချိတ်ထားပြီး · သုံးနေတာ: <b>${esc((x.model || '').split('/').pop())}</b>`
+      : x.gemini ? '⚠ Workers AI မချိတ်ရသေးပါ (Gemini သုံးနေ) — Cloudflare → recap-proxy → Settings → Bindings → Add → <b>Workers AI</b> → Name: <b>AI</b>'
+      : '⚠ AI မချိတ်ရသေးပါ — Cloudflare → recap-proxy → Settings → Bindings → Add → <b>Workers AI</b> → Name: <b>AI</b>';
+    return x;
+  };
+  aiInfo();
+  $('#aiGo').onclick = async () => {
+    const info = await aiInfo();
+    const lines = $('#aiSrc').value.split('\n').map(x => x.trim()).filter(Boolean).slice(0, 40);
+    if (!lines.length) return;
+    const prompt = L.buildPrompt(lines.map((text, i) => ({ start: i * 3, end: i * 3 + 2.8, text })), 'recap');
+    const out = $('#aiOut'), b = $('#aiGo'); b.disabled = true; out.innerHTML = '';
+    for (const model of (info.ai ? info.models : [null])) {
+      const name = model ? model.split('/').pop() : 'Gemini';
+      const box = document.createElement('div'); box.className = 'aires';
+      box.innerHTML = `<b>${esc(name)}</b> <span class="muted small">ဘာသာပြန်နေပါတယ်…</span>`;
+      out.append(box);
+      const r = await L.adminCall({ action: 'aiTest', prompt, model }).catch(e => ({ error: e.message }));
+      let body;
+      try { body = '<ol>' + L.parseTranslations(r.text || '').map(t => `<li>${esc(t)}</li>`).join('') + '</ol>'; }
+      catch (e) { body = `<p class="err small">${esc(r.error || e.message)}</p>${r.text ? `<pre class="small">${esc(r.text.slice(0, 400))}</pre>` : ''}`; }
+      box.innerHTML = `<b>${esc(name)}</b> <span class="muted small">${r.ms ? (r.ms / 1000).toFixed(1) + ' စက္ကန့်' : ''}</span>${body}
+        ${model ? `<button class="btn block aiuse" data-m="${esc(model)}">✅ ဒီ Model ကို သုံးမည်</button>` : ''}`;
+      const u = box.querySelector('.aiuse');
+      if (u) u.onclick = async () => { const x = await L.adminCall({ action: 'aiModel', model }).catch(() => ({})); toast(x.ok ? `✅ ${name} ကို သုံးပါမယ်` : 'မရပါ'); aiInfo(); };
+    }
+    b.disabled = false;
+  };
   $('#tgGo').onclick = async () => {
     const b = $('#tgGo'), m = $('#tgMsg'); b.disabled = true;
     const x = await L.adminCall({ action: 'tgSetup' }).catch(e => ({ error: e.message }));

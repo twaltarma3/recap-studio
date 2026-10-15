@@ -53,6 +53,7 @@ const PREMIUM_ERR = {
   no_credit: '💎 Credit မလောက်တော့ပါ — Admin ဆီက ထပ်ဖြည့်ပါ',
   premium_cap: 'ယနေ့အတွက် Premium အလိုအလျောက် သုံးခွင့် ပြည့်သွားပါပြီ — မနက်ဖြန် ပြန်သုံးပါ',
   no_gemini_key: 'Admin က Gemini key မထည့်ရသေးပါ',
+  no_ai: 'Admin က AI (Workers AI / Gemini) မချိတ်ရသေးပါ',
   no_aai_key: 'Admin က AssemblyAI key မထည့်ရသေးပါ'
 };
 // Premium: Gemini answers a prompt on the Worker (json = ask for a JSON reply)
