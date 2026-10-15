@@ -65,14 +65,15 @@ export async function premiumAI(prompt, json = false) {
 }
 // Premium: translate all lines in small batches, so the AI keeps the line count (big batches drop lines).
 // A batch that comes back with the wrong count is asked again, then split in half; a line that still fails stays empty.
+// An error from the AI itself (location, key, credits, network) stops everything at once and is shown.
 export async function autoTranslate(segs, style, onProgress) {
   const out = new Array(segs.length).fill('');
   let done = 0;
   const run = async (from, to, tries = 0) => {
     const part = segs.slice(from, to);
+    const text = await premiumAI(buildPrompt(part, style), true);
     let t = [];
-    try { t = parseTranslations(await premiumAI(buildPrompt(part, style), true)); }
-    catch (e) { if (PREMIUM_STOP.test(e.message)) throw e; }
+    try { t = parseTranslations(text); } catch {}
     if (t.length === part.length) {
       t.forEach((x, i) => { out[from + i] = x; });
       done += part.length; if (onProgress) onProgress(done / segs.length);
@@ -89,8 +90,6 @@ export async function autoTranslate(segs, style, onProgress) {
   }
   return out;
 }
-// errors worth stopping for (no point retrying): credits, caps, setup
-const PREMIUM_STOP = /Credit|Premium|Admin|ယနေ့/;
 // uses one of today's videos (same job again = free); returns {ticket, left, ...} or {error:'limit'|'bad_code'}
 export async function accessStart(job, secs = 0) {
   const r = await accessPost('/auth/start', { code: access.code, job, secs });
