@@ -1448,6 +1448,12 @@ async function pageAdmin() {
     <div class="kbox">
       <b>🧪 AI ဘာသာပြန် စမ်းမည်</b>
       <p class="muted small" style="margin:6px 0 10px" id="aiStat">…</p>
+      <p class="small" style="margin:0 0 6px">🔑 Gemini API Key <span class="muted" id="gkSrc"></span></p>
+      <div class="linkrow" style="margin-bottom:10px">
+        <input id="gkIn" type="password" autocomplete="off" placeholder="AIza… (aistudio.google.com)" />
+        <button type="button" class="btn primary" id="gkSave">သိမ်းမည်</button>
+        <button type="button" class="btn" id="gkDel" title="ဖျက်မည်">🗑</button>
+      </div>
       <textarea id="aiSrc" rows="5">${esc(AI_SAMPLE)}</textarea>
       <button class="btn block" id="aiGo" style="margin-top:8px">▶ Model အားလုံး စမ်းမည်</button>
       <div id="aiOut"></div>
@@ -1478,10 +1484,19 @@ async function pageAdmin() {
   const aiInfo = async () => {
     const x = await L.adminCall({ action: 'aiInfo' }).catch(() => ({}));
     $('#aiStat').innerHTML = x.ai || x.gemini ? `✅ သုံးနေတာ: <b>${esc((x.model || '').split('/').pop())}</b>${x.ai ? '' : ' · Workers AI မချိတ်ရသေး'}${x.gemini ? '' : ' · GEMINI_KEY မထည့်ရသေး'}`
-      : '⚠ AI မချိတ်ရသေးပါ — Cloudflare → recap-proxy → Settings → Bindings → Add → <b>Workers AI</b> → Name: <b>AI</b> (သို့) GEMINI_KEY ထည့်ပါ';
+      : '⚠ AI မချိတ်ရသေးပါ — အောက်မှာ Gemini key ထည့်ပါ (သို့) Cloudflare မှာ Workers AI (Name: AI) ချိတ်ပါ';
+    $('#gkSrc').textContent = x.keySrc === 'app' ? `· App ထဲက key (…${x.keyTail}) သုံးနေ` : x.keySrc === 'cloudflare' ? '· Cloudflare က GEMINI_KEY သုံးနေ' : '· မထည့်ရသေး';
+    $('#gkDel').hidden = x.keySrc !== 'app';
     return x;
   };
   aiInfo();
+  const saveKey = async key => {
+    const x = await L.adminCall({ action: 'geminiKey', key }).catch(e => ({ error: e.message }));
+    toast(x.ok ? (key ? '✅ Gemini key သိမ်းပြီးပါပြီ' : '🗑 App ထဲက key ဖျက်ပြီးပါပြီ') : x.error === 'bad_key' ? 'Key ပုံစံ မမှန်ပါ — AIza… နဲ့စတဲ့ key ကို အကုန် ကူးထည့်ပါ' : 'မရပါ: ' + (x.error || x.status));
+    if (x.ok) { $('#gkIn').value = ''; aiInfo(); }
+  };
+  $('#gkSave').onclick = () => { const k = $('#gkIn').value.trim(); if (k) saveKey(k); };
+  $('#gkDel').onclick = () => { if (confirm('App ထဲက Gemini key ကို ဖျက်မလား?')) saveKey(''); };
   $('#aiGo').onclick = async () => {
     const info = await aiInfo();
     const lines = $('#aiSrc').value.split('\n').map(x => x.trim()).filter(Boolean).slice(0, 40);
