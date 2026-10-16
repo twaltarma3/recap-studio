@@ -63,8 +63,14 @@ const errTip = html => view.insertAdjacentHTML('beforeend', `<div class="warn">$
 const showErr = (e) => { const d = document.createElement('div'); d.className = 'err'; d.textContent = e.message || String(e); view.appendChild(d); };
 const download = (blob, name) => { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); };
 
-const canGo = n => !state.busy && n !== state.step &&
-  (n === 1 || (n === 2 && state.segs.length > 0) || (n === 3 && state.burmese.length > 0) || (n === 4 && !!state.result));
+// every step can be opened (to look around or set things up first); a step without its data shows a notice
+const canGo = n => !state.busy && n !== state.step;
+function previewOnly(ids) {
+  view.insertAdjacentHTML('afterbegin', `<div class="tip" style="margin-bottom:12px">ℹ️ Video မတင်ရသေးလို့ ကြည့်ရုံပဲ ရပါသေးတယ်
+    <button type="button" class="btn block" id="toStep1" style="margin-top:8px">⬆ Video တင်မည်</button></div>`);
+  $('#toStep1').onclick = () => go(1);
+  ids.forEach(id => { const b = $('#' + id); if (b) b.disabled = true; });
+}
 function renderStepper() {
   const vis = STEPS.map((s, i) => ({ s, n: i + 1 }));
   $('#stepper').innerHTML = vis.map((x, k) => {
@@ -73,7 +79,7 @@ function renderStepper() {
   }).join('');
   $('#stepper').querySelectorAll('.link').forEach(el => { el.onclick = () => go(+el.dataset.n); });
 }
-function go(step) { state.step = step; render(); window.scrollTo(0, 0); }
+function go(step, opts = {}) { state.step = step; state.renderNow = !!opts.render; render(); window.scrollTo(0, 0); }
 function render() {
   histUrls.forEach(u => URL.revokeObjectURL(u)); histUrls = [];      // leaving / redrawing History: free its videos
   const stp = $('#stepper');
@@ -424,7 +430,7 @@ function pageKeys() {
       const ab = await L.tts('မင်္ဂလာပါ၊ အသံစမ်းသပ်နေပါတယ်။', L.PERSONAS[0], 0, 0, 1);
       const sec = ((performance.now() - t0) / 1000).toFixed(1);
       badge.textContent = 'OK'; badge.className = 'badge ok';
-      out.className = 'tip'; out.textContent = `✅ အသံရပါတယ် (${(ab.byteLength / 1024).toFixed(0)} KB · ${sec} စက္ကန့် · ${L.ttsInfo.last === 'phone' ? 'ဖုန်းကနေ တိုက်ရိုက်' : 'Worker ကနေ'})`;
+      out.className = 'tip'; out.textContent = `✅ အသံရပါတယ် (${(ab.byteLength / 1024).toFixed(0)} KB · ${sec} စက္ကန့်)`;
       try { new Audio(URL.createObjectURL(new Blob([ab], { type: 'audio/mpeg' }))).play().catch(() => {}); } catch {}
     } catch (e) {
       badge.textContent = 'Error'; badge.className = 'badge req';
@@ -982,6 +988,7 @@ function step2() {
       go(3);
     } catch (e) { toast(e.message); }
   };
+  if (!state.segs.length) previewOnly(['copy', 'next']);
 }
 
 /* ---------------- Step 3 ---------------- */
@@ -1073,13 +1080,20 @@ function step3() {
       toast(`စာကြောင်း ${state.burmese.length} / ${state.segs.length} မကိုက်ပါ`); return;
     }
     clearResult();
-    go(4);
+    go(4, { render: true });
   };
+  if (!state.segs.length) previewOnly(['next']);
 }
 
 /* ---------------- Step 4 ---------------- */
 async function step4() {
   if (state.result) return showResult();
+  if (!state.renderNow) {                                   // opened from the step bar: nothing made yet
+    view.innerHTML = `<h2>ရလဒ်</h2><p class="muted">Video ထုတ်ပြီးရင် ဒီမှာ ပြပါမယ်။ အဆင့် ၃ မှာ <b>အသံထုတ်ပြီး Video ပေါင်းမည်</b> ကို နှိပ်ပါ။</p>`;
+    if (!state.segs.length) previewOnly([]);
+    return;
+  }
+  state.renderNow = false;
   state.busy = true; renderStepper();
   view.innerHTML = `<h2>ဗီဒီယိုနှင့် အသုံးပြုထားသော အရာများကို ပေါင်းစပ်နေပါတယ်</h2>
     <p class="muted">ခဏစောင့်ပေးပါ — ဒီ tab ကို ဖွင့်ထားပါ၊ screen မပိတ်ပါနဲ့။</p>${bar()}`;
@@ -1138,11 +1152,11 @@ async function step4() {
     view.insertAdjacentHTML('beforeend', `<button class="btn primary" id="retry">ပြန်စမည်</button>
       <label class="btn block" for="repick" style="display:block;text-align:center;cursor:pointer">🎞 Video ပြန်ရွေးပြီး ပြန်စမည်<input id="repick" type="file" accept="video/*" hidden /></label>
       <button class="btn block" id="back">ဘာသာပြန် အဆင့်သို့ ပြန်သွားမည်</button>`);
-    $('#retry').onclick = () => step4();
+    $('#retry').onclick = () => { state.renderNow = true; step4(); };
     $('#repick').onchange = async ev => {
       const nf = ev.target.files[0]; if (!nf) return;
       try { await L.forgetInput(); state.file = nf; state.videoDur = await L.videoDuration(nf).catch(() => state.videoDur); } catch (e2) { toast(e2.message); return; }
-      step4();
+      state.renderNow = true; step4();
     };
     $('#back').onclick = () => go(3);
   } finally {
