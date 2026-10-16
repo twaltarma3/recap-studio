@@ -28,7 +28,14 @@ async function accessPost(path, body, headers = {}) {
   return { status: r.status, ...j };
 }
 // {open:true} = no access codes on this Worker; {error:'bad_code'}; else {name, limit, used, left}
-export const accessCheck = code => accessPost('/auth/check', { code: code ?? access.code });
+// Codes the owner marked "no key needed" also get a ticket to transcribe with the owner's spare AssemblyAI key.
+let ftk = '';
+export const freeKey = { get on() { return !!ftk; } };
+export async function accessCheck(code) {
+  const r = await accessPost('/auth/check', { code: code ?? access.code });
+  ftk = r.ftk || '';
+  return r;
+}
 // uses one of today's videos (same job again = free); returns {ticket, left, ...} or {error:'limit'|'bad_code'}
 export async function accessStart(job) {
   const r = await accessPost('/auth/start', { code: access.code, job });
@@ -309,7 +316,25 @@ export async function loadTikTok(link, onProg) {
 }
 
 /* ---------- AssemblyAI (through the worker) ---------- */
+const FREE_ERR = {
+  free_cap: 'ယနေ့အတွက် စာသားထုတ်ခွင့် ပြည့်သွားပါပြီ — မနက်ဖြန် ပြန်စမ်းပါ (သို့) ကိုယ်ပိုင် AssemblyAI key ထည့်ပါ',
+  too_long: 'Key မလိုတဲ့ Code နဲ့ Video ၁၀ မိနစ်အထိပဲ ရပါတယ် — ဖြတ်ပြီး တင်ပါ (သို့) ကိုယ်ပိုင် AssemblyAI key ထည့်ပါ',
+  no_free_key: 'Admin က Key မထည့်ရသေးပါ — ခဏနေ ပြန်စမ်းပါ (သို့) ကိုယ်ပိုင် AssemblyAI key ထည့်ပါ',
+  free_off: 'ဒီ Code မှာ Key မလို ခွင့် ပိတ်ထားပါတယ် — API Key Settings မှာ ကိုယ်ပိုင် key ထည့်ပါ'
+};
 async function aai(path, opts = {}) {
+  // no key of their own, but the owner allowed this code: the Worker uses the owner's spare key
+  if (!cfg.aaiKey && ftk) {
+    for (let k = 0; k < 2; k++) {
+      const r = await fetch(`${cfg.workerUrl}/free/aai${path}`, { ...opts, headers: { ...(opts.headers || {}), 'x-ticket': ftk } });
+      if (r.status === 403 && k === 0) { await accessCheck().catch(() => {}); if (ftk) continue; }
+      if (!r.ok) {
+        const t = await r.text(); let j = {}; try { j = JSON.parse(t); } catch {}
+        throw new Error(FREE_ERR[j.error] || `Server ${r.status}: ${t}`);
+      }
+      return r.json();
+    }
+  }
   if (!cfg.workerUrl || !cfg.aaiKey) throw new Error('API Key Settings ထဲမှာ AssemblyAI key ကို အရင်ထည့်ပါ');
   const r = await fetch(`${cfg.workerUrl}/aai${path}`, {
     ...opts,

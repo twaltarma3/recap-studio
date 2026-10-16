@@ -350,8 +350,9 @@ function pageKeys() {
     <div class="kbox">
       <div class="krow">
         <b>AssemblyAI API Key<br><span class="muted small" style="font-weight:400">(အသံဖိုင် စာသားပြောင်းရန်)</span></b>
-        <div class="badges"><span class="badge req">Required</span><span class="badge" id="aaiBadge"></span></div>
+        <div class="badges">${L.freeKey.on ? '' : '<span class="badge req">Required</span>'}<span class="badge" id="aaiBadge"></span></div>
       </div>
+      ${L.freeKey.on ? '<div class="tip" style="margin-top:10px">🎁 <b>Key ထည့်စရာ မလိုပါ</b> — Admin က သင့် Code ကို Key မလိုအောင် ပေးထားပါတယ်။ ကိုယ်ပိုင် Key ရှိရင်တော့ ထည့်ထားလို့ရပါတယ် (ကိုယ်ပိုင် Key ကို အရင်သုံးပါမယ်)။</div>' : ''}
       <p style="margin:8px 0 10px"><a class="link small" href="https://www.assemblyai.com/dashboard/signup" target="_blank" rel="noopener">Get Free Key ↗</a></p>
       <div class="keyfield">
         <input id="kAai" type="password" autocomplete="off" placeholder="AssemblyAI API Key" />
@@ -397,8 +398,9 @@ function pageKeys() {
     const k = localStorage.getItem('aaiKey') || '';
     const dirty = $('#kAai').value.trim() !== k;
     const ok = !!k, b = $('#aaiBadge');
-    b.textContent = dirty ? 'Unsaved' : ok ? 'Active' : 'Not set';
-    b.className = 'badge' + (!dirty && ok ? ' ok' : '');
+    const free = !ok && L.freeKey.on;                       // no own key, but the owner's spare key covers this code
+    b.textContent = dirty ? 'Unsaved' : ok ? 'Active' : free ? '🎁 Admin Key' : 'Not set';
+    b.className = 'badge' + (!dirty && (ok || free) ? ' ok' : '');
   };
   $('#kAai').oninput = upd;
   $('#kEye').onclick = () => { const i = $('#kAai'); i.type = i.type === 'password' ? 'text' : 'password'; };
@@ -909,7 +911,7 @@ function step1() {
   bindLinkBox();
   if (state.file) bindPreview();
   $('#next').onclick = () => {
-    if (!L.cfg.aaiKey) { toast('API Key အရင်ထည့်ပါ'); openPage('keys'); return; }
+    if (!L.cfg.aaiKey && !L.freeKey.on) { toast('API Key အရင်ထည့်ပါ'); openPage('keys'); return; }
     state.segs.length ? go(2) : transcribeFlow();
   };
 }
@@ -1279,7 +1281,7 @@ function pageCode() {
       if (r.error) throw new Error('Code မမှန်ပါ (သို့) ပိတ်ထားပါတယ်');
       L.access.code = code; setQuota(r);
       toast(`✅ ${r.name} — ${quotaTxt()}`);
-      openPage(L.cfg.aaiKey ? 'free' : 'keys');
+      openPage(L.cfg.aaiKey || L.freeKey.on ? 'free' : 'keys');
     } catch (e) {
       err.hidden = false; err.textContent = e.message === 'Failed to fetch' ? 'ချိတ်ဆက်မရပါ — Internet စစ်ပါ' : e.message;
     }
@@ -1296,7 +1298,7 @@ const agoDays = t => {
   return m < 1 ? 'အခုလေးတင်' : m < 60 ? `${m} မိနစ်က` : m < 1440 ? `${Math.floor(m / 60)} နာရီက` : `${Math.floor(m / 1440)} ရက်က`;
 };
 const APP_URL = 'https://recap-studio-74n.pages.dev';
-const shareText = c => `🎬 Recap Studio\nAccess Code: ${c.code}\nတစ်ရက် ${c.limit > 0 ? c.limit + ' ပုဒ်' : 'အကန့်အသတ်မရှိ'}\n${APP_URL}`;
+const shareText = c => `🎬 Recap Studio\nAccess Code: ${c.code}\nတစ်ရက် ${c.limit > 0 ? c.limit + ' ပုဒ်' : 'အကန့်အသတ်မရှိ'}${c.freeAai ? '\n🎁 AssemblyAI Key ထည့်စရာ မလို' : ''}\n${APP_URL}`;
 async function shareCode(c) {
   const text = shareText(c);
   try { if (navigator.share) { await navigator.share({ text }); return; } } catch (e) { if (e && e.name === 'AbortError') return; }
@@ -1354,13 +1356,14 @@ async function pageAdmin() {
 
     <div id="codes">${r.codes.length ? r.codes.map(c => `
       <div class="kbox acode" data-c="${esc(c.code)}">
-        <div class="krow"><b>${esc(c.name)}</b><span class="badge ${c.active ? 'ok' : 'req'}">${c.active ? 'ဖွင့်ထား' : 'ပိတ်ထား'}</span></div>
+        <div class="krow"><b>${esc(c.name)}${c.freeAai ? ' <span class="badge ok">🎁 Key မလို</span>' : ''}</b><span class="badge ${c.active ? 'ok' : 'req'}">${c.active ? 'ဖွင့်ထား' : 'ပိတ်ထား'}</span></div>
         <div class="codeline"><b class="ccode">${esc(c.code)}</b><button class="ghost cshare" title="Share">📤</button></div>
         <p class="muted small" style="margin:6px 0 0">ယနေ့ <b>${c.today || 0}</b>/${c.limit > 0 ? c.limit : '∞'} · စုစုပေါင်း ${c.total || 0} ပုဒ် · နောက်ဆုံး ${agoDays(c.last)}</p>
         <div class="krow" style="margin-top:10px">
           <span class="small">တစ်ရက် ထုတ်ခွင့်</span>
           <span class="limrow"><button class="ghost cminus">−</button><b class="clim">${c.limit > 0 ? c.limit : '∞'}</b><button class="ghost cplus">+</button></span>
         </div>
+        <button class="btn block cfree" style="margin-top:8px">${c.freeAai ? '🔑 Key မလို — ပိတ်မည်' : '🎁 AssemblyAI Key မလိုအောင် ပေးမည်'}</button>
         <div class="two">
           <button class="btn ctoggle">${c.active ? '⏸ ပိတ်မည်' : '▶ ဖွင့်မည်'}</button>
           <button class="btn creset" ${c.today ? '' : 'disabled'}>↺ ယနေ့ ပြန်စ</button>
@@ -1391,6 +1394,7 @@ async function pageAdmin() {
     const setLim = v => act({ action: 'update', code, limit: v });
     el.querySelector('.cminus').onclick = () => setLim(c.limit === 0 ? 5 : Math.max(1, c.limit - 1));
     el.querySelector('.cplus').onclick = () => setLim(c.limit === 0 ? 0 : c.limit >= 10 ? 0 : c.limit + 1);
+    el.querySelector('.cfree').onclick = () => act({ action: 'update', code, freeAai: !c.freeAai }, c.freeAai ? '🔑 Key မလို ပိတ်လိုက်ပါပြီ' : '🎁 ဒီ Code က Key မလိုတော့ပါ');
     el.querySelector('.ctoggle').onclick = () => act({ action: 'update', code, active: !c.active }, c.active ? '⏸ ပိတ်လိုက်ပါပြီ' : '▶ ဖွင့်လိုက်ပါပြီ');
     el.querySelector('.creset').onclick = () => act({ action: 'reset', code }, '↺ ယနေ့ အရေအတွက် ပြန်စပြီးပါပြီ');
     el.querySelector('.cdel').onclick = () => { if (confirm(`${c.name} (${code}) ကို ဖျက်မှာ သေချာလား?`)) act({ action: 'delete', code }, '🗑 ဖျက်ပြီးပါပြီ'); };
@@ -1537,6 +1541,6 @@ buildMenu();
     acc.on = true;
     if (r.name) setQuota(r);
   }
-  if (!L.cfg.aaiKey && (!acc.on || acc.ok)) page = 'keys';
+  if (!L.cfg.aaiKey && !L.freeKey.on && (!acc.on || acc.ok)) page = 'keys';
   render();
 })();
