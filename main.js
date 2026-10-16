@@ -171,7 +171,13 @@ function pageGuide() {
           <li><b>🔎 စစ်ဆေးမည်</b> ကိုနှိပ်ပါ။ ✅ ပေါ်မှ <b>သိမ်းမည်</b> ကိုနှိပ်ပါ။ (Worker URL ကို app ထဲမှာ ထည့်ပေးထားပြီးသားပါ)</li>
           <li><b>Device Video Engine</b> မှာ <b>⬇ Install</b> ကိုနှိပ်ပါ။ (~31MB၊ Wi-Fi နဲ့ တစ်ကြိမ်ပဲ ဒေါင်းရပြီး ဖုန်းထဲမှာ သိမ်းထားပေးပါတယ်)</li>
         </ol>
-        <div class="tip">💡 Key တွေကို ဒီဖုန်း browser ထဲမှာပဲ သိမ်းပါတယ်။ Browser data ဖျက်ရင် ပြန်ထည့်ရပါမယ်။</div>`, true)}
+        <div class="tip">💡 Key တွေကို ဒီဖုန်း browser ထဲမှာပဲ သိမ်းပါတယ်။ Browser data ဖျက်ရင် ပြန်ထည့်ရပါမယ်။</div>
+        <div class="tip">🎁 <b>Key မလိုတဲ့ Code</b> — Admin က သင့် Code ကို "Key မလို" ပေးထားရင် အဆင့် ၂ နဲ့ ၃ ကို ကျော်လို့ရပါတယ် (API Key Settings မှာ <b>🎁 Admin Key</b> လို့ ပြပါမယ်)။ ကန့်သတ်ချက်:
+          <ul style="margin:6px 0 0">
+            <li>Video <b>၁၀ မိနစ်အထိ</b> ပဲ ရပါတယ်။</li>
+            <li>တစ်ရက် စာသားထုတ်ခွင့်က Code ရဲ့ ပုဒ်ရေ × ၃ ကြိမ် ပါ။ (ဥပမာ တစ်ရက် ၁ ပုဒ် Code → ၃ ကြိမ်)</li>
+            <li>ပိုသုံးချင်ရင် ကိုယ်ပိုင် AssemblyAI Key ထည့်ပါ — ကိုယ်ပိုင် Key ကို အရင်သုံးပါမယ်။</li>
+          </ul></div>`, true)}
 
       ${sec(2, 'Video တင်ပါ', `
         <div class="tip" style="margin:0 0 10px">📲 <b>App လို အပြည့်ဖွင့်ချင်ရင်</b> — ☰ Menu → <b>App အဖြစ် ထည့်မည်</b> (ဒါမှမဟုတ် Chrome ⋮ → Add to Home screen)။ Home screen က icon နဲ့ ဖွင့်ရင် browser bar မပါဘဲ ပွင့်ပါတယ်။</div>
