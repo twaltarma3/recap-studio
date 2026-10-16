@@ -1046,7 +1046,7 @@ function step2() {
       go(3);
     } catch (e) { toast(e.message); }
   };
-  if (!state.segs.length) previewOnly(['copy', 'next']);
+  if (!state.segs.length) previewOnly(['copy', 'next', 'autoTr']);
 }
 
 /* ---------------- Step 3 ---------------- */
