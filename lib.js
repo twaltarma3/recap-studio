@@ -62,13 +62,17 @@ const PREMIUM_ERR = {
 };
 // Premium: Gemini answers a prompt on the Worker (json = ask for a JSON reply)
 export async function premiumAI(prompt, json = false) {
-  const r = await premiumFetch('/premium/ai', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ prompt, json }) });
-  const j = await r.json().catch(() => ({}));
-  if (!r.ok || !j.text) {
+  // Gemini answers 503 "high demand" (or 500) now and then; that passes in seconds, so ask again twice
+  for (let tries = 0; ; tries++) {
+    const r = await premiumFetch('/premium/ai', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ prompt, json }) });
+    const j = await r.json().catch(() => ({}));
+    if (r.ok && j.text) return j.text;
+    const busy = / 50[03]:/.test(j.detail || '');
+    if (busy && tries < 2) { await new Promise(res => setTimeout(res, tries ? 6000 : 2500)); continue; }
+    if (busy) throw new Error('AI (Gemini) မှာ လူသုံးများနေလို့ ခဏ မအားပါ — ၁ မိနစ်လောက်နေ ပြန်နှိပ်ပါ');
     if (/ 429:/.test(j.detail || '')) throw new Error('AI ရဲ့ အခမဲ့ quota ပြည့်သွားပါပြီ — ခဏနေ (သို့) မနက်ဖြန် ပြန်စမ်းပါ (Admin: Google AI Studio မှာ Billing ဖွင့်ရင် မကုန်တော့ပါ)');
     throw new Error(PREMIUM_ERR[j.error] || ('AI မအောင်မြင်ပါ: ' + (j.detail || j.error || r.status)));
   }
-  return j.text;
 }
 // Premium: one call for all lines first (a strong model like Gemini gets it right at once); if the count comes back
 // wrong, translate in small batches, so the AI keeps the line count (weaker models drop lines in big batches).
@@ -274,6 +278,16 @@ export async function ffmpegCached() {
     const r = await Promise.all(core.files.map(f => c.match(`${core.base}/${f.name}`)));
     return r.every(Boolean);
   } catch { return false; }
+}
+
+// The wasm engine crashed ("RuntimeError: Out of bounds memory access" when an iPhone runs short of memory, …).
+// A crashed engine can't run again, so the next run starts a fresh one; a multi-core crash also switches
+// multi-core off for this session, since it needs more memory.
+export const isEngineCrash = e => /RuntimeError|memory access|out of memory|Aborted\(|unreachable/i.test(String((e && e.message) || e));
+export function dropEngine() {
+  if (ffKind === 'mt') mtFailed = true;
+  if (ff) { try { ff.terminate(); } catch {} }
+  ff = null; ffKind = null; keptInput = null;
 }
 
 export async function ffmpegClear() {
@@ -1046,6 +1060,23 @@ function wrapLines(ctx, text, maxW) {
   return lines;
 }
 
+// safety net for the subtitle centring: move the painted text so it sits in the middle of the strip
+function centreInk(c) {
+  try {
+    const x = c.getContext('2d'), d = x.getImageData(0, 0, c.width, c.height).data;
+    let lo = c.width, hi = -1;
+    for (let col = 0; col < c.width; col++) {
+      for (let row = 0; row < c.height; row++) if (d[(row * c.width + col) * 4 + 3] > 20) { lo = Math.min(lo, col); hi = col; break; }
+    }
+    if (hi < 0) return;
+    const dx = Math.round(c.width / 2 - (lo + hi) / 2);
+    if (Math.abs(dx) < 3) return;
+    const t = document.createElement('canvas'); t.width = c.width; t.height = c.height;
+    t.getContext('2d').drawImage(c, 0, 0);
+    x.clearRect(0, 0, c.width, c.height); x.drawImage(t, dx, 0);
+  } catch {}
+}
+
 // draws every subtitle line as a transparent PNG strip and lists them (with timings) for ffmpeg's concat demuxer
 async function makeSubTrack(f, { file, videoDur, burmese, placed, fx }) {
   const sz = fx.geo ? { w: fx.geo.OW, h: fx.geo.OH } : await videoSize(file);     // subtitles are drawn on the OUTPUT frame size
@@ -1109,7 +1140,10 @@ async function makeSubTrack(f, { file, videoDur, burmese, placed, fx }) {
       x.lineWidth = Math.max(2, px * 0.16); x.strokeStyle = s.outline; x.fillStyle = s.color;
       const L = lines.slice(0, maxL);
       const top = (bandH - L.length * lh) / 2 + lh / 2;
-      L.forEach((t, j) => { const yy = top + j * lh; x.strokeText(t, W / 2, yy); x.fillText(t, W / 2, yy); });
+      // centred by hand: iPhone Safari ignores textAlign 'center' for Burmese text and drew it from the middle
+      x.textAlign = 'left';
+      L.forEach((t, j) => { const yy = top + j * lh, xx = Math.max(0, (W - x.measureText(t).width) / 2); x.strokeText(t, xx, yy); x.fillText(t, xx, yy); });
+      centreInk(c);
     }
     const blob = await new Promise(r => c.toBlob(r, 'image/png'));
     await f.writeFile(name, new Uint8Array(await blob.arrayBuffer()));
