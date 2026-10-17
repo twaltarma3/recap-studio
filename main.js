@@ -50,8 +50,25 @@ function toast(msg) {
   const t = $('#toast'); t.textContent = msg; t.classList.add('show');
   clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove('show'), 2200);
 }
-const bar = () => `<div class="bar"><i id="fill"></i></div><div class="pct"><span id="ptxt">…</span><b id="pnum">0%</b></div>
-  <div class="ptime">⏱ ကြာချိန် <b id="ptime">0:00</b></div>`;
+// progress card: a ring with the %, what is happening now, the stages (One-Click Auto shows all four), time and tips
+const PSTEPS = [['text', '📝', 'စာသားထုတ်'], ['tr', '✨', 'ဘာသာပြန်'], ['voice', '🎙', 'အသံထုတ်'], ['video', '🎬', 'Video ပေါင်း']];
+const stageOf = t => /ဘာသာပြန်/.test(t) ? 'tr'
+  : /ဗီဒီယို|Video|Watermark|စာတန်းထိုး|သိမ်းနေ|ပြီးပါပြီ/.test(t) ? 'video'
+  : /မြန်မာအသံ|အသံကို|အသံတွေ/.test(t) ? 'voice' : 'text';
+const RING = 2 * Math.PI * 54;
+const bar = (stages = state.autoRun ? PSTEPS.map(x => x[0]) : []) => `<div class="prog">
+  <div class="prog-ring"><svg viewBox="0 0 120 120" aria-hidden="true">
+    <defs><linearGradient id="pgGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7c5cff"/><stop offset=".55" stop-color="#c084fc"/><stop offset="1" stop-color="#f0abfc"/></linearGradient></defs>
+    <circle cx="60" cy="60" r="54" class="pr-track"/><circle cx="60" cy="60" r="54" class="pr-fill" id="pring" stroke-dasharray="${RING.toFixed(1)}" stroke-dashoffset="${RING.toFixed(1)}"/>
+  </svg><b id="pnum">0%</b></div>
+  <div class="prog-now"><span id="ptxt">စတင်နေပါတယ်</span><span class="pdots"><i></i><i></i><i></i></span></div>
+  <div class="bar"><i id="fill"></i></div>
+  ${stages.length > 1 ? `<div class="prog-steps">${PSTEPS.filter(x => stages.includes(x[0])).map(([k, ic, t]) => `<span data-st="${k}"><em>${ic}</em>${t}</span>`).join('')}</div>` : ''}
+  <div class="ptime">⏱ ကြာချိန် <b id="ptime">0:00</b></div>
+  <p class="prog-tip" id="ptip">💡 ဒီ tab ကို ဖွင့်ထားပါ — Screen မပိတ်ပါနဲ့</p>
+</div>`;
+const TIPS = ['💡 ဒီ tab ကို ဖွင့်ထားပါ — Screen မပိတ်ပါနဲ့', '☕ ခဏနားပြီး စောင့်ပေးပါ၊ ကိုယ့်ဖုန်းထဲမှာပဲ Video ထုတ်နေတာပါ',
+  '🎬 ပြီးရင် Thumbnail နဲ့ Caption + Hashtag ပါ ဆက်ထုတ်လို့ရပါတယ်', '🔋 ဘက်ထရီ နည်းနေရင် အားသွင်းထားပါ', '📶 Internet ကောင်းရင် ပိုမြန်ပါတယ်'];
 const fmtDur = sec => {
   sec = Math.max(0, Math.round(sec));
   const h = Math.floor(sec / 3600), m = Math.floor(sec / 60) % 60, s = String(sec % 60).padStart(2, '0');
@@ -60,15 +77,25 @@ const fmtDur = sec => {
 // elapsed-time clock under the progress bar; returns a stop function that gives the seconds taken
 function startClock() {
   const t0 = Date.now();
-  const tick = () => { const el = $('#ptime'); if (el) el.textContent = fmtDur((Date.now() - t0) / 1000); };
+  const tick = () => {
+    const sec = (Date.now() - t0) / 1000, el = $('#ptime'); if (el) el.textContent = fmtDur(sec);
+    const tip = $('#ptip'), k = Math.floor(sec / 7) % TIPS.length;
+    if (tip && tip.dataset.k !== String(k)) { tip.dataset.k = k; tip.classList.remove('in'); void tip.offsetWidth; tip.textContent = TIPS[k]; tip.classList.add('in'); }
+  };
   const iv = setInterval(tick, 1000); tick();
   return () => { clearInterval(iv); return (Date.now() - t0) / 1000; };
 }
 function setProg(frac, text) {
   const f = $('#fill'); if (!f) return;
-  f.style.width = Math.round(frac * 100) + '%';
-  $('#pnum').textContent = Math.round(frac * 100) + '%';
-  if (text) $('#ptxt').textContent = text;
+  const pc = Math.max(0, Math.min(100, Math.round(frac * 100)));
+  f.style.width = pc + '%';
+  $('#pnum').textContent = pc + '%';
+  const ring = $('#pring'); if (ring) ring.style.strokeDashoffset = (RING * (1 - pc / 100)).toFixed(1);
+  if (text) {
+    $('#ptxt').textContent = text.replace(/[.…]+$/, '');
+    const steps = [...document.querySelectorAll('.prog-steps span')], cur = steps.findIndex(x => x.dataset.st === stageOf(text));
+    if (cur >= 0) steps.forEach((x, i) => { x.classList.toggle('done', i < cur || pc >= 100); x.classList.toggle('now', i === cur && pc < 100); });
+  }
 }
 const esc = t => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;');
 // drop extra blank lines at the end (a stray Enter) so the line count still matches
@@ -1020,6 +1047,7 @@ function step1() {
     // one tap: transcribe (unless done already) -> AI translation -> voice + render -> the usual result page
     $('#autoGo').onclick = () => {
       if (!(acc.credits > 0) && !L.premium.on) { toast('💎 Credit ကုန်နေပါပြီ — Telegram မှာ ထပ်ဝယ်ပါ'); return; }
+      state.autoRun = true;                                   // the progress card shows all four stages until the video is out
       state.segs.length ? autoRest() : transcribeFlow(true);
     };
   }
@@ -1041,11 +1069,11 @@ async function autoRest() {
     stopClock(); state.busy = false;
     state.burmese = state.segs.map((_, i) => t[i] || '');
     const miss = state.burmese.filter(x => !x).length;
-    if (miss) { toast(`⚠ ${miss} ကြောင်း ဘာသာမပြန်နိုင်ပါ — ဖြည့်ပြီး "အသံထုတ်ပြီး Video ပေါင်းမည်" ကိုနှိပ်ပါ`); go(3); return; }
+    if (miss) { state.autoRun = false; toast(`⚠ ${miss} ကြောင်း ဘာသာမပြန်နိုင်ပါ — ဖြည့်ပြီး "အသံထုတ်ပြီး Video ပေါင်းမည်" ကိုနှိပ်ပါ`); go(3); return; }
     clearResult();
     go(4, { render: true });
   } catch (e) {
-    stopClock(); state.busy = false;
+    stopClock(); state.busy = false; state.autoRun = false;
     go(2);
     toast(e.message.slice(0, 140));
   }
@@ -1075,7 +1103,7 @@ async function transcribeFlow(auto = false) {
     stopClock();
     view.innerHTML = `<h2>အမှားရှိနေပါသည်</h2>`; showErr(e);
     errTip('⚠ <b>VPN ချိတ်ထားရင် ဖြုတ်ပြီး</b> ပြန်ကြိုးစားပါ။ Wi-Fi / Internet ကောင်းမကောင်းလည်း စစ်ပါ။ (AssemblyAI Key မှန်လားဆိုတာ API Key Settings → 🔎 စစ်ဆေးမည် နဲ့ စစ်နိုင်ပါတယ်)');
-    state.busy = false; renderStepper();
+    state.busy = false; state.autoRun = false; renderStepper();
     view.insertAdjacentHTML('beforeend', `<button class="btn primary" id="back">ဗီဒီယိုတင် အဆင့်သို့ ပြန်သွားမည်</button>`);
     $('#back').onclick = () => go(1);
   }
@@ -1271,7 +1299,7 @@ async function step4() {
   state.renderNow = false;
   state.busy = true; renderStepper();
   view.innerHTML = `<h2>ဗီဒီယိုနှင့် အသုံးပြုထားသော အရာများကို ပေါင်းစပ်နေပါတယ်</h2>
-    <p class="muted">ခဏစောင့်ပေးပါ — ဒီ tab ကို ဖွင့်ထားပါ၊ screen မပိတ်ပါနဲ့။</p>${bar()}`;
+    <p class="muted">ခဏစောင့်ပေးပါ — ဒီ tab ကို ဖွင့်ထားပါ၊ screen မပိတ်ပါနဲ့။</p>${bar(state.autoRun ? undefined : ['voice', 'video'])}`;
   let wake; try { wake = await navigator.wakeLock?.request('screen'); } catch {}
   const stopClock = startClock();
   let mtRetry = false, crashRetry = false;
@@ -1342,6 +1370,7 @@ async function step4() {
     $('#back').onclick = () => go(3);
   } finally {
     stopClock(); wake?.release?.(); state.busy = false; renderStepper();
+    if (!mtRetry && !crashRetry) state.autoRun = false;
     if (mtRetry || crashRetry) {
       toast(mtRetry ? '⚡ Multi-core ရပ်သွားလို့ ပုံမှန် Engine နဲ့ ပြန်ထုတ်နေပါတယ်' : '⚙ Engine ကို ပြန်စပြီး ထပ်ထုတ်နေပါတယ်');
       state.renderNow = true; setTimeout(step4, 300);
