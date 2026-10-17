@@ -20,8 +20,8 @@ const state = {
 };
 // access codes: on only when the Worker has them set up (accessCheck answers something other than {open:true})
 const acc = { on: false, ok: false, name: '', limit: 0, used: 0, left: -1, plan: 'free', expires: 0, credits: 0 };
-const setQuota = r => Object.assign(acc, { ok: true, name: r.name || '', limit: r.limit || 0, used: r.used || 0, left: r.left ?? -1,
-  ...(r.plan ? { plan: r.plan, expires: r.expires || 0, credits: r.credits || 0 } : {}) });
+const setQuota = r => (L.setCpm(r.cpm), Object.assign(acc, { ok: true, name: r.name || '', limit: r.limit || 0, used: r.used || 0, left: r.left ?? -1,
+  ...(r.plan ? { plan: r.plan, expires: r.expires || 0, credits: r.credits || 0 } : {}) }));
 // Premium is paid per video (credits); a video already paid keeps its premium features after the last credit is used
 const jobId = () => (state.file ? `${state.file.name}|${state.file.size}` : '');
 L.premium.job = jobId;
@@ -50,8 +50,38 @@ function toast(msg) {
   const t = $('#toast'); t.textContent = msg; t.classList.add('show');
   clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove('show'), 2200);
 }
-const bar = () => `<div class="bar"><i id="fill"></i></div><div class="pct"><span id="ptxt">…</span><b id="pnum">0%</b></div>
-  <div class="ptime">⏱ ကြာချိန် <b id="ptime">0:00</b></div>`;
+// progress card: a ring with the %, what is happening now, the stages (One-Click Auto shows all four), time and tips
+const PSTEPS = [['text', '📝', 'စာသားထုတ်'], ['tr', '✨', 'ဘာသာပြန်'], ['voice', '🎙', 'အသံထုတ်'], ['video', '🎬', 'Video ပေါင်း']];
+const stageOf = t => /ဘာသာပြန်/.test(t) ? 'tr'
+  : /ဗီဒီယို|Video|Watermark|စာတန်းထိုး|သိမ်းနေ|ပြီးပါပြီ/.test(t) ? 'video'
+  : /မြန်မာအသံ|အသံကို|အသံတွေ/.test(t) ? 'voice' : 'text';
+const RING = 2 * Math.PI * 54;
+const bar = (stages = state.autoRun ? PSTEPS.map(x => x[0]) : []) => `<div class="prog">
+  <div class="prog-ring"><svg viewBox="0 0 120 120" aria-hidden="true">
+    <defs><linearGradient id="pgGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7c5cff"/><stop offset=".55" stop-color="#c084fc"/><stop offset="1" stop-color="#f0abfc"/></linearGradient></defs>
+    <circle cx="60" cy="60" r="54" class="pr-track"/><circle cx="60" cy="60" r="54" class="pr-fill" id="pring" stroke-dasharray="${RING.toFixed(1)}" stroke-dashoffset="${RING.toFixed(1)}"/>
+  </svg><b id="pnum">0%</b></div>
+  <div class="prog-now"><span id="ptxt">စတင်နေပါတယ်</span><span class="pdots"><i></i><i></i><i></i></span></div>
+  <div class="prog-sub" id="psub"></div>
+  <div class="bar"><i id="fill"></i></div>
+  ${stages.length > 1 ? `<div class="prog-steps">${PSTEPS.filter(x => stages.includes(x[0])).map(([k, ic, t]) => `<span data-st="${k}"><em>${ic}</em>${t}</span>`).join('')}</div>` : ''}
+  <div class="ptime">⏱ ကြာချိန် <b id="ptime">0:00</b></div>
+  <p class="prog-tip" id="ptip"></p>
+</div>`;
+const TIPS = [
+  '🎬 မင်းရဲ့ Video က Viral ဖြစ်ဖို့ အသင့်ပြင်နေပါပြီ…',
+  '🔥 ပထမ ၃ စက္ကန့်မှာ ဆွဲဆောင်နိုင်ရင် ကြည့်သူတွေ အဆုံးထိ ကြည့်တတ်ပါတယ်',
+  '😎 ကော်ဖီတစ်ခွက် သောက်ရင်း ခဏစောင့်ပါ ☕ — ကျန်တာ App က လုပ်ပေးပါမယ်',
+  '🖼 Thumbnail လှရင် Click ပိုရပါတယ် — ပြီးရင် 3D Thumbnail ပါ လုပ်ကြည့်ပါ',
+  '#️⃣ Caption + Hashtag ကို AI နဲ့ တစ်ချက်တည်း ရေးလို့ရပါတယ်',
+  '💪 ပုံမှန် နေ့တိုင်းတင်ရင် Follower ပိုမြန်မြန် တက်ပါတယ်',
+  '⏰ ညနေပိုင်း လူအားချိန်မှာ တင်ရင် ကြည့်သူ ပိုများတတ်ပါတယ်',
+  '🎙 အသံ Speed နဲ့ Pitch ကို ကိုယ့်စိတ်ကြိုက် ချိန်လို့ရပါတယ်',
+  '❄ Freeze + Zoom နဲ့ Video ကို ပိုစိတ်ဝင်စားစရာ ကောင်းအောင် လုပ်ကြည့်ပါ',
+  '🔒 Video ကို ကိုယ့်ဖုန်းထဲမှာပဲ ထုတ်နေတာမို့ စိတ်ချရပါတယ်',
+  '💡 ဒီ tab ကို ဖွင့်ထားပါ — Screen မပိတ်ပါနဲ့',
+  '🔋 ဘက်ထရီ နည်းနေရင် အားသွင်းထားပါ'];
+let tipStart = Math.floor(Math.random() * TIPS.length);
 const fmtDur = sec => {
   sec = Math.max(0, Math.round(sec));
   const h = Math.floor(sec / 3600), m = Math.floor(sec / 60) % 60, s = String(sec % 60).padStart(2, '0');
@@ -60,15 +90,32 @@ const fmtDur = sec => {
 // elapsed-time clock under the progress bar; returns a stop function that gives the seconds taken
 function startClock() {
   const t0 = Date.now();
-  const tick = () => { const el = $('#ptime'); if (el) el.textContent = fmtDur((Date.now() - t0) / 1000); };
+  const tick = () => {
+    const sec = (Date.now() - t0) / 1000, el = $('#ptime'); if (el) el.textContent = fmtDur(sec);
+    // a new tip every 6 s; near the end, a "nearly there" line instead
+    const tip = $('#ptip'), pc = parseInt(($('#pnum') || {}).textContent, 10) || 0;
+    const k = pc >= 92 ? 'end' : String((tipStart + Math.floor(sec / 6)) % TIPS.length);
+    if (tip && tip.dataset.k !== k) {
+      tip.dataset.k = k; tip.classList.remove('in'); void tip.offsetWidth;
+      tip.textContent = k === 'end' ? '🎉 ပြီးခါနီးပါပြီ — ခဏလေးပဲ ကျန်ပါတော့တယ်…' : TIPS[+k]; tip.classList.add('in');
+    }
+  };
   const iv = setInterval(tick, 1000); tick();
   return () => { clearInterval(iv); return (Date.now() - t0) / 1000; };
 }
 function setProg(frac, text) {
   const f = $('#fill'); if (!f) return;
-  f.style.width = Math.round(frac * 100) + '%';
-  $('#pnum').textContent = Math.round(frac * 100) + '%';
-  if (text) $('#ptxt').textContent = text;
+  const pc = Math.max(0, Math.min(100, Math.round(frac * 100)));
+  f.style.width = pc + '%';
+  $('#pnum').textContent = pc + '%';
+  const ring = $('#pring'); if (ring) ring.style.strokeDashoffset = (RING * (1 - pc / 100)).toFixed(1);
+  if (text) {
+    const [main, sub] = text.split('\n');                 // an optional second line: what is in the mix, in small type
+    $('#ptxt').textContent = main.replace(/[.…]+$/, '');
+    const ps = $('#psub'); if (ps) ps.textContent = sub || '';
+    const steps = [...document.querySelectorAll('.prog-steps span')], cur = steps.findIndex(x => x.dataset.st === stageOf(text));
+    if (cur >= 0) steps.forEach((x, i) => { x.classList.toggle('done', i < cur || pc >= 100); x.classList.toggle('now', i === cur && pc < 100); });
+  }
 }
 const esc = t => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;');
 // drop extra blank lines at the end (a stray Enter) so the line count still matches
@@ -989,7 +1036,17 @@ function step1() {
           .map(([v, t]) => `<option value="${v}" ${v === state.lang ? 'selected' : ''}>${t}</option>`).join('')}
       </select>
     </label>
-    <div style="position:sticky;bottom:0;z-index:4;margin:12px -6px 0;padding:10px 6px;background:linear-gradient(180deg,rgba(20,20,23,0),#141417 35%)"><button id="next" class="btn primary" style="margin:0" ${state.file ? '' : 'disabled'}>စာသားထုတ်မည် (Next)</button></div>`;
+    ${premPlan() ? `<div class="panel" style="margin-top:16px">
+      <b>⚡ One-Click Auto <span class="pbadge">💎 Premium</span></b>
+      <p class="muted small" style="margin:6px 0 10px">ဘာသာပြန်ပုံစံနဲ့ အသံကို ရွေးပြီး <b>⚡ Auto နဲ့ Video ထုတ်မည်</b> ကိုနှိပ်ရင် စာသားထုတ် → ဘာသာပြန် → အသံထုတ် → Video ပေါင်း အကုန် အလိုအလျောက် လုပ်ပေးပါမယ်။ 🌐 VPN (US) ဖွင့်ထားပါ။</p>
+      <b class="small">✍ ဘာသာပြန်ပုံစံ</b>
+      <div class="chips" id="aStyle" style="margin:6px 0 0">${[['recap', '🔥 Recap (လှုပ်ရှား)'], ['chat', '💬 ရိုးရိုးစကားပြော']].map(([k, t]) => `<button type="button" class="chip ${state.pStyle === k ? 'on' : ''}" data-s="${k}">${t}</button>`).join('')}</div>
+      ${voiceBlock()}
+    </div>` : ''}
+    <div style="position:sticky;bottom:0;z-index:4;margin:12px -6px 0;padding:10px 6px;background:linear-gradient(180deg,rgba(20,20,23,0),#141417 35%)">
+      ${premPlan() ? `<button id="autoGo" class="btn primary" style="margin:0 0 8px" ${state.file ? '' : 'disabled'}>⚡ Auto နဲ့ Video ထုတ်မည်</button>` : ''}
+      <button id="next" class="btn ${premPlan() ? '' : 'primary'}" style="margin:0" ${state.file ? '' : 'disabled'}>${premPlan() ? 'အဆင့်လိုက် ကိုယ်တိုင်ပြင်မည် (Next)' : 'စာသားထုတ်မည် (Next)'}</button>
+    </div>`;
   $('#f').onchange = e => { state.file = e.target.files[0] || null; state.segs = []; state.origSegs = null; L.forgetInput(); step1(); };
   $('#lang').onchange = e => { state.lang = e.target.value; };
   bindLinkBox();
@@ -1002,11 +1059,49 @@ function step1() {
     if (!L.cfg.aaiKey && !L.premium.on && !L.freeKey.on) { toast('API Key အရင်ထည့်ပါ'); openPage('keys'); return; }
     state.segs.length ? go(2) : transcribeFlow();
   };
+  if (premPlan()) {
+    view.querySelectorAll('#aStyle .chip').forEach(c => c.onclick = () => {
+      state.pStyle = c.dataset.s; view.querySelectorAll('#aStyle .chip').forEach(x => x.classList.toggle('on', x === c));
+    });
+    bindVoice(step1);
+    // one tap: transcribe (unless done already) -> AI translation -> voice + render -> the usual result page
+    $('#autoGo').onclick = () => {
+      if (!(acc.credits > 0) && !L.premium.on) { toast('💎 Credit ကုန်နေပါပြီ — Telegram မှာ ထပ်ဝယ်ပါ'); return; }
+      state.autoRun = true;                                   // the progress card shows all four stages until the video is out
+      state.segs.length ? autoRest() : transcribeFlow(true);
+    };
+  }
 }
 
-async function transcribeFlow() {
+// One-Click Auto, after the transcript: AI translation, then straight to the render (step 4).
+// Lines the AI left empty go to step 3 to fill in; an AI error goes to step 2 (Copy Full Prompt still works there).
+async function autoRest() {
+  state.step = 3; state.busy = true; renderStepper();
+  view.innerHTML = bar();
+  const stopClock = startClock();
+  const t0 = Date.now(), T = Math.max(10, state.segs.length * 0.6);
+  let real = 0;
+  const show = () => setProg(Math.max(real, 0.9 * (1 - Math.exp(-(Date.now() - t0) / 1000 / T))), 'AI နဲ့ မြန်မာလို ဘာသာပြန်နေပါတယ်');
+  show();
+  const tick = setInterval(show, 500);
+  try {
+    const t = await L.autoTranslate(state.segs, state.pStyle, p => { real = Math.max(real, p); }).finally(() => clearInterval(tick));
+    stopClock(); state.busy = false;
+    state.burmese = state.segs.map((_, i) => t[i] || '');
+    const miss = state.burmese.filter(x => !x).length;
+    if (miss) { state.autoRun = false; toast(`⚠ ${miss} ကြောင်း ဘာသာမပြန်နိုင်ပါ — ဖြည့်ပြီး "အသံထုတ်ပြီး Video ပေါင်းမည်" ကိုနှိပ်ပါ`); go(3); return; }
+    clearResult();
+    go(4, { render: true });
+  } catch (e) {
+    stopClock(); state.busy = false; state.autoRun = false;
+    go(2);
+    toast(e.message.slice(0, 140));
+  }
+}
+
+async function transcribeFlow(auto = false) {
   state.step = 2; state.busy = true; renderStepper();
-  view.innerHTML = `<h2>စာသား ထုတ်နေပါတယ်…</h2><p class="muted">ခဏစောင့်ပေးပါ — ဒီ tab ကို ဖွင့်ထားပါ။</p>${bar()}`;
+  view.innerHTML = bar();
   const stopClock = startClock();
   try {
     setProg(0.02, 'Engine ပြင်ဆင်နေသည်');
@@ -1022,12 +1117,13 @@ async function transcribeFlow() {
     state.burmese = []; state.busy = false;
     if (premPlan()) L.accessCheck().then(r => { if (r && r.name) setQuota(r); }).catch(() => {});   // credits left after this video
     stopClock();
+    if (auto) return autoRest();
     go(2);
   } catch (e) {
     stopClock();
     view.innerHTML = `<h2>အမှားရှိနေပါသည်</h2>`; showErr(e);
     errTip('⚠ <b>VPN ချိတ်ထားရင် ဖြုတ်ပြီး</b> ပြန်ကြိုးစားပါ။ Wi-Fi / Internet ကောင်းမကောင်းလည်း စစ်ပါ။ (AssemblyAI Key မှန်လားဆိုတာ API Key Settings → 🔎 စစ်ဆေးမည် နဲ့ စစ်နိုင်ပါတယ်)');
-    state.busy = false; renderStepper();
+    state.busy = false; state.autoRun = false; renderStepper();
     view.insertAdjacentHTML('beforeend', `<button class="btn primary" id="back">ဗီဒီယိုတင် အဆင့်သို့ ပြန်သွားမည်</button>`);
     $('#back').onclick = () => go(1);
   }
@@ -1107,17 +1203,15 @@ function step2() {
 
 /* ---------------- Step 3 ---------------- */
 let previewAudio;
-function step3() {
+// voice + original-audio settings, shared by step 3 and the Premium one-tap panel on step 1
+function voiceBlock() {
   const voices = L.PERSONAS.map(p => `
     <div class="voice ${p.id === state.personaId ? 'sel' : ''}" data-id="${p.id}">
       <div class="av ${p.g === 'Male' ? 'm' : 'f'}">${p.id}</div>
       <b>${p.name}</b><small>${p.g}</small>
       <button data-prev="${p.id}">▶ Preview</button>
     </div>`).join('');
-  view.innerHTML = `
-    <div class="row"><h2>မြန်မာဘာသာပြန်ကို စစ်ဆေးပါ</h2><button class="ghost" id="back">‹ နောက်သို့</button></div>
-    <p class="muted">တစ်ကြောင်းလျှင် စာတစ်ကြောင်း။ (${state.segs.length} lines)</p>
-    <textarea id="mm" style="min-height:300px">${esc(state.burmese.join('\n'))}</textarea>
+  return `<div id="vblock">
     <div class="row" style="margin-top:20px"><b>အသံရွေးချယ်ပါ</b><span class="muted small">${L.PERSONAS.length} Voice Personas</span></div>
     <div class="voices">${voices}</div>
     <div class="panel">
@@ -1143,16 +1237,10 @@ function step3() {
         <input id="dgain" type="range" min="100" max="250" value="${Math.round(state.dubGain * 100)}" />
       </details>
     </div>
-    <p id="cost" hidden></p>
-    <button id="next" class="btn primary">အသံထုတ်ပြီး Video ပေါင်းမည်</button>`;
-  costLine($('#cost'), state.videoDur);
-
-  const read = () => {
-    const lines = trimTail($('#mm').value.split('\n').map(x => x.trim()), state.segs.length);
-    return lines;
-  };
-  $('#mm').oninput = () => { state.burmese = read(); };
-  $('#back').onclick = () => { state.burmese = read(); go(2); };
+    </div>`;
+}
+function bindVoice(onReset) {
+  const box = $('#vblock');
   $('#pitch').oninput = e => { state.pitch = +e.target.value; $('#pv').textContent = (state.pitch >= 0 ? '+' : '') + state.pitch + 'Hz'; };
   $('#rate').oninput = e => { state.rate = +e.target.value; $('#rv').textContent = (state.rate >= 0 ? '+' : '') + state.rate + '%'; };
   $('#gap').oninput = e => { state.keepGap = +e.target.value / 100; $('#gv').textContent = e.target.value + '%'; };
@@ -1162,7 +1250,7 @@ function step3() {
   $('#dgain').oninput = e => { state.dubGain = +e.target.value / 100; $('#dv').textContent = e.target.value + '%'; };
 
   // sliders are locked by default so scrolling with a finger can't move them
-  const sliders = [...view.querySelectorAll('.panel:not(.fx) input[type=range]')];
+  const sliders = [...box.querySelectorAll('.panel input[type=range]')];
   let unlocked = false;
   const applyLock = () => {
     sliders.forEach(s => { s.disabled = !unlocked; });
@@ -1173,13 +1261,13 @@ function step3() {
   const rs = document.createElement('button');
   rs.className = 'btn block'; rs.textContent = '↺ ပုံမှန်တန်ဖိုးသို့ ပြန်ထားမည်';
   $('#unlock').after(rs);
-  rs.onclick = () => { state.burmese = read(); Object.assign(state, DEFAULTS); step3(); toast('ပုံမှန်တန်ဖိုး ပြန်ထားပြီးပါပြီ'); };
-  view.querySelectorAll('.voice').forEach(el => el.onclick = e => {
+  rs.onclick = () => { Object.assign(state, DEFAULTS); onReset(); toast('ပုံမှန်တန်ဖိုး ပြန်ထားပြီးပါပြီ'); };
+  box.querySelectorAll('.voice').forEach(el => el.onclick = e => {
     if (e.target.dataset.prev) return;
     state.personaId = el.dataset.id;
-    view.querySelectorAll('.voice').forEach(v => v.classList.toggle('sel', v === el));
+    box.querySelectorAll('.voice').forEach(v => v.classList.toggle('sel', v === el));
   });
-  view.querySelectorAll('[data-prev]').forEach(b => b.onclick = async () => {
+  box.querySelectorAll('[data-prev]').forEach(b => b.onclick = async () => {
     const p = L.PERSONAS.find(x => x.id === b.dataset.prev);
     b.textContent = '…';
     try {
@@ -1190,6 +1278,25 @@ function step3() {
     } catch (e) { toast(e.message.slice(0, 80)); }
     b.textContent = '▶ Preview';
   });
+}
+
+function step3() {
+  view.innerHTML = `
+    <div class="row"><h2>မြန်မာဘာသာပြန်ကို စစ်ဆေးပါ</h2><button class="ghost" id="back">‹ နောက်သို့</button></div>
+    <p class="muted">တစ်ကြောင်းလျှင် စာတစ်ကြောင်း။ (${state.segs.length} lines)</p>
+    <textarea id="mm" style="min-height:300px">${esc(state.burmese.join('\n'))}</textarea>
+    ${voiceBlock()}
+    <p id="cost" hidden></p>
+    <button id="next" class="btn primary">အသံထုတ်ပြီး Video ပေါင်းမည်</button>`;
+  costLine($('#cost'), state.videoDur);
+
+  const read = () => {
+    const lines = trimTail($('#mm').value.split('\n').map(x => x.trim()), state.segs.length);
+    return lines;
+  };
+  $('#mm').oninput = () => { state.burmese = read(); };
+  $('#back').onclick = () => { state.burmese = read(); go(2); };
+  bindVoice(() => { state.burmese = read(); step3(); });
   $('#next').onclick = () => {
     state.burmese = read();
     if (state.burmese.length !== state.segs.length) {
@@ -1211,8 +1318,7 @@ async function step4() {
   }
   state.renderNow = false;
   state.busy = true; renderStepper();
-  view.innerHTML = `<h2>ဗီဒီယိုနှင့် အသုံးပြုထားသော အရာများကို ပေါင်းစပ်နေပါတယ်</h2>
-    <p class="muted">ခဏစောင့်ပေးပါ — ဒီ tab ကို ဖွင့်ထားပါ၊ screen မပိတ်ပါနဲ့။</p>${bar()}`;
+  view.innerHTML = bar(state.autoRun ? undefined : ['voice', 'video']);
   let wake; try { wake = await navigator.wakeLock?.request('screen'); } catch {}
   const stopClock = startClock();
   let mtRetry = false, crashRetry = false;
@@ -1283,6 +1389,7 @@ async function step4() {
     $('#back').onclick = () => go(3);
   } finally {
     stopClock(); wake?.release?.(); state.busy = false; renderStepper();
+    if (!mtRetry && !crashRetry) state.autoRun = false;
     if (mtRetry || crashRetry) {
       toast(mtRetry ? '⚡ Multi-core ရပ်သွားလို့ ပုံမှန် Engine နဲ့ ပြန်ထုတ်နေပါတယ်' : '⚙ Engine ကို ပြန်စပြီး ထပ်ထုတ်နေပါတယ်');
       state.renderNow = true; setTimeout(step4, 300);
@@ -1471,6 +1578,7 @@ async function pageAdmin() {
   if (page !== 'admin') return;
   if (r.error === 'bad_pass') { L.access.adminPass = ''; syncMenu(); return pageAdmin(); }
   if (!r.codes) { view.innerHTML = `<h2>🛡 Admin</h2><div class="err">ဖွင့်မရပါ: ${esc(r.error || r.status)}</div><button class="btn block" id="again">ပြန်စမ်းမည်</button>`; $('#again').onclick = pageAdmin; return; }
+  L.setCpm(r.cpm);
 
   const used = r.codes.reduce((n, c) => n + (c.today || 0), 0);
   view.innerHTML = `
@@ -1524,6 +1632,15 @@ async function pageAdmin() {
       </div>`).join('') : '<p class="muted">Code မရှိသေးပါ — အပေါ်မှာ ထုတ်ပါ။</p>'}</div>
 
     <div class="kbox">
+      <b>💰 Premium ဈေး (၁ မိနစ်ကို Credit)</b>
+      <p class="muted small" style="margin:6px 0 10px">Video ၁ မိနစ်ကို Credit ဘယ်လောက် နှုတ်မလဲ${r.cpm ? '' : ' — ⚠ Worker အသစ် မတင်ရသေးလို့ ပြောင်းလို့ မရသေးပါ'}</p>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input id="cpmIn" type="number" inputmode="numeric" min="1" max="10000" value="${L.CPM}" style="flex:1;margin:0" />
+        <button type="button" class="btn primary" id="cpmSave">သိမ်းမည်</button>
+      </div>
+      <p class="muted small" style="margin:8px 0 0" id="cpmEx"></p>
+    </div>
+    <div class="kbox" style="margin-top:14px">
       <b>🧪 AI ဘာသာပြန် စမ်းမည်</b>
       <p class="muted small" style="margin:6px 0 10px" id="aiStat">…</p>
       <p class="small" style="margin:0 0 6px">🔑 Gemini API Key <span class="muted" id="gkSrc"></span></p>
@@ -1559,6 +1676,19 @@ async function pageAdmin() {
   };
   $('#aout').onclick = () => { L.access.adminPass = ''; syncMenu(); openPage(acc.ok || !acc.on ? 'free' : 'code'); };
   // AI test: the same prompt as Auto translate, on every model, so the owner can pick the best Burmese
+  // Premium price: what the packs buy at the typed rate, saved to the Worker
+  const cpmEx = () => {
+    const n = Math.round(+$('#cpmIn').value || 0);
+    $('#cpmEx').textContent = n >= 1 ? `၃ မိနစ် Video = ${fmtN(Math.ceil(3 * n))} credit · ${CRED_PACKS.map(v => `${fmtN(v)} = ~${fmtN(Math.floor(v / n))} မိနစ်`).join(' · ')}` : '၁ နဲ့ 10,000 ကြား ထည့်ပါ';
+  };
+  $('#cpmIn').oninput = cpmEx; cpmEx();
+  $('#cpmSave').onclick = async () => {
+    const n = Math.round(+$('#cpmIn').value || 0);
+    if (!(n >= 1 && n <= 10000)) { toast('၁ နဲ့ 10,000 ကြား ထည့်ပါ'); return; }
+    const x = await L.adminCall({ action: 'cpm', cpm: n }).catch(() => ({}));
+    if (x.ok) { L.setCpm(x.cpm); toast(`✅ ၁ မိနစ် = ${fmtN(x.cpm)} credit သိမ်းပြီးပါပြီ`); }
+    else toast(x.error === 'bad_action' || !x.error ? 'မရပါ — Worker အသစ် တင်ပြီးမှ ပြောင်းလို့ရပါမယ်' : 'မရပါ: ' + x.error);
+  };
   const aiInfo = async () => {
     const x = await L.adminCall({ action: 'aiInfo' }).catch(() => ({}));
     $('#aiStat').innerHTML = x.ai || x.gemini ? `✅ သုံးနေတာ: <b>${esc((x.model || '').split('/').pop())}</b>${x.ai ? '' : ' · Workers AI မချိတ်ရသေး'}${x.gemini ? '' : ' · GEMINI_KEY မထည့်ရသေး'}`
