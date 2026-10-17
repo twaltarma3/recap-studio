@@ -1039,8 +1039,17 @@ function step2() {
     if (!syncSrc()) return;
     const b = $('#autoTr'); b.disabled = true; state.busy = true;
     const old = b.innerHTML; b.textContent = '✨ ဘာသာပြန်နေပါတယ်… 0%';
+    // the AI answers all lines in one go, with no progress on the way: show an estimate that creeps
+    // towards 90% (slower for longer videos) until real progress or the answer arrives
+    const t0 = Date.now(), T = Math.max(10, state.segs.length * 0.6);
+    let real = 0;
+    const show = () => {
+      const est = 0.9 * (1 - Math.exp(-(Date.now() - t0) / 1000 / T));
+      b.textContent = `✨ ဘာသာပြန်နေပါတယ်… ${Math.round(Math.max(real, est) * 100)}% · ${Math.round((Date.now() - t0) / 1000)}s`;
+    };
+    const tick = setInterval(show, 500);
     try {
-      const t = await L.autoTranslate(state.segs, state.pStyle, p => { b.textContent = `✨ ဘာသာပြန်နေပါတယ်… ${Math.round(p * 100)}%`; });
+      const t = await L.autoTranslate(state.segs, state.pStyle, p => { real = Math.max(real, p); show(); }).finally(() => clearInterval(tick));
       $('#json').value = JSON.stringify({ translations: t }, null, 1);
       const miss = t.filter(x => !x).length;
       toast(miss ? `⚠ ${miss} ကြောင်း ဘာသာမပြန်နိုင်ပါ — အဆင့် ၃ မှာ ဖြည့်ပါ (သို့) ထပ်နှိပ်ပါ` : `✅ ဘာသာပြန်ပြီးပါပြီ (${t.length} ကြောင်း) — စစ်ပြီး Next နှိပ်ပါ`);
