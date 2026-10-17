@@ -15,6 +15,7 @@ const state = {
   fxMirror: false, fxBlur: false, blurH: 15, blurY: 100, blurS: 50, blurO: 100, previewUrl: null, previewFor: null,
   pStyle: 'recap', fxRatio: 'orig', fxFit: 'crop', fxZoom: 100, fxFast: true, fxFps30: true, fxUnlock: false, wmOn: false, wmText: '', wmPos: 'br', wmSize: 4,
   logoOn: false, logoData: null, logoPos: 'tr', logoSize: 14, tab: 'video',
+  frzOn: false, frzA: 4, frzB: 2, frzZoom: 'out', frzAmt: 20,
   fxSubs: false, subS: 5, subY: 88, subC: '#ffffff', subO: '#000000', subFont: 'pt16', fontOk: false
 };
 // access codes: on only when the Worker has them set up (accessCheck answers something other than {open:true})
@@ -654,6 +655,25 @@ function previewBlock() {
         ${pmRow('blurO', 20, 100, 5, state.blurO)}
         <div class="row muted small"><span>နည်း (ပါးပါး)</span><span>100% (အပြည့်)</span></div>
       </div>
+      <label style="display:flex;align-items:center;gap:10px;font-weight:600;margin-top:12px">
+        <input id="frzOn" type="checkbox" style="${chk}" ${state.frzOn ? 'checked' : ''} />
+        ❄ Freeze + Zoom
+      </label>
+      <p class="muted small" style="margin:4px 0 0">Video ကို ခဏပြ → ခဏရပ် (ပုံရပ်) လုပ်ပြီး ရပ်နေတုန်း Zoom လုပ်ပေးပါတယ်။ Video အရှည် မပြောင်းပါ (ရပ်ထားတဲ့ စက္ကန့်တွေက ကျော်သွားပါတယ်)။</p>
+      <div id="frzBox" ${state.frzOn ? '' : 'hidden'}>
+        <div class="row" style="margin-top:14px"><b>▶ ပြမည်</b><span id="frzAV">${state.frzA} စက္ကန့်</span></div>
+        ${pmRow('frzA', 1, 15, 1, state.frzA)}
+        <div class="row" style="margin-top:14px"><b>❄ ရပ်မည် (Freeze)</b><span id="frzBV">${state.frzB} စက္ကန့်</span></div>
+        ${pmRow('frzB', 1, 6, 0.5, state.frzB)}
+        <div class="row" style="margin-top:14px"><b>🔍 ရပ်နေတုန်း</b></div>
+        <div class="chips" id="frzZChips" style="margin-top:6px">
+          ${[['out', '🔍 Zoom out'], ['in', '🔎 Zoom in'], ['none', 'Zoom မလုပ်']].map(([k, t]) => `<button type="button" class="chip ${state.frzZoom === k ? 'on' : ''}" data-z="${k}">${t}</button>`).join('')}
+        </div>
+        <div id="frzAmtBox" ${state.frzZoom === 'none' ? 'hidden' : ''}>
+          <div class="row" style="margin-top:14px"><b>Zoom အား</b><span id="frzAmtV">${state.frzAmt}%</span></div>
+          ${pmRow('frzAmt', 5, 50, 5, state.frzAmt)}
+        </div>
+      </div>
       </div>
       <div class="pane" data-pane="caps">
       <label style="display:flex;align-items:center;gap:10px;font-weight:600;margin-top:12px">
@@ -826,6 +846,18 @@ function bindPreview() {
     $('#' + id + 'P').onclick = () => set(state[key] + step);
   };
   bindPM('blurS', 'blurS', 5, 100, 5);
+  $('#frzOn').onchange = e => { state.frzOn = e.target.checked; $('#frzBox').hidden = !state.frzOn; };
+  for (const [id, key, min, max, step, unit] of [['frzA', 'frzA', 1, 15, 1, ' စက္ကန့်'], ['frzB', 'frzB', 1, 6, 0.5, ' စက္ကန့်'], ['frzAmt', 'frzAmt', 5, 50, 5, '%']]) {
+    const set = x => { state[key] = Math.max(min, Math.min(max, Math.round(x / step) * step)); $('#' + id).value = state[key]; $('#' + id + 'V').textContent = state[key] + unit; };
+    $('#' + id).oninput = e => set(+e.target.value);
+    $('#' + id + 'M').onclick = () => set(state[key] - step);
+    $('#' + id + 'P').onclick = () => set(state[key] + step);
+  }
+  view.querySelectorAll('#frzZChips .chip').forEach(b => { b.onclick = () => {
+    state.frzZoom = b.dataset.z;
+    view.querySelectorAll('#frzZChips .chip').forEach(x => x.classList.toggle('on', x === b));
+    $('#frzAmtBox').hidden = state.frzZoom === 'none';
+  }; });
   bindPM('fxZoom', 'fxZoom', 100, 250, 10);
   bindPM('wmSize', 'wmSize', 2, 10, 1);
   bindPM('logoSize', 'logoSize', 5, 40, 1);
@@ -1203,6 +1235,7 @@ async function step4() {
         ratio: state.fxRatio, fit: state.fxFit, zoom: state.fxZoom, fast: state.fxFast, fps30: state.fxFps30,
         wm: { on: state.wmOn, text: state.wmText, pos: state.wmPos, size: state.wmSize },
         logo: { on: state.logoOn, data: state.logoData, pos: state.logoPos, size: state.logoSize },
+        freeze: { on: state.frzOn, every: state.frzA, hold: state.frzB, zoom: state.frzZoom, amount: state.frzAmt },
         mirror: state.fxMirror, blur: state.fxBlur, blurH: state.blurH, blurY: state.blurY, blurS: state.blurS, blurO: state.blurO,
         subs: { on: state.fxSubs, size: state.subS, y: state.subY, color: state.subC, outline: state.subO, font: selFont() }
       }, keepTalk: state.keepTalk, keepGap: state.keepGap,

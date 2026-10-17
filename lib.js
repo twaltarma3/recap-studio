@@ -920,7 +920,8 @@ function buildFx(fx, subs, g, ovl = 0) {
   const mirror = !!(fx && fx.mirror), blur = !!(fx && fx.blur);
   const zoom = Math.max(1, Math.min(3, (+(fx && fx.zoom) || 100) / 100));
   const geo = !!(g && g.ratio), doZoom = zoom > 1.001 && g;
-  if (!mirror && !blur && !subs && !geo && !doZoom && !ovl) return '';   // nothing to re-encode: keep the fast stream copy
+  const frz = fx && fx.freeze && fx.freeze.on ? fx.freeze : null;
+  if (!mirror && !blur && !subs && !geo && !doZoom && !ovl && !frz) return '';   // nothing to re-encode: keep the fast stream copy
   const gr = [];
   let cur = '[0:v]', n = 0;
   const lbl = () => `[t${n++}]`;
@@ -943,6 +944,20 @@ function buildFx(fx, subs, g, ovl = 0) {
     const o = lbl();
     gr.push(`${cur}crop=${even(g.OW / zoom)}:${even(g.OH / zoom)},scale=${g.OW}:${g.OH}:flags=bilinear${o}`);
     cur = o;
+  }
+  if (frz) {
+    // freeze: play A seconds, then hold the last frame for B seconds (the video keeps its length; what happens
+    // in those B seconds is skipped), over and over. The held frame can slowly zoom out (or in).
+    const A = Math.max(1, Math.min(30, +frz.every || 4)), B = Math.max(0.5, Math.min(10, +frz.hold || 2)), P = A + B;
+    const o = lbl();
+    let f = `${cur}select='lt(mod(t\\,${P})\\,${A})',fps=30,tpad=stop_mode=clone:stop_duration=${B}`;
+    const Z = 1 + Math.max(5, Math.min(50, +frz.amount || 20)) / 100;
+    if (g && frz.zoom && frz.zoom !== 'none') {
+      const u = `(mod(it\\,${P})-${A})/${B}`;                       // 0 -> 1 across the held frame
+      const z = frz.zoom === 'in' ? `1+${(Z - 1).toFixed(3)}*${u}` : `${Z.toFixed(3)}-${(Z - 1).toFixed(3)}*${u}`;
+      f += `,zoompan=z='if(gte(mod(it\\,${P})\\,${A})\\,${z}\\,1)':x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2':d=1:s=${g.OW}x${g.OH}:fps=30`;
+    }
+    gr.push(f + o); cur = o;
   }
   if (blur) {
     const h = (Math.max(3, Math.min(60, +fx.blurH || 15)) / 100).toFixed(3);   // band height, fraction of video height
@@ -1335,7 +1350,7 @@ export async function renderDub({ file, videoDur, segs, burmese, persona, pitch,
     const wantMix = keepTalk > 0 || keepGap > 0;
     let geo = null;
     if (fx) {
-      const needGeo = fx.ratio && fx.ratio !== 'orig' || +fx.zoom > 100 || (fx.subs && fx.subs.on) || (fx.wm && fx.wm.on) || (fx.logo && fx.logo.on) || (fx.fast && (fx.mirror || fx.blur));
+      const needGeo = fx.ratio && fx.ratio !== 'orig' || +fx.zoom > 100 || (fx.subs && fx.subs.on) || (fx.wm && fx.wm.on) || (fx.logo && fx.logo.on) || (fx.fast && (fx.mirror || fx.blur)) || (fx.freeze && fx.freeze.on);
       if (needGeo) {
         let sz = null;
         try { sz = await videoSize(file); } catch {}
@@ -1410,6 +1425,7 @@ export async function renderDub({ file, videoDur, segs, burmese, persona, pitch,
     if (geo && geo.ratio) fxNames.push('အချိုး');
     if (fx && +fx.zoom > 100) fxNames.push('Zoom');
     if (fx && fx.mirror) fxNames.push('Mirror');
+    if (fx && fx.freeze && fx.freeze.on) fxNames.push('Freeze');
     if (fx && fx.blur) fxNames.push('Blur');
     if (subs) fxNames.push('စာတန်းထိုး');
     if (ovl) fxNames.push('Watermark/Logo');
