@@ -1635,8 +1635,8 @@ async function pageAdmin() {
       <b>💰 Premium ဈေး (၁ မိနစ်ကို Credit)</b>
       <p class="muted small" style="margin:6px 0 10px">Video ၁ မိနစ်ကို Credit ဘယ်လောက် နှုတ်မလဲ${r.cpm ? '' : ' — ⚠ Worker အသစ် မတင်ရသေးလို့ ပြောင်းလို့ မရသေးပါ'}</p>
       <div style="display:flex;gap:8px;align-items:center">
-        <input id="cpmIn" type="number" inputmode="numeric" min="1" max="10000" value="${L.CPM}" style="flex:1;margin:0" />
-        <button type="button" class="btn primary" id="cpmSave">သိမ်းမည်</button>
+        <input id="cpmIn" type="number" inputmode="numeric" min="1" max="10000" value="${L.CPM}" style="flex:1 1 auto;min-width:0;width:auto;margin:0;font-size:20px;font-weight:700;text-align:center" />
+        <button type="button" class="btn primary" id="cpmSave" style="flex:0 0 auto;width:auto;margin:0;padding-left:22px;padding-right:22px">သိမ်းမည်</button>
       </div>
       <p class="muted small" style="margin:8px 0 0" id="cpmEx"></p>
     </div>
@@ -1682,6 +1682,7 @@ async function pageAdmin() {
     $('#cpmEx').textContent = n >= 1 ? `၃ မိနစ် Video = ${fmtN(Math.ceil(3 * n))} credit · ${CRED_PACKS.map(v => `${fmtN(v)} = ~${fmtN(Math.floor(v / n))} မိနစ်`).join(' · ')}` : '၁ နဲ့ 10,000 ကြား ထည့်ပါ';
   };
   $('#cpmIn').oninput = cpmEx; cpmEx();
+  $('#cpmIn').onfocus = e => e.target.select();             // typing replaces the old number instead of adding to it
   $('#cpmSave').onclick = async () => {
     const n = Math.round(+$('#cpmIn').value || 0);
     if (!(n >= 1 && n <= 10000)) { toast('၁ နဲ့ 10,000 ကြား ထည့်ပါ'); return; }
