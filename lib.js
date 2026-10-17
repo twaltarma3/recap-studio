@@ -31,7 +31,8 @@ async function accessPost(path, body, headers = {}) {
 // Premium codes with credits also get a ticket for the premium routes (transcription with the owner's key, AI translation).
 // Premium is paid by video length (CPM credits a minute): job() names the video in hand (set by the app),
 // its first premium use pays for it.
-export const CPM = 80;
+export let CPM = 80;                                       // the owner sets it in Admin; the Worker sends it with each code check
+export const setCpm = n => { if (Number(n) >= 1) CPM = Math.round(Number(n)); };
 export const creditCost = secs => Math.max(1, Math.ceil(Math.max(0, secs || 0) * CPM / 60));
 let pticket = '';
 export const premium = { get on() { return !!pticket; }, job: () => '' };

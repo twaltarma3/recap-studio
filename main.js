@@ -20,8 +20,8 @@ const state = {
 };
 // access codes: on only when the Worker has them set up (accessCheck answers something other than {open:true})
 const acc = { on: false, ok: false, name: '', limit: 0, used: 0, left: -1, plan: 'free', expires: 0, credits: 0 };
-const setQuota = r => Object.assign(acc, { ok: true, name: r.name || '', limit: r.limit || 0, used: r.used || 0, left: r.left ?? -1,
-  ...(r.plan ? { plan: r.plan, expires: r.expires || 0, credits: r.credits || 0 } : {}) });
+const setQuota = r => (L.setCpm(r.cpm), Object.assign(acc, { ok: true, name: r.name || '', limit: r.limit || 0, used: r.used || 0, left: r.left ?? -1,
+  ...(r.plan ? { plan: r.plan, expires: r.expires || 0, credits: r.credits || 0 } : {}) }));
 // Premium is paid per video (credits); a video already paid keeps its premium features after the last credit is used
 const jobId = () => (state.file ? `${state.file.name}|${state.file.size}` : '');
 L.premium.job = jobId;
@@ -1471,6 +1471,7 @@ async function pageAdmin() {
   if (page !== 'admin') return;
   if (r.error === 'bad_pass') { L.access.adminPass = ''; syncMenu(); return pageAdmin(); }
   if (!r.codes) { view.innerHTML = `<h2>🛡 Admin</h2><div class="err">ဖွင့်မရပါ: ${esc(r.error || r.status)}</div><button class="btn block" id="again">ပြန်စမ်းမည်</button>`; $('#again').onclick = pageAdmin; return; }
+  L.setCpm(r.cpm);
 
   const used = r.codes.reduce((n, c) => n + (c.today || 0), 0);
   view.innerHTML = `
@@ -1524,6 +1525,15 @@ async function pageAdmin() {
       </div>`).join('') : '<p class="muted">Code မရှိသေးပါ — အပေါ်မှာ ထုတ်ပါ။</p>'}</div>
 
     <div class="kbox">
+      <b>💰 Premium ဈေး (၁ မိနစ်ကို Credit)</b>
+      <p class="muted small" style="margin:6px 0 10px">Video ၁ မိနစ်ကို Credit ဘယ်လောက် နှုတ်မလဲ${r.cpm ? '' : ' — ⚠ Worker အသစ် မတင်ရသေးလို့ ပြောင်းလို့ မရသေးပါ'}</p>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input id="cpmIn" type="number" inputmode="numeric" min="1" max="10000" value="${L.CPM}" style="flex:1;margin:0" />
+        <button type="button" class="btn primary" id="cpmSave">သိမ်းမည်</button>
+      </div>
+      <p class="muted small" style="margin:8px 0 0" id="cpmEx"></p>
+    </div>
+    <div class="kbox" style="margin-top:14px">
       <b>🧪 AI ဘာသာပြန် စမ်းမည်</b>
       <p class="muted small" style="margin:6px 0 10px" id="aiStat">…</p>
       <p class="small" style="margin:0 0 6px">🔑 Gemini API Key <span class="muted" id="gkSrc"></span></p>
@@ -1559,6 +1569,19 @@ async function pageAdmin() {
   };
   $('#aout').onclick = () => { L.access.adminPass = ''; syncMenu(); openPage(acc.ok || !acc.on ? 'free' : 'code'); };
   // AI test: the same prompt as Auto translate, on every model, so the owner can pick the best Burmese
+  // Premium price: what the packs buy at the typed rate, saved to the Worker
+  const cpmEx = () => {
+    const n = Math.round(+$('#cpmIn').value || 0);
+    $('#cpmEx').textContent = n >= 1 ? `၃ မိနစ် Video = ${fmtN(Math.ceil(3 * n))} credit · ${CRED_PACKS.map(v => `${fmtN(v)} = ~${fmtN(Math.floor(v / n))} မိနစ်`).join(' · ')}` : '၁ နဲ့ 10,000 ကြား ထည့်ပါ';
+  };
+  $('#cpmIn').oninput = cpmEx; cpmEx();
+  $('#cpmSave').onclick = async () => {
+    const n = Math.round(+$('#cpmIn').value || 0);
+    if (!(n >= 1 && n <= 10000)) { toast('၁ နဲ့ 10,000 ကြား ထည့်ပါ'); return; }
+    const x = await L.adminCall({ action: 'cpm', cpm: n }).catch(() => ({}));
+    if (x.ok) { L.setCpm(x.cpm); toast(`✅ ၁ မိနစ် = ${fmtN(x.cpm)} credit သိမ်းပြီးပါပြီ`); }
+    else toast(x.error === 'bad_action' || !x.error ? 'မရပါ — Worker အသစ် တင်ပြီးမှ ပြောင်းလို့ရပါမယ်' : 'မရပါ: ' + x.error);
+  };
   const aiInfo = async () => {
     const x = await L.adminCall({ action: 'aiInfo' }).catch(() => ({}));
     $('#aiStat').innerHTML = x.ai || x.gemini ? `✅ သုံးနေတာ: <b>${esc((x.model || '').split('/').pop())}</b>${x.ai ? '' : ' · Workers AI မချိတ်ရသေး'}${x.gemini ? '' : ' · GEMINI_KEY မထည့်ရသေး'}`
