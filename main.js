@@ -989,7 +989,17 @@ function step1() {
           .map(([v, t]) => `<option value="${v}" ${v === state.lang ? 'selected' : ''}>${t}</option>`).join('')}
       </select>
     </label>
-    <div style="position:sticky;bottom:0;z-index:4;margin:12px -6px 0;padding:10px 6px;background:linear-gradient(180deg,rgba(20,20,23,0),#141417 35%)"><button id="next" class="btn primary" style="margin:0" ${state.file ? '' : 'disabled'}>စာသားထုတ်မည် (Next)</button></div>`;
+    ${premPlan() ? `<div class="panel" style="margin-top:16px">
+      <b>⚡ One-Click Auto <span class="pbadge">💎 Premium</span></b>
+      <p class="muted small" style="margin:6px 0 10px">ဘာသာပြန်ပုံစံနဲ့ အသံကို ရွေးပြီး <b>⚡ Auto နဲ့ Video ထုတ်မည်</b> ကိုနှိပ်ရင် စာသားထုတ် → ဘာသာပြန် → အသံထုတ် → Video ပေါင်း အကုန် အလိုအလျောက် လုပ်ပေးပါမယ်။ 🌐 VPN (US) ဖွင့်ထားပါ။</p>
+      <b class="small">✍ ဘာသာပြန်ပုံစံ</b>
+      <div class="chips" id="aStyle" style="margin:6px 0 0">${[['recap', '🔥 Recap (လှုပ်ရှား)'], ['chat', '💬 ရိုးရိုးစကားပြော']].map(([k, t]) => `<button type="button" class="chip ${state.pStyle === k ? 'on' : ''}" data-s="${k}">${t}</button>`).join('')}</div>
+      ${voiceBlock()}
+    </div>` : ''}
+    <div style="position:sticky;bottom:0;z-index:4;margin:12px -6px 0;padding:10px 6px;background:linear-gradient(180deg,rgba(20,20,23,0),#141417 35%)">
+      ${premPlan() ? `<button id="autoGo" class="btn primary" style="margin:0 0 8px" ${state.file ? '' : 'disabled'}>⚡ Auto နဲ့ Video ထုတ်မည်</button>` : ''}
+      <button id="next" class="btn ${premPlan() ? '' : 'primary'}" style="margin:0" ${state.file ? '' : 'disabled'}>${premPlan() ? 'အဆင့်လိုက် ကိုယ်တိုင်ပြင်မည် (Next)' : 'စာသားထုတ်မည် (Next)'}</button>
+    </div>`;
   $('#f').onchange = e => { state.file = e.target.files[0] || null; state.segs = []; state.origSegs = null; L.forgetInput(); step1(); };
   $('#lang').onchange = e => { state.lang = e.target.value; };
   bindLinkBox();
@@ -1002,9 +1012,46 @@ function step1() {
     if (!L.cfg.aaiKey && !L.premium.on && !L.freeKey.on) { toast('API Key အရင်ထည့်ပါ'); openPage('keys'); return; }
     state.segs.length ? go(2) : transcribeFlow();
   };
+  if (premPlan()) {
+    view.querySelectorAll('#aStyle .chip').forEach(c => c.onclick = () => {
+      state.pStyle = c.dataset.s; view.querySelectorAll('#aStyle .chip').forEach(x => x.classList.toggle('on', x === c));
+    });
+    bindVoice(step1);
+    // one tap: transcribe (unless done already) -> AI translation -> voice + render -> the usual result page
+    $('#autoGo').onclick = () => {
+      if (!(acc.credits > 0) && !L.premium.on) { toast('💎 Credit ကုန်နေပါပြီ — Telegram မှာ ထပ်ဝယ်ပါ'); return; }
+      state.segs.length ? autoRest() : transcribeFlow(true);
+    };
+  }
 }
 
-async function transcribeFlow() {
+// One-Click Auto, after the transcript: AI translation, then straight to the render (step 4).
+// Lines the AI left empty go to step 3 to fill in; an AI error goes to step 2 (Copy Full Prompt still works there).
+async function autoRest() {
+  state.step = 3; state.busy = true; renderStepper();
+  view.innerHTML = `<h2>✨ ဘာသာပြန်နေပါတယ်…</h2><p class="muted">ပြီးရင် အသံထုတ်ပြီး Video ကို ဆက်ပေါင်းပေးပါမယ် — ဒီ tab ကို ဖွင့်ထားပါ။</p>${bar()}`;
+  const stopClock = startClock();
+  const t0 = Date.now(), T = Math.max(10, state.segs.length * 0.6);
+  let real = 0;
+  const show = () => setProg(Math.max(real, 0.9 * (1 - Math.exp(-(Date.now() - t0) / 1000 / T))), 'AI နဲ့ မြန်မာလို ဘာသာပြန်နေပါတယ်');
+  show();
+  const tick = setInterval(show, 500);
+  try {
+    const t = await L.autoTranslate(state.segs, state.pStyle, p => { real = Math.max(real, p); }).finally(() => clearInterval(tick));
+    stopClock(); state.busy = false;
+    state.burmese = state.segs.map((_, i) => t[i] || '');
+    const miss = state.burmese.filter(x => !x).length;
+    if (miss) { toast(`⚠ ${miss} ကြောင်း ဘာသာမပြန်နိုင်ပါ — ဖြည့်ပြီး "အသံထုတ်ပြီး Video ပေါင်းမည်" ကိုနှိပ်ပါ`); go(3); return; }
+    clearResult();
+    go(4, { render: true });
+  } catch (e) {
+    stopClock(); state.busy = false;
+    go(2);
+    toast(e.message.slice(0, 140));
+  }
+}
+
+async function transcribeFlow(auto = false) {
   state.step = 2; state.busy = true; renderStepper();
   view.innerHTML = `<h2>စာသား ထုတ်နေပါတယ်…</h2><p class="muted">ခဏစောင့်ပေးပါ — ဒီ tab ကို ဖွင့်ထားပါ။</p>${bar()}`;
   const stopClock = startClock();
@@ -1022,6 +1069,7 @@ async function transcribeFlow() {
     state.burmese = []; state.busy = false;
     if (premPlan()) L.accessCheck().then(r => { if (r && r.name) setQuota(r); }).catch(() => {});   // credits left after this video
     stopClock();
+    if (auto) return autoRest();
     go(2);
   } catch (e) {
     stopClock();
@@ -1107,17 +1155,15 @@ function step2() {
 
 /* ---------------- Step 3 ---------------- */
 let previewAudio;
-function step3() {
+// voice + original-audio settings, shared by step 3 and the Premium one-tap panel on step 1
+function voiceBlock() {
   const voices = L.PERSONAS.map(p => `
     <div class="voice ${p.id === state.personaId ? 'sel' : ''}" data-id="${p.id}">
       <div class="av ${p.g === 'Male' ? 'm' : 'f'}">${p.id}</div>
       <b>${p.name}</b><small>${p.g}</small>
       <button data-prev="${p.id}">▶ Preview</button>
     </div>`).join('');
-  view.innerHTML = `
-    <div class="row"><h2>မြန်မာဘာသာပြန်ကို စစ်ဆေးပါ</h2><button class="ghost" id="back">‹ နောက်သို့</button></div>
-    <p class="muted">တစ်ကြောင်းလျှင် စာတစ်ကြောင်း။ (${state.segs.length} lines)</p>
-    <textarea id="mm" style="min-height:300px">${esc(state.burmese.join('\n'))}</textarea>
+  return `<div id="vblock">
     <div class="row" style="margin-top:20px"><b>အသံရွေးချယ်ပါ</b><span class="muted small">${L.PERSONAS.length} Voice Personas</span></div>
     <div class="voices">${voices}</div>
     <div class="panel">
@@ -1143,16 +1189,10 @@ function step3() {
         <input id="dgain" type="range" min="100" max="250" value="${Math.round(state.dubGain * 100)}" />
       </details>
     </div>
-    <p id="cost" hidden></p>
-    <button id="next" class="btn primary">အသံထုတ်ပြီး Video ပေါင်းမည်</button>`;
-  costLine($('#cost'), state.videoDur);
-
-  const read = () => {
-    const lines = trimTail($('#mm').value.split('\n').map(x => x.trim()), state.segs.length);
-    return lines;
-  };
-  $('#mm').oninput = () => { state.burmese = read(); };
-  $('#back').onclick = () => { state.burmese = read(); go(2); };
+    </div>`;
+}
+function bindVoice(onReset) {
+  const box = $('#vblock');
   $('#pitch').oninput = e => { state.pitch = +e.target.value; $('#pv').textContent = (state.pitch >= 0 ? '+' : '') + state.pitch + 'Hz'; };
   $('#rate').oninput = e => { state.rate = +e.target.value; $('#rv').textContent = (state.rate >= 0 ? '+' : '') + state.rate + '%'; };
   $('#gap').oninput = e => { state.keepGap = +e.target.value / 100; $('#gv').textContent = e.target.value + '%'; };
@@ -1162,7 +1202,7 @@ function step3() {
   $('#dgain').oninput = e => { state.dubGain = +e.target.value / 100; $('#dv').textContent = e.target.value + '%'; };
 
   // sliders are locked by default so scrolling with a finger can't move them
-  const sliders = [...view.querySelectorAll('.panel:not(.fx) input[type=range]')];
+  const sliders = [...box.querySelectorAll('.panel input[type=range]')];
   let unlocked = false;
   const applyLock = () => {
     sliders.forEach(s => { s.disabled = !unlocked; });
@@ -1173,13 +1213,13 @@ function step3() {
   const rs = document.createElement('button');
   rs.className = 'btn block'; rs.textContent = '↺ ပုံမှန်တန်ဖိုးသို့ ပြန်ထားမည်';
   $('#unlock').after(rs);
-  rs.onclick = () => { state.burmese = read(); Object.assign(state, DEFAULTS); step3(); toast('ပုံမှန်တန်ဖိုး ပြန်ထားပြီးပါပြီ'); };
-  view.querySelectorAll('.voice').forEach(el => el.onclick = e => {
+  rs.onclick = () => { Object.assign(state, DEFAULTS); onReset(); toast('ပုံမှန်တန်ဖိုး ပြန်ထားပြီးပါပြီ'); };
+  box.querySelectorAll('.voice').forEach(el => el.onclick = e => {
     if (e.target.dataset.prev) return;
     state.personaId = el.dataset.id;
-    view.querySelectorAll('.voice').forEach(v => v.classList.toggle('sel', v === el));
+    box.querySelectorAll('.voice').forEach(v => v.classList.toggle('sel', v === el));
   });
-  view.querySelectorAll('[data-prev]').forEach(b => b.onclick = async () => {
+  box.querySelectorAll('[data-prev]').forEach(b => b.onclick = async () => {
     const p = L.PERSONAS.find(x => x.id === b.dataset.prev);
     b.textContent = '…';
     try {
@@ -1190,6 +1230,25 @@ function step3() {
     } catch (e) { toast(e.message.slice(0, 80)); }
     b.textContent = '▶ Preview';
   });
+}
+
+function step3() {
+  view.innerHTML = `
+    <div class="row"><h2>မြန်မာဘာသာပြန်ကို စစ်ဆေးပါ</h2><button class="ghost" id="back">‹ နောက်သို့</button></div>
+    <p class="muted">တစ်ကြောင်းလျှင် စာတစ်ကြောင်း။ (${state.segs.length} lines)</p>
+    <textarea id="mm" style="min-height:300px">${esc(state.burmese.join('\n'))}</textarea>
+    ${voiceBlock()}
+    <p id="cost" hidden></p>
+    <button id="next" class="btn primary">အသံထုတ်ပြီး Video ပေါင်းမည်</button>`;
+  costLine($('#cost'), state.videoDur);
+
+  const read = () => {
+    const lines = trimTail($('#mm').value.split('\n').map(x => x.trim()), state.segs.length);
+    return lines;
+  };
+  $('#mm').oninput = () => { state.burmese = read(); };
+  $('#back').onclick = () => { state.burmese = read(); go(2); };
+  bindVoice(() => { state.burmese = read(); step3(); });
   $('#next').onclick = () => {
     state.burmese = read();
     if (state.burmese.length !== state.segs.length) {
