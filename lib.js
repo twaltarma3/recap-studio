@@ -1429,7 +1429,8 @@ export async function renderDub({ file, videoDur, segs, burmese, persona, pitch,
     if (fx && fx.freeze && fx.freeze.on) fxNames.push('Freeze');
     if (fx && fx.blur) fxNames.push('Blur');
     if (subs) fxNames.push('စာတန်းထိုး');
-    if (ovl) fxNames.push('Watermark/Logo');
+    if (ovl && fx.wm && fx.wm.on && fx.wm.text) fxNames.push('Watermark');
+    if (ovl && fx.logo && fx.logo.on) fxNames.push('Logo');
     if (fx && fx.cap30) fxNames.push('30fps');
     let tries = 0;
     let code = -1, usedMix = false, fxFailed = false, diag = '';
@@ -1437,7 +1438,7 @@ export async function renderDub({ file, videoDur, segs, burmese, persona, pitch,
       for (const a of plans[p]) {
         const vfOn = a.args.includes('[v]');
         ffLabel = tries++ ? 'ပထမနည်း မရလို့ တခြားနည်းနဲ့ ပြန်ကြိုးစားနေပါတယ်'
-          : vfOn && fxNames.length ? `ဗီဒီယိုကို ${fxNames.join('၊ ')} နဲ့ ပြန်ထုတ်ပြီး အသံပေါင်းနေပါတယ်`
+          : vfOn && fxNames.length ? `🎬 Video ပေါင်းနေပါတယ်\n${fxNames.join(' · ')}`
           : a.mix ? 'မြန်မာအသံ၊ မူရင်းအသံနဲ့ ဗီဒီယို ပေါင်းနေပါတယ်' : 'မြန်မာအသံနဲ့ ဗီဒီယို ပေါင်းနေပါတယ်';
         onProgress(0.86, ffLabel);
         flog.length = 0; fhead.length = 0; flog.push(`#plan ${p + 1} ${a.mix ? 'mix' : 'nomix'}`);

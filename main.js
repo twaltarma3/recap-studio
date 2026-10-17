@@ -62,6 +62,7 @@ const bar = (stages = state.autoRun ? PSTEPS.map(x => x[0]) : []) => `<div class
     <circle cx="60" cy="60" r="54" class="pr-track"/><circle cx="60" cy="60" r="54" class="pr-fill" id="pring" stroke-dasharray="${RING.toFixed(1)}" stroke-dashoffset="${RING.toFixed(1)}"/>
   </svg><b id="pnum">0%</b></div>
   <div class="prog-now"><span id="ptxt">စတင်နေပါတယ်</span><span class="pdots"><i></i><i></i><i></i></span></div>
+  <div class="prog-sub" id="psub"></div>
   <div class="bar"><i id="fill"></i></div>
   ${stages.length > 1 ? `<div class="prog-steps">${PSTEPS.filter(x => stages.includes(x[0])).map(([k, ic, t]) => `<span data-st="${k}"><em>${ic}</em>${t}</span>`).join('')}</div>` : ''}
   <div class="ptime">⏱ ကြာချိန် <b id="ptime">0:00</b></div>
@@ -109,7 +110,9 @@ function setProg(frac, text) {
   $('#pnum').textContent = pc + '%';
   const ring = $('#pring'); if (ring) ring.style.strokeDashoffset = (RING * (1 - pc / 100)).toFixed(1);
   if (text) {
-    $('#ptxt').textContent = text.replace(/[.…]+$/, '');
+    const [main, sub] = text.split('\n');                 // an optional second line: what is in the mix, in small type
+    $('#ptxt').textContent = main.replace(/[.…]+$/, '');
+    const ps = $('#psub'); if (ps) ps.textContent = sub || '';
     const steps = [...document.querySelectorAll('.prog-steps span')], cur = steps.findIndex(x => x.dataset.st === stageOf(text));
     if (cur >= 0) steps.forEach((x, i) => { x.classList.toggle('done', i < cur || pc >= 100); x.classList.toggle('now', i === cur && pc < 100); });
   }
