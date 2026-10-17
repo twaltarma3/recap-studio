@@ -276,6 +276,16 @@ export async function ffmpegCached() {
   } catch { return false; }
 }
 
+// The wasm engine crashed ("RuntimeError: Out of bounds memory access" when an iPhone runs short of memory, …).
+// A crashed engine can't run again, so the next run starts a fresh one; a multi-core crash also switches
+// multi-core off for this session, since it needs more memory.
+export const isEngineCrash = e => /RuntimeError|memory access|out of memory|Aborted\(|unreachable/i.test(String((e && e.message) || e));
+export function dropEngine() {
+  if (ffKind === 'mt') mtFailed = true;
+  if (ff) { try { ff.terminate(); } catch {} }
+  ff = null; ffKind = null; keptInput = null;
+}
+
 export async function ffmpegClear() {
   for (const k in CORES) { try { await caches.delete(CORES[k].cache); } catch {} }
   if (ff) { try { ff.terminate(); } catch {} }   // free the old wasm worker's memory
@@ -1046,6 +1056,23 @@ function wrapLines(ctx, text, maxW) {
   return lines;
 }
 
+// safety net for the subtitle centring: move the painted text so it sits in the middle of the strip
+function centreInk(c) {
+  try {
+    const x = c.getContext('2d'), d = x.getImageData(0, 0, c.width, c.height).data;
+    let lo = c.width, hi = -1;
+    for (let col = 0; col < c.width; col++) {
+      for (let row = 0; row < c.height; row++) if (d[(row * c.width + col) * 4 + 3] > 20) { lo = Math.min(lo, col); hi = col; break; }
+    }
+    if (hi < 0) return;
+    const dx = Math.round(c.width / 2 - (lo + hi) / 2);
+    if (Math.abs(dx) < 3) return;
+    const t = document.createElement('canvas'); t.width = c.width; t.height = c.height;
+    t.getContext('2d').drawImage(c, 0, 0);
+    x.clearRect(0, 0, c.width, c.height); x.drawImage(t, dx, 0);
+  } catch {}
+}
+
 // draws every subtitle line as a transparent PNG strip and lists them (with timings) for ffmpeg's concat demuxer
 async function makeSubTrack(f, { file, videoDur, burmese, placed, fx }) {
   const sz = fx.geo ? { w: fx.geo.OW, h: fx.geo.OH } : await videoSize(file);     // subtitles are drawn on the OUTPUT frame size
@@ -1109,7 +1136,10 @@ async function makeSubTrack(f, { file, videoDur, burmese, placed, fx }) {
       x.lineWidth = Math.max(2, px * 0.16); x.strokeStyle = s.outline; x.fillStyle = s.color;
       const L = lines.slice(0, maxL);
       const top = (bandH - L.length * lh) / 2 + lh / 2;
-      L.forEach((t, j) => { const yy = top + j * lh; x.strokeText(t, W / 2, yy); x.fillText(t, W / 2, yy); });
+      // centred by hand: iPhone Safari ignores textAlign 'center' for Burmese text and drew it from the middle
+      x.textAlign = 'left';
+      L.forEach((t, j) => { const yy = top + j * lh, xx = Math.max(0, (W - x.measureText(t).width) / 2); x.strokeText(t, xx, yy); x.fillText(t, xx, yy); });
+      centreInk(c);
     }
     const blob = await new Promise(r => c.toBlob(r, 'image/png'));
     await f.writeFile(name, new Uint8Array(await blob.arrayBuffer()));

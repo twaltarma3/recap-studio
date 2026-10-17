@@ -80,6 +80,7 @@ function clearResult() {
 // friendly hint under an error box: what to check before trying again
 const errTip = html => view.insertAdjacentHTML('beforeend', `<div class="warn">${html}</div>`);
 const showErr = (e) => { const d = document.createElement('div'); d.className = 'err'; d.textContent = e.message || String(e); view.appendChild(d); };
+const IS_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 const download = (blob, name) => { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); };
 
 // every step can be opened (to look around or set things up first); a step without its data shows a notice
@@ -1167,7 +1168,7 @@ async function step4() {
     <p class="muted">ခဏစောင့်ပေးပါ — ဒီ tab ကို ဖွင့်ထားပါ၊ screen မပိတ်ပါနဲ့။</p>${bar()}`;
   let wake; try { wake = await navigator.wakeLock?.request('screen'); } catch {}
   const stopClock = startClock();
-  let mtRetry = false;
+  let mtRetry = false, crashRetry = false;
   try {
     if (acc.on) {
       // one use per video per day; re-rendering the same file again today is free
@@ -1194,6 +1195,7 @@ async function step4() {
     });
     state.diag = `geo:${geoOk} subs:${subsOk} overlay:${ovlOk} fxFailed:${fxFailed}\n${diag || ''}`;
     const took = stopClock();
+    state.crashRetried = false;
     state.result = { video, url: URL.createObjectURL(video), srt: L.buildSrt(state.burmese, placed), stats, took, timing, tries, src, out, engine, skipped };
     showResult();
     H.histAdd({ name: state.file.name, video, srt: state.result.srt, size: video.size, dur: state.videoDur, took })
@@ -1203,6 +1205,8 @@ async function step4() {
     else if (fellBack) toast('မူရင်းအသံ ရောစပ်မရလို့ မြန်မာအသံချည်းပဲ ထည့်ထားပါတယ်');
   } catch (e) {
     if (e && e.mtStall) { mtRetry = true; return; }      // multi-core got stuck: run again on the normal engine (see finally)
+    // the engine crashed (iPhone memory): start a fresh one and run again, once
+    if (L.isEngineCrash(e) && !state.crashRetried) { state.crashRetried = true; L.dropEngine(); crashRetry = true; return; }
     view.innerHTML = `<h2>အမှားရှိနေပါသည်</h2>`; showErr(e);
     if (e && (e.limit || e.badCode)) {
       errTip(e.limit
@@ -1231,7 +1235,10 @@ async function step4() {
     $('#back').onclick = () => go(3);
   } finally {
     stopClock(); wake?.release?.(); state.busy = false; renderStepper();
-    if (mtRetry) { toast('⚡ Multi-core ရပ်သွားလို့ ပုံမှန် Engine နဲ့ ပြန်ထုတ်နေပါတယ်'); setTimeout(step4, 300); }
+    if (mtRetry || crashRetry) {
+      toast(mtRetry ? '⚡ Multi-core ရပ်သွားလို့ ပုံမှန် Engine နဲ့ ပြန်ထုတ်နေပါတယ်' : '⚙ Engine ကို ပြန်စပြီး ထပ်ထုတ်နေပါတယ်');
+      state.renderNow = true; setTimeout(step4, 300);
+    }
   }
 }
 
@@ -1606,6 +1613,7 @@ async function thumbPanel() {
       <p class="muted small" style="margin:4px 0 0">ခေါင်းစဉ် ရွေးထားရင် ChatGPT က ထပ်မမေးဘဲ ပုံကို တန်းဆွဲပေးပါမယ်။</p>` : ''}
       <p class="tstep">၂) ပုံ ဒေါင်းပြီး Prompt ကူးပါ</p>
       <button type="button" class="btn primary block" id="tbGet">📋 ပုံ ဒေါင်း + Prompt ကူးမည်</button>
+      <div id="tbShow"></div>
       <p class="tstep">၃) ChatGPT မှာ ပုံ ထုတ်ပါ</p>
       <a class="btn block" id="tbOpen" href="https://chatgpt.com/" target="_blank" rel="noopener" style="display:block;text-align:center">💬 ChatGPT ဖွင့်မည်</a>
       <ol class="muted small tsteps">
@@ -1621,8 +1629,15 @@ async function thumbPanel() {
       <p class="muted small" style="margin:4px 0 8px">TikTok / Facebook မှာ Video တင်တဲ့အခါ ရေးဖို့ စာ</p>
       <div id="tbCap"></div>
     </div>` : ''}`;
+  // the picture is made as soon as a shot is chosen: iPhone only saves / shares a file straight from the tap
+  const prepShot = () => {
+    const i = th.sel; th.blobs = th.blobs || {};
+    if (!th.blobs[i]) th.blobs[i] = T.shotBlob(th.src, th.shots[i]).then(b => { th.ready = { ...th.ready, [i]: b }; return b; }, e => { delete th.blobs[i]; throw e; });
+    return th.blobs[i];
+  };
+  prepShot().catch(() => {});
   view.querySelectorAll('.tshots button').forEach(b => {
-    b.onclick = () => { th.sel = +b.dataset.i; view.querySelectorAll('.tshots button').forEach(x => x.classList.toggle('on', x === b)); };
+    b.onclick = () => { th.sel = +b.dataset.i; view.querySelectorAll('.tshots button').forEach(x => x.classList.toggle('on', x === b)); prepShot().catch(() => {}); };
   });
   const paintTitles = () => {
     const box = $('#tbTitles'); if (!box || !(th.titles || []).length) return;
@@ -1656,16 +1671,37 @@ async function thumbPanel() {
   paintCap();
   $('#tbGet').onclick = async () => {
     const b = $('#tbGet'); b.disabled = true;
-    let copied = false;
     const chosen = isPremium() && th.titles && th.titleSel >= 0 ? th.titles[th.titleSel] : '';
-    try { await navigator.clipboard.writeText(chosen ? T.chatgptPromptWithTitle(chosen) : T.chatgptPrompt(state.burmese)); copied = true; } catch {}
+    // started before anything is awaited, so iPhone still counts it as part of the tap
+    const copying = navigator.clipboard.writeText(chosen ? T.chatgptPromptWithTitle(chosen) : T.chatgptPrompt(state.burmese)).then(() => true, () => false);
+    const name = state.file.name.replace(/\.[^.]+$/, '') + '_character.jpg';
     try {
-      const blob = await T.shotBlob(th.src, th.shots[th.sel]);
-      if (blob) download(blob, state.file.name.replace(/\.[^.]+$/, '') + '_character.jpg');
-      toast(copied ? '✅ ပုံ ဒေါင်းပြီး Prompt ကူးပြီးပါပြီ — ChatGPT ဖွင့်ပါ' : 'ပုံ ဒေါင်းပြီးပါပြီ — Prompt ကူးမရလို့ ထပ်နှိပ်ပါ');
+      const ready = th.ready && th.ready[th.sel];
+      const blob = ready || await prepShot();
+      if (!blob) throw new Error('no picture');
+      const file = new File([blob], name, { type: 'image/jpeg' });
+      let saved = false;
+      // iPhone: the share sheet ("Save Image" / straight to ChatGPT); a plain download link does nothing there
+      if (IS_IOS && ready && navigator.canShare && navigator.canShare({ files: [file] })) {
+        try { await navigator.share({ files: [file] }); saved = true; }
+        catch (e) { if (e && e.name === 'AbortError') saved = true; }
+      }
+      if (!saved && IS_IOS) { showShot(blob); saved = true; }
+      if (!saved) download(blob, name);
+      const copied = await copying;
+      toast(copied ? '✅ ပုံ ယူပြီး Prompt ကူးပြီးပါပြီ — ChatGPT ဖွင့်ပါ' : 'ပုံ ယူပြီးပါပြီ — Prompt ကူးမရလို့ ထပ်နှိပ်ပါ');
     } catch { toast('ပုံ ထုတ်လို့ မရပါ'); }
     b.disabled = false;
   };
+}
+
+// iPhone fallback: show the picture so it can be saved with a long press
+function showShot(blob) {
+  const box = $('#tbShow'); if (!box) return;
+  if (box.dataset.url) URL.revokeObjectURL(box.dataset.url);
+  box.dataset.url = URL.createObjectURL(blob);
+  box.innerHTML = `<img src="${box.dataset.url}" alt="" style="width:100%;border-radius:12px;margin-top:8px" />
+    <p class="tip small" style="margin-top:6px">👆 ပုံကို ဖိနှိပ်ထားပြီး <b>Save to Photos</b> (ဓာတ်ပုံထဲ သိမ်းမည်) ကို ရွေးပါ</p>`;
 }
 
 /* ---------------- Cut a finished video (start / end), no re-encoding ---------------- */
