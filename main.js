@@ -1613,6 +1613,7 @@ async function thumbPanel() {
       <p class="muted small" style="margin:4px 0 0">ခေါင်းစဉ် ရွေးထားရင် ChatGPT က ထပ်မမေးဘဲ ပုံကို တန်းဆွဲပေးပါမယ်။</p>` : ''}
       <p class="tstep">၂) ပုံ ဒေါင်းပြီး Prompt ကူးပါ</p>
       <button type="button" class="btn primary block" id="tbGet">📋 ပုံ ဒေါင်း + Prompt ကူးမည်</button>
+      <button type="button" class="btn block" id="tbPrompt" style="margin-top:8px">📋 Prompt ပဲ ကူးမည်</button>
       <div id="tbShow"></div>
       <p class="tstep">၃) ChatGPT မှာ ပုံ ထုတ်ပါ</p>
       <a class="btn block" id="tbOpen" href="https://chatgpt.com/" target="_blank" rel="noopener" style="display:block;text-align:center">💬 ChatGPT ဖွင့်မည်</a>
@@ -1669,11 +1670,19 @@ async function thumbPanel() {
     if (c) c.onclick = async () => { try { await navigator.clipboard.writeText(th.caption); toast('✅ ကူးပြီးပါပြီ'); } catch { $('#capTxt').select(); toast('ကူးမရပါ — ကိုယ်တိုင် ရွေးကူးပါ'); } };
   };
   paintCap();
+  $('#tbPrompt').onclick = async () => {
+    const chosen = isPremium() && th.titles && th.titleSel >= 0 ? th.titles[th.titleSel] : '';
+    const prompt = chosen ? T.chatgptPromptWithTitle(chosen) : T.chatgptPrompt(state.burmese);
+    let ok = copyNow(prompt);
+    if (!ok) { try { await navigator.clipboard.writeText(prompt); ok = true; } catch {} }
+    toast(ok ? '✅ Prompt ကူးပြီးပါပြီ — ChatGPT မှာ paste လုပ်ပါ' : 'ကူးမရပါ — ထပ်နှိပ်ကြည့်ပါ');
+  };
   $('#tbGet').onclick = async () => {
     const b = $('#tbGet'); b.disabled = true;
     const chosen = isPremium() && th.titles && th.titleSel >= 0 ? th.titles[th.titleSel] : '';
-    // started before anything is awaited, so iPhone still counts it as part of the tap
-    const copying = navigator.clipboard.writeText(chosen ? T.chatgptPromptWithTitle(chosen) : T.chatgptPrompt(state.burmese)).then(() => true, () => false);
+    const prompt = chosen ? T.chatgptPromptWithTitle(chosen) : T.chatgptPrompt(state.burmese);
+    // iPhone: copied at once, inside the tap; the share sheet that opens next would otherwise block the copy
+    const copying = IS_IOS && copyNow(prompt) ? Promise.resolve(true) : navigator.clipboard.writeText(prompt).then(() => true, () => false);
     const name = state.file.name.replace(/\.[^.]+$/, '') + '_character.jpg';
     try {
       const ready = th.ready && th.ready[th.sel];
@@ -1683,6 +1692,7 @@ async function thumbPanel() {
       let saved = false;
       // iPhone: the share sheet ("Save Image" / straight to ChatGPT); a plain download link does nothing there
       if (IS_IOS && ready && navigator.canShare && navigator.canShare({ files: [file] })) {
+        b.disabled = false;                       // the share promise can stay open after "Save Image"
         try { await navigator.share({ files: [file] }); saved = true; }
         catch (e) { if (e && e.name === 'AbortError') saved = true; }
       }
@@ -1693,6 +1703,17 @@ async function thumbPanel() {
     } catch { toast('ပုံ ထုတ်လို့ မရပါ'); }
     b.disabled = false;
   };
+}
+
+// copies right away (no promise), so it still counts as part of the tap on iPhone
+function copyNow(text) {
+  const t = document.createElement('textarea');
+  t.value = text; t.readOnly = true; t.style.cssText = 'position:fixed;top:0;left:0;opacity:0;font-size:16px';
+  document.body.appendChild(t);
+  let ok = false;
+  try { t.focus(); t.select(); t.setSelectionRange(0, text.length); ok = document.execCommand('copy'); } catch {}
+  t.remove();
+  return ok;
 }
 
 // iPhone fallback: show the picture so it can be saved with a long press

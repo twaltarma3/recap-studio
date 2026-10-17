@@ -62,13 +62,17 @@ const PREMIUM_ERR = {
 };
 // Premium: Gemini answers a prompt on the Worker (json = ask for a JSON reply)
 export async function premiumAI(prompt, json = false) {
-  const r = await premiumFetch('/premium/ai', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ prompt, json }) });
-  const j = await r.json().catch(() => ({}));
-  if (!r.ok || !j.text) {
+  // Gemini answers 503 "high demand" (or 500) now and then; that passes in seconds, so ask again twice
+  for (let tries = 0; ; tries++) {
+    const r = await premiumFetch('/premium/ai', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ prompt, json }) });
+    const j = await r.json().catch(() => ({}));
+    if (r.ok && j.text) return j.text;
+    const busy = / 50[03]:/.test(j.detail || '');
+    if (busy && tries < 2) { await new Promise(res => setTimeout(res, tries ? 6000 : 2500)); continue; }
+    if (busy) throw new Error('AI (Gemini) မှာ လူသုံးများနေလို့ ခဏ မအားပါ — ၁ မိနစ်လောက်နေ ပြန်နှိပ်ပါ');
     if (/ 429:/.test(j.detail || '')) throw new Error('AI ရဲ့ အခမဲ့ quota ပြည့်သွားပါပြီ — ခဏနေ (သို့) မနက်ဖြန် ပြန်စမ်းပါ (Admin: Google AI Studio မှာ Billing ဖွင့်ရင် မကုန်တော့ပါ)');
     throw new Error(PREMIUM_ERR[j.error] || ('AI မအောင်မြင်ပါ: ' + (j.detail || j.error || r.status)));
   }
-  return j.text;
 }
 // Premium: one call for all lines first (a strong model like Gemini gets it right at once); if the count comes back
 // wrong, translate in small batches, so the AI keeps the line count (weaker models drop lines in big batches).
