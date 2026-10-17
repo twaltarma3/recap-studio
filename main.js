@@ -65,10 +65,22 @@ const bar = (stages = state.autoRun ? PSTEPS.map(x => x[0]) : []) => `<div class
   <div class="bar"><i id="fill"></i></div>
   ${stages.length > 1 ? `<div class="prog-steps">${PSTEPS.filter(x => stages.includes(x[0])).map(([k, ic, t]) => `<span data-st="${k}"><em>${ic}</em>${t}</span>`).join('')}</div>` : ''}
   <div class="ptime">⏱ ကြာချိန် <b id="ptime">0:00</b></div>
-  <p class="prog-tip" id="ptip">💡 ဒီ tab ကို ဖွင့်ထားပါ — Screen မပိတ်ပါနဲ့</p>
+  <p class="prog-tip" id="ptip"></p>
 </div>`;
-const TIPS = ['💡 ဒီ tab ကို ဖွင့်ထားပါ — Screen မပိတ်ပါနဲ့', '☕ ခဏနားပြီး စောင့်ပေးပါ၊ ကိုယ့်ဖုန်းထဲမှာပဲ Video ထုတ်နေတာပါ',
-  '🎬 ပြီးရင် Thumbnail နဲ့ Caption + Hashtag ပါ ဆက်ထုတ်လို့ရပါတယ်', '🔋 ဘက်ထရီ နည်းနေရင် အားသွင်းထားပါ', '📶 Internet ကောင်းရင် ပိုမြန်ပါတယ်'];
+const TIPS = [
+  '🎬 မင်းရဲ့ Video က Viral ဖြစ်ဖို့ အသင့်ပြင်နေပါပြီ…',
+  '🔥 ပထမ ၃ စက္ကန့်မှာ ဆွဲဆောင်နိုင်ရင် ကြည့်သူတွေ အဆုံးထိ ကြည့်တတ်ပါတယ်',
+  '😎 ကော်ဖီတစ်ခွက် သောက်ရင်း ခဏစောင့်ပါ ☕ — ကျန်တာ App က လုပ်ပေးပါမယ်',
+  '🖼 Thumbnail လှရင် Click ပိုရပါတယ် — ပြီးရင် 3D Thumbnail ပါ လုပ်ကြည့်ပါ',
+  '#️⃣ Caption + Hashtag ကို AI နဲ့ တစ်ချက်တည်း ရေးလို့ရပါတယ်',
+  '💪 ပုံမှန် နေ့တိုင်းတင်ရင် Follower ပိုမြန်မြန် တက်ပါတယ်',
+  '⏰ ညနေပိုင်း လူအားချိန်မှာ တင်ရင် ကြည့်သူ ပိုများတတ်ပါတယ်',
+  '🎙 အသံ Speed နဲ့ Pitch ကို ကိုယ့်စိတ်ကြိုက် ချိန်လို့ရပါတယ်',
+  '❄ Freeze + Zoom နဲ့ Video ကို ပိုစိတ်ဝင်စားစရာ ကောင်းအောင် လုပ်ကြည့်ပါ',
+  '🔒 Video ကို ကိုယ့်ဖုန်းထဲမှာပဲ ထုတ်နေတာမို့ စိတ်ချရပါတယ်',
+  '💡 ဒီ tab ကို ဖွင့်ထားပါ — Screen မပိတ်ပါနဲ့',
+  '🔋 ဘက်ထရီ နည်းနေရင် အားသွင်းထားပါ'];
+let tipStart = Math.floor(Math.random() * TIPS.length);
 const fmtDur = sec => {
   sec = Math.max(0, Math.round(sec));
   const h = Math.floor(sec / 3600), m = Math.floor(sec / 60) % 60, s = String(sec % 60).padStart(2, '0');
@@ -79,8 +91,13 @@ function startClock() {
   const t0 = Date.now();
   const tick = () => {
     const sec = (Date.now() - t0) / 1000, el = $('#ptime'); if (el) el.textContent = fmtDur(sec);
-    const tip = $('#ptip'), k = Math.floor(sec / 7) % TIPS.length;
-    if (tip && tip.dataset.k !== String(k)) { tip.dataset.k = k; tip.classList.remove('in'); void tip.offsetWidth; tip.textContent = TIPS[k]; tip.classList.add('in'); }
+    // a new tip every 6 s; near the end, a "nearly there" line instead
+    const tip = $('#ptip'), pc = parseInt(($('#pnum') || {}).textContent, 10) || 0;
+    const k = pc >= 92 ? 'end' : String((tipStart + Math.floor(sec / 6)) % TIPS.length);
+    if (tip && tip.dataset.k !== k) {
+      tip.dataset.k = k; tip.classList.remove('in'); void tip.offsetWidth;
+      tip.textContent = k === 'end' ? '🎉 ပြီးခါနီးပါပြီ — ခဏလေးပဲ ကျန်ပါတော့တယ်…' : TIPS[+k]; tip.classList.add('in');
+    }
   };
   const iv = setInterval(tick, 1000); tick();
   return () => { clearInterval(iv); return (Date.now() - t0) / 1000; };
@@ -1057,7 +1074,7 @@ function step1() {
 // Lines the AI left empty go to step 3 to fill in; an AI error goes to step 2 (Copy Full Prompt still works there).
 async function autoRest() {
   state.step = 3; state.busy = true; renderStepper();
-  view.innerHTML = `<h2>✨ ဘာသာပြန်နေပါတယ်…</h2><p class="muted">ပြီးရင် အသံထုတ်ပြီး Video ကို ဆက်ပေါင်းပေးပါမယ် — ဒီ tab ကို ဖွင့်ထားပါ။</p>${bar()}`;
+  view.innerHTML = bar();
   const stopClock = startClock();
   const t0 = Date.now(), T = Math.max(10, state.segs.length * 0.6);
   let real = 0;
@@ -1081,7 +1098,7 @@ async function autoRest() {
 
 async function transcribeFlow(auto = false) {
   state.step = 2; state.busy = true; renderStepper();
-  view.innerHTML = `<h2>စာသား ထုတ်နေပါတယ်…</h2><p class="muted">ခဏစောင့်ပေးပါ — ဒီ tab ကို ဖွင့်ထားပါ။</p>${bar()}`;
+  view.innerHTML = bar();
   const stopClock = startClock();
   try {
     setProg(0.02, 'Engine ပြင်ဆင်နေသည်');
@@ -1298,8 +1315,7 @@ async function step4() {
   }
   state.renderNow = false;
   state.busy = true; renderStepper();
-  view.innerHTML = `<h2>ဗီဒီယိုနှင့် အသုံးပြုထားသော အရာများကို ပေါင်းစပ်နေပါတယ်</h2>
-    <p class="muted">ခဏစောင့်ပေးပါ — ဒီ tab ကို ဖွင့်ထားပါ၊ screen မပိတ်ပါနဲ့။</p>${bar(state.autoRun ? undefined : ['voice', 'video'])}`;
+  view.innerHTML = bar(state.autoRun ? undefined : ['voice', 'video']);
   let wake; try { wake = await navigator.wakeLock?.request('screen'); } catch {}
   const stopClock = startClock();
   let mtRetry = false, crashRetry = false;
