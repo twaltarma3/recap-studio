@@ -104,7 +104,9 @@ function render() {
   histUrls.forEach(u => URL.revokeObjectURL(u)); histUrls = [];      // leaving / redrawing History: free its videos
   const stp = $('#stepper');
   if (acc.on && !acc.ok && !['code', 'admin', 'guide'].includes(page)) page = 'code';   // no valid code yet
-  if (page === 'free') {
+  if (page === 'free' && premPlan()) page = 'premium';                                    // Premium codes work in the Premium tab
+  // the editor: Free Recap for free codes, the Premium tab for Premium codes (others see how to buy)
+  if (page === 'free' || (page === 'premium' && premPlan())) {
     stp.style.display = '';
     renderStepper();
     [null, step1, step2, step3, step4][state.step]();
@@ -152,7 +154,10 @@ function buildMenu() {
   burger.onclick = openDrawer;
   $('#scrim').onclick = closeDrawer;
   $('#dclose').onclick = closeDrawer;
-  document.querySelectorAll('.ditem').forEach(b => { b.onclick = () => openPage(b.dataset.p); });
+  document.querySelectorAll('.ditem').forEach(b => { b.onclick = () => {
+    if (b.dataset.p === 'free' && premPlan()) toast('💎 Premium Code နဲ့ ဝင်ထားလို့ Premium tab မှာ သုံးပါ');
+    openPage(b.dataset.p);
+  }; });
   setupInstall();
   $('#openSettings').onclick = () => openPage('keys');
 }
@@ -357,15 +362,12 @@ async function pageHistory() {
   };
 }
 
-/* ---------------- Premium (placeholder) ---------------- */
+/* ---------------- Premium tab for codes that aren't Premium: what it gives and how to buy ---------------- */
 function pagePremium() {
-  const on = isPremium();
   const row = (icon, t, d) => `<li><span>${icon}</span><div><b>${t}</b><small>${d}</small></div></li>`;
   view.innerHTML = `
     <h2>💎 Premium</h2>
-    ${on ? `<div class="tip">✅ <b>Premium သုံးနေပါတယ်</b> — ${creditTxt(acc.credits)}</div>`
-      : premPlan() ? '<div class="tip">💎 Premium Credit ကုန်သွားပါပြီ — အောက်က အဆင့်တွေအတိုင်း ထပ်ဝယ်ပါ</div>'
-      : '<p class="muted">Video ထုတ်တဲ့ အလုပ်ရှုပ်တဲ့ အဆင့်တွေကို App က အလိုအလျောက် လုပ်ပေးပါတယ်။</p>'}
+    <p class="muted">Video ထုတ်တဲ့ အလုပ်ရှုပ်တဲ့ အဆင့်တွေကို App က အလိုအလျောက် လုပ်ပေးပါတယ်။ ဒီ tab ကို 💎 Premium Code ရှိသူတွေပဲ သုံးလို့ရပါတယ်။</p>
     <ul class="plist">
       ${row('🔑', 'AssemblyAI Key မလို', 'Key ဖွင့်စရာ၊ ထည့်စရာ မလိုဘဲ စာသားထုတ်လို့ရ')}
       ${row('✨', 'Auto ဘာသာပြန်', 'Gemini မှာ Copy/Paste မလုပ်ရတော့ဘဲ ခလုတ်တစ်ချက်နဲ့ မြန်မာလို ဘာသာပြန်')}
@@ -373,16 +375,19 @@ function pagePremium() {
       ${row('🎟', 'တစ်ရက် ကန့်သတ်ချက် မရှိ', `ဝယ်ထားတဲ့ Credit ရှိသလောက် ထုတ်လို့ရ — ၁ မိနစ် = ${L.CPM} credit (စက္ကန့်နဲ့ တွက်၊ ဥပမာ 1:30 = ${L.creditCost(90)})၊ Video တစ်ပုဒ်တည်း ပြန်ထုတ်ရင် မနှုတ်`)}
       ${row('📝', 'Caption + Hashtag', 'TikTok / Facebook မှာ တင်ဖို့ စာနဲ့ Hashtag ကို AI က ရေးပေး')}
     </ul>
-    ${on ? '<button class="btn primary block" id="toFree">🎬 Video ထုတ်မည်</button>'
-      : `<div class="kbox"><b>Premium ဘယ်လိုရမလဲ</b>
-          <ol class="muted small" style="margin:8px 0 0;padding-left:20px;line-height:1.9">
-            <li>Admin ကို ဆက်သွယ်ပြီး လိုချင်တဲ့ Credit Package အတွက် ငွေလွှဲပါ (KPay / Wave)</li>
-            <li>💎 Premium Code (သို့) Credit ထပ်ဖြည့်ပေးပါမယ်</li>
-            <li>☰ Menu → 🔑 Access Code → <b>Code ပြောင်းမည်</b> ကနေ Code အသစ် ထည့်ပါ</li>
-          </ol></div>
-        <button class="btn block" id="toFree">Free နဲ့ ဆက်သုံးမည်</button>`}`;
+    <div class="kbox"><b>Premium ဘယ်လိုရမလဲ</b>
+      <ol class="muted small" style="margin:8px 0 0;padding-left:20px;line-height:1.9">
+        <li>Telegram Bot ကိုဖွင့်ပြီး <b>💎 Credit ဝယ်မည်</b> ကိုနှိပ်ပါ</li>
+        <li>Package ရွေးပြီး ငွေလွှဲ Screenshot ပို့ပါ</li>
+        <li>💎 Premium Code (သို့) Credit ထပ်ဖြည့်ပေးပါမယ်</li>
+        <li>☰ Menu → 🔑 Access Code → <b>Code ပြောင်းမည်</b> ကနေ Code အသစ် ထည့်ပါ</li>
+      </ol>
+      <a class="btn primary block" href="${TG_BOT}" target="_blank" rel="noopener" style="display:block;text-align:center;margin-top:10px;text-decoration:none">🤖 Telegram မှာ ဝယ်မည်</a></div>
+    <button class="btn block" id="toFree">🎬 Free Recap နဲ့ ဆက်သုံးမည်</button>`;
   $('#toFree').onclick = () => openPage('free');
 }
+
+const TG_BOT = 'https://t.me/RecapStudioMyanmar_bot';
 
 /* ---------------- API Key Settings ---------------- */
 let ffBusy = false, ffCached = false;
@@ -927,6 +932,7 @@ function step1() {
   view.innerHTML = `
     <h2>Video တင်ပါ</h2>
     ${acc.on && acc.ok ? `<p class="muted small quota">🎟 ${esc(acc.name)} · <b>${quotaTxt()}</b>${premPlan() ? ` · <span class="pbadge">💎 Premium</span>` : ''}</p>` : ''}
+    ${premPlan() && !(acc.credits > 0) ? `<div class="tip">💎 Credit ကုန်နေပါပြီ — <a href="${TG_BOT}" target="_blank" rel="noopener"><b>Telegram မှာ ထပ်ဝယ်ပါ</b></a></div>` : ''}
     <label class="drop ${state.file ? 'has' : ''}" for="f">
       <input id="f" type="file" accept="video/*" hidden />
       <b>${state.file ? esc(state.file.name) : 'နှိပ်၍ Video File ရွေးချယ်ပါ'}</b>
