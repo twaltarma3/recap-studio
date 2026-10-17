@@ -27,18 +27,88 @@ async function accessPost(path, body, headers = {}) {
   let j = {}; try { j = await r.json(); } catch {}
   return { status: r.status, ...j };
 }
-// {open:true} = no access codes on this Worker; {error:'bad_code'}; else {name, limit, used, left}
+// {open:true} = no access codes on this Worker; {error:'bad_code'|'expired'}; else {name, limit, used, left, plan, expires, credits}
+// Premium codes with credits also get a ticket for the premium routes (transcription with the owner's key, AI translation).
+// Premium is paid by video length (CPM credits a minute): job() names the video in hand (set by the app),
+// its first premium use pays for it.
+export const CPM = 80;
+export const creditCost = secs => Math.max(1, Math.ceil(Math.max(0, secs || 0) * CPM / 60));
+let pticket = '';
+export const premium = { get on() { return !!pticket; }, job: () => '' };
 // Codes the owner marked "no key needed" also get a ticket to transcribe with the owner's spare AssemblyAI key.
 let ftk = '';
 export const freeKey = { get on() { return !!ftk; } };
 export async function accessCheck(code) {
-  const r = await accessPost('/auth/check', { code: code ?? access.code });
+  const r = await accessPost('/auth/check', { code: code ?? access.code, job: premium.job() });
+  pticket = r.pticket || '';
   ftk = r.ftk || '';
   return r;
 }
+// call a premium route; an expired premium ticket (6 h) is renewed once
+async function premiumFetch(path, opts = {}) {
+  for (let k = 0; k < 2; k++) {
+    const r = await fetch(cfg.workerUrl + path, { ...opts, headers: { ...(opts.headers || {}), 'x-ticket': pticket, 'x-job': premium.job() } });
+    if (r.status === 403 && k === 0) { await accessCheck().catch(() => {}); if (pticket) continue; }
+    return r;
+  }
+}
+const PREMIUM_ERR = {
+  premium_only: 'Premium Code မဟုတ်တော့ပါ (သို့) ပိတ်ထားပါတယ်',
+  no_credit: '💎 Credit မလောက်တော့ပါ — Admin ဆီက ထပ်ဖြည့်ပါ',
+  premium_cap: 'ယနေ့အတွက် Premium အလိုအလျောက် သုံးခွင့် ပြည့်သွားပါပြီ — မနက်ဖြန် ပြန်သုံးပါ',
+  no_gemini_key: 'Admin က Gemini key မထည့်ရသေးပါ',
+  no_ai: 'Admin က AI (Workers AI / Gemini) မချိတ်ရသေးပါ',
+  no_aai_key: 'Admin က AssemblyAI key မထည့်ရသေးပါ'
+};
+// Premium: Gemini answers a prompt on the Worker (json = ask for a JSON reply)
+export async function premiumAI(prompt, json = false) {
+  const r = await premiumFetch('/premium/ai', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ prompt, json }) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok || !j.text) {
+    if (/ 429:/.test(j.detail || '')) throw new Error('AI ရဲ့ အခမဲ့ quota ပြည့်သွားပါပြီ — ခဏနေ (သို့) မနက်ဖြန် ပြန်စမ်းပါ (Admin: Google AI Studio မှာ Billing ဖွင့်ရင် မကုန်တော့ပါ)');
+    throw new Error(PREMIUM_ERR[j.error] || ('AI မအောင်မြင်ပါ: ' + (j.detail || j.error || r.status)));
+  }
+  return j.text;
+}
+// Premium: one call for all lines first (a strong model like Gemini gets it right at once); if the count comes back
+// wrong, translate in small batches, so the AI keeps the line count (weaker models drop lines in big batches).
+// A batch that comes back with the wrong count is asked again, then split in half; a line that still fails stays empty.
+// An error from the AI itself (location, key, credits, network) stops everything at once and is shown.
+export async function autoTranslate(segs, style, onProgress) {
+  const out = new Array(segs.length).fill('');
+  let done = 0;
+  const tryAll = async () => {
+    const text = await premiumAI(buildPrompt(segs, style), true);
+    try { const t = parseTranslations(text); return t.length === segs.length ? t : null; } catch { return null; }
+  };
+  const run = async (from, to, tries = 0) => {
+    const part = segs.slice(from, to);
+    const text = await premiumAI(buildPrompt(part, style), true);
+    let t = [];
+    try { t = parseTranslations(text); } catch {}
+    if (t.length === part.length) {
+      t.forEach((x, i) => { out[from + i] = x; });
+      done += part.length; if (onProgress) onProgress(done / segs.length);
+      return;
+    }
+    if (tries < 1) return run(from, to, tries + 1);
+    if (part.length > 1) { const mid = from + Math.ceil(part.length / 2); await run(from, mid); return run(mid, to); }
+    done += 1; if (onProgress) onProgress(done / segs.length);
+  };
+  {
+    const t = await tryAll();
+    if (t) { if (onProgress) onProgress(1); return t; }
+  }
+  const BATCH = 12, starts = [];
+  for (let i = 0; i < segs.length; i += BATCH) starts.push(i);
+  for (let k = 0; k < starts.length; k += 3) {             // 3 batches at a time
+    await Promise.all(starts.slice(k, k + 3).map(i => run(i, Math.min(segs.length, i + BATCH))));
+  }
+  return out;
+}
 // uses one of today's videos (same job again = free); returns {ticket, left, ...} or {error:'limit'|'bad_code'}
-export async function accessStart(job) {
-  const r = await accessPost('/auth/start', { code: access.code, job });
+export async function accessStart(job, secs = 0) {
+  const r = await accessPost('/auth/start', { code: access.code, job, secs });
   if (r.ticket) ticket = r.ticket;
   return r;
 }
@@ -323,6 +393,18 @@ const FREE_ERR = {
   free_off: 'ဒီ Code မှာ Key မလို ခွင့် ပိတ်ထားပါတယ် — API Key Settings မှာ ကိုယ်ပိုင် key ထည့်ပါ'
 };
 async function aai(path, opts = {}) {
+  // Premium: the Worker uses the owner's AssemblyAI key, so the user needs none
+  if (premium.on) {
+    // the Worker charges by length: 16 kHz mono 16-bit WAV is 32000 bytes a second (it also reads content-length)
+    if (opts.body instanceof Blob) opts = { ...opts, headers: { ...(opts.headers || {}), 'x-secs': String(Math.max(0, (opts.body.size - 44) / 32000)) } };
+    const r = await premiumFetch('/premium/aai' + path, opts);
+    if (!r.ok) {
+      const t = await r.text(); let j = {}; try { j = JSON.parse(t); } catch {}
+      if (j.error === 'no_credit' && j.need) throw new Error(`💎 ဒီ Video အတွက် Credit ${j.need.toLocaleString()} လိုပါတယ် (ကျန် ${(j.credits || 0).toLocaleString()}) — Admin ဆီက ထပ်ဖြည့်ပါ`);
+      throw new Error(PREMIUM_ERR[j.error] || `Server ${r.status}: ${t}`);
+    }
+    return r.json();
+  }
   // no key of their own, but the owner allowed this code: the Worker uses the owner's spare key
   if (!cfg.aaiKey && ftk) {
     for (let k = 0; k < 2; k++) {
