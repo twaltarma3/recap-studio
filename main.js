@@ -23,7 +23,13 @@ const acc = { on: false, ok: false, name: '', limit: 0, used: 0, left: -1, plan:
 const setQuota = r => (L.setCpm(r.cpm), Object.assign(acc, { ok: true, name: r.name || '', limit: r.limit || 0, used: r.used || 0, left: r.left ?? -1,
   ...(r.plan ? { plan: r.plan, expires: r.expires || 0, credits: r.credits || 0 } : {}) }));
 // Premium is paid per video (credits); a video already paid keeps its premium features after the last credit is used
-const jobId = () => (state.file ? `${state.file.name}|${state.file.size}` : '');
+// Premium: every finished video is paid. Making a video again after it came out (to change the voice, text,
+// effects…) is a new job, so it is paid again; retrying after an error stays on the same job and is free.
+// The count is kept per file in the browser, so reloading the page doesn't reset it.
+const baseJob = () => (state.file ? `${state.file.name}|${state.file.size}` : '');
+const renders = k => { try { return JSON.parse(localStorage.getItem('rn:' + k)) || { n: 0, done: false }; } catch { return { n: 0, done: false }; } };
+const saveRenders = (k, r) => { try { localStorage.setItem('rn:' + k, JSON.stringify(r)); } catch {} };
+const jobId = () => { const b = baseJob(), r = b && premPlan() ? renders(b) : null; return r && r.n ? `${b}#${r.n}` : b; };
 L.premium.job = jobId;
 const premPlan = () => acc.on && acc.ok && acc.plan === 'premium';
 const isPremium = () => premPlan() && (acc.credits > 0 || L.premium.on);
@@ -38,7 +44,7 @@ function costLine(el, secs) {
   const need = L.creditCost(secs), short = need > acc.credits;
   el.hidden = false;
   el.className = short ? 'err small' : 'muted small';
-  el.innerHTML = `💎 ${mmss(secs)} video = <b>${fmtN(need)} credit</b>${short ? ` — ကျန် ${fmtN(acc.credits)} ပဲ ရှိပါတယ် (ဒီ Video ကို အရင်ကလုပ်ပြီးသားဆိုရင် ထပ်မနှုတ်ပါ)` : ` · ကျန် ${fmtN(acc.credits)}`}`;
+  el.innerHTML = `💎 ${mmss(secs)} video = <b>${fmtN(need)} credit</b>${short ? ` — ကျန် ${fmtN(acc.credits)} ပဲ ရှိပါတယ်` : ` · ကျန် ${fmtN(acc.credits)}`}`;
 }
 const quotaTxt = () => premPlan() ? creditTxt(acc.credits) : acc.limit > 0 ? `ယနေ့ ကျန် ${acc.left}/${acc.limit} ပုဒ်` : 'အကန့်အသတ် မရှိ';
 const STEPS = ['ဗီဒီယိုတင်', 'မူရင်းစာသား', 'ဘာသာပြန်', 'ရလဒ်'];
@@ -420,7 +426,7 @@ function pagePremium() {
       ${row('🔑', 'AssemblyAI Key မလို', 'Key ဖွင့်စရာ၊ ထည့်စရာ မလိုဘဲ စာသားထုတ်လို့ရ')}
       ${row('✨', 'Auto ဘာသာပြန်', 'Gemini မှာ Copy/Paste မလုပ်ရတော့ဘဲ ခလုတ်တစ်ချက်နဲ့ မြန်မာလို ဘာသာပြန်')}
       ${row('🖼', 'Auto Thumbnail ခေါင်းစဉ်', 'ဇာတ်ကြောင်းကနေ ခေါင်းစဉ် ၅ ခု ထုတ်ပေး — ရွေးပြီး ChatGPT ကို တန်းပို့')}
-      ${row('🎟', 'တစ်ရက် ကန့်သတ်ချက် မရှိ', `ဝယ်ထားတဲ့ Credit ရှိသလောက် ထုတ်လို့ရ — ၁ မိနစ် = ${L.CPM} credit (စက္ကန့်နဲ့ တွက်၊ ဥပမာ 1:30 = ${L.creditCost(90)})၊ Video တစ်ပုဒ်တည်း ပြန်ထုတ်ရင် မနှုတ်`)}
+      ${row('🎟', 'တစ်ရက် ကန့်သတ်ချက် မရှိ', `ဝယ်ထားတဲ့ Credit ရှိသလောက် ထုတ်လို့ရ — ၁ မိနစ် = ${L.CPM} credit (စက္ကန့်နဲ့ တွက်၊ ဥပမာ 1:30 = ${L.creditCost(90)})၊ ထုတ်ပြီးသား Video ကို ပြန်ထုတ်ရင်လည်း နှုတ်ပါတယ် (Error တက်လို့ ပြန်စရင် မနှုတ်)`)}
       ${row('📝', 'Caption + Hashtag', 'TikTok / Facebook မှာ တင်ဖို့ စာနဲ့ Hashtag ကို AI က ရေးပေး')}
     </ul>
     <div class="kbox"><b>Premium ဘယ်လိုရမလဲ</b>
@@ -1325,6 +1331,7 @@ async function step4() {
   try {
     if (acc.on) {
       // one use per video per day; re-rendering the same file again today is free
+      if (premPlan()) { const b = baseJob(), r = renders(b); if (r.done) saveRenders(b, { n: r.n + 1, done: false }); }   // a video made again
       const a = await L.accessStart(jobId(), state.videoDur);
       if (a.error === 'no_credit') { setQuota(a); throw Object.assign(new Error(`💎 ဒီ Video အတွက် Credit ${fmtN(a.need)} လိုပါတယ် (ကျန် ${fmtN(a.credits)}) — Admin ဆီက ထပ်ဖြည့်ပါ`), { limit: true }); }
       if (a.error === 'limit') throw Object.assign(new Error(`ယနေ့အတွက် Video ${a.limit} ပုဒ် ထုတ်ပြီးပါပြီ`), { limit: true });
@@ -1350,6 +1357,7 @@ async function step4() {
     state.diag = `geo:${geoOk} subs:${subsOk} overlay:${ovlOk} fxFailed:${fxFailed}\n${diag || ''}`;
     const took = stopClock();
     state.crashRetried = false;
+    if (premPlan()) { const b = baseJob(); saveRenders(b, { ...renders(b), done: true }); }
     state.result = { video, url: URL.createObjectURL(video), srt: L.buildSrt(state.burmese, placed), stats, took, timing, tries, src, out, engine, skipped };
     showResult();
     H.histAdd({ name: state.file.name, video, srt: state.result.srt, size: video.size, dur: state.videoDur, took })
@@ -1481,7 +1489,7 @@ function pageCode() {
       ${premPlan() ? `<p style="margin:10px 0 0"><span class="pbadge">💎 Premium</span>${acc.expires ? ` <span class="muted small">· ${dateTxt(acc.expires)} အထိ</span>` : ''}</p>` : ''}
       <p style="margin:10px 0 0">🎟 <b>${quotaTxt()}</b></p>
       <p class="muted small" style="margin:6px 0 0">${premPlan()
-        ? `Video အရှည်နဲ့ တွက်ပါတယ် — ၁ မိနစ် = ${L.CPM} credit (စက္ကန့်နဲ့)။ Video တစ်ပုဒ်တည်းကို ပြန်လုပ်ရင် ထပ်မနှုတ်ပါ။`
+        ? `Video အရှည်နဲ့ တွက်ပါတယ် — ၁ မိနစ် = ${L.CPM} credit (စက္ကန့်နဲ့)။ ထုတ်ပြီးသား Video ကို ပြန်ထုတ်ရင်လည်း နှုတ်ပါတယ် (Error တက်လို့ ပြန်စရင်တော့ မနှုတ်ပါ)။`
         : 'Video တစ်ပုဒ် ထုတ်တိုင်း တစ်ခါ ရေတွက်ပါတယ်။ Video တစ်ပုဒ်တည်းကို ယနေ့ထဲ ပြန်ထုတ်ရင် ထပ်မရေတွက်ပါ။ မြန်မာစံတော်ချိန် ည ၁၂ နာရီမှာ ပြန်စပါတယ်။'}</p>
     </div>
     <button class="btn primary block" id="toFree">🎬 Video ထုတ်မည်</button>
