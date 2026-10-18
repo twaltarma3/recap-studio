@@ -13,7 +13,7 @@ const state = {
   step: 1, showSrc: false, file: null, videoDur: 0, lang: 'auto', segs: [], sourceLines: [],
   burmese: [], personaId: 'TH', ...DEFAULTS, result: null, busy: false, origSegs: null,
   fxMirror: false, fxBlur: false, blurH: 15, blurY: 100, blurS: 50, blurO: 100, previewUrl: null, previewFor: null,
-  pStyle: 'recap', fxRatio: 'orig', fxFit: 'crop', fxZoom: 100, fxFast: true, fxFps30: true, fxUnlock: false, wmOn: false, wmText: '', wmPos: 'br', wmSize: 4,
+  pStyle: 'recap', fxRatio: 'orig', fxFit: 'crop', fxZoom: 100, fxFast: true, fxHD: false, fxFps30: true, fxUnlock: false, wmOn: false, wmText: '', wmPos: 'br', wmSize: 4,
   logoOn: false, logoData: null, logoPos: 'tr', logoSize: 14, tab: 'video',
   frzOn: false, frzA: 4, frzB: 2, frzZoom: 'out', frzAmt: 20,
   fxSubs: false, subS: 5, subY: 88, subC: '#ffffff', subO: '#000000', subFont: 'pt16', fontOk: false
@@ -687,6 +687,13 @@ function previewBlock() {
       </label>
       <p class="muted small" style="margin:4px 0 0">မူရင်း 60 fps Video တွေကို 30 fps နဲ့ ထုတ်လို့ ၂ ဆလောက် ပိုမြန်ပါတယ် (TikTok/Facebook မှာ ကွာခြားမှု မသိသာပါ)။ 30 fps နဲ့အောက် Video တွေကို မထိပါ။</p>
         </div>
+      <label style="display:flex;align-items:center;gap:10px;font-weight:600;margin-top:12px;${premPlan() ? '' : 'opacity:.55'}">
+        <input id="fxHD" type="checkbox" style="${chk}" ${premPlan() ? '' : 'disabled'} ${state.fxHD && premPlan() ? 'checked' : ''} />
+        📺 1080p (Quality မြင့်) <span class="pbadge">💎 Premium</span>
+      </label>
+      <p class="muted small" style="margin:4px 0 0">${premPlan()
+        ? 'Monetization အတွက် Quality မြင့်မြင့် ထုတ်ပါ။ 720p ထက် ၂ ဆလောက် ပိုကြာပါတယ်။ မူရင်း Video က 1080p မပြည့်ရင် မူရင်းအရွယ်အတိုင်းပဲ ထွက်ပါမယ်။'
+        : '💎 Premium ဝယ်ထားသူတွေပဲ 1080p နဲ့ ထုတ်လို့ရပါတယ်။'}</p>
       <label style="display:flex;align-items:center;gap:10px;font-weight:600;margin-top:12px">
         <input id="fxMirror" type="checkbox" style="${chk}" ${state.fxMirror ? 'checked' : ''} />
         ↔ Mirror (ဘယ်ညာ လှန်မည်)
@@ -876,7 +883,11 @@ function bindPreview() {
     try { state.logoData = await fileToLogo(f); $('#logoPickTxt').textContent = '🖼 Logo ပြောင်းမည်'; apply(); }
     catch (err) { toast(err.message); }
   };
-  $('#fxFast').onchange = e => { state.fxFast = e.target.checked; };
+  $('#fxFast').onchange = e => { state.fxFast = e.target.checked; if (state.fxFast && state.fxHD) { state.fxHD = false; $('#fxHD').checked = false; } };
+  $('#fxHD').onchange = e => {                                 // 1080p and 720p can't both be on
+    state.fxHD = e.target.checked && premPlan();
+    if (state.fxHD) { state.fxFast = false; $('#fxFast').checked = false; toast('📺 1080p နဲ့ ထုတ်ပါမယ် — ၂ ဆလောက် ပိုကြာပါမယ်'); }
+  };
   $('#fxFps30').onchange = e => { state.fxFps30 = e.target.checked; };
   $('#fxUnlock').onchange = e => {
     state.fxUnlock = e.target.checked;
@@ -1345,7 +1356,7 @@ async function step4() {
       file: state.file, videoDur: state.videoDur, segs: state.segs, burmese: state.burmese,
       persona, pitch: state.pitch, rate: state.rate,
       fx: {
-        ratio: state.fxRatio, fit: state.fxFit, zoom: state.fxZoom, fast: state.fxFast, fps30: state.fxFps30,
+        ratio: state.fxRatio, fit: state.fxFit, zoom: state.fxZoom, fast: state.fxFast, hd: state.fxHD && premPlan(), fps30: state.fxFps30,
         wm: { on: state.wmOn, text: state.wmText, pos: state.wmPos, size: state.wmSize },
         logo: { on: state.logoOn, data: state.logoData, pos: state.logoPos, size: state.logoSize },
         freeze: { on: state.frzOn, every: state.frzA, hold: state.frzB, zoom: state.frzZoom, amount: state.frzAmt },

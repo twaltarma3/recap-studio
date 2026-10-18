@@ -901,6 +901,15 @@ const RATIOS = { '9:16': 9 / 16, '3:4': 3 / 4, '16:9': 16 / 9, '1:1': 1 };
 export function outGeometry(sz, fx) {
   const W = even(sz.w), H = even(sz.h);
   const r = fx && RATIOS[fx.ratio];
+  // Premium 1080p: up to 1080 on the short side and 1920 on the long side (never larger than the source)
+  if (fx && fx.hd) {
+    if (!r) {
+      const k = Math.min(1, 1920 / Math.max(W, H), 1080 / Math.min(W, H));
+      return k < 1 ? { W, H, OW: even(W * k), OH: even(H * k), ratio: false, scaled: true } : { W, H, OW: W, OH: H, ratio: false };
+    }
+    const long = Math.min(Math.max(W, H), 1920);
+    return { W, H, OW: r <= 1 ? even(long * r) : even(long), OH: r <= 1 ? even(long) : even(long / r), ratio: true };
+  }
   if (!r) {
     // "fast" option: shrink a large original-ratio video to 720p — at most 720 on the short side and 1280 on the
     // long side (1920x1080 -> 1280x720, 1080x1080 -> 720x720, 1080x1920 -> 720x1280)
@@ -1394,7 +1403,7 @@ export async function renderDub({ file, videoDur, segs, burmese, persona, pitch,
     // build the list of ffmpeg attempts for a given video filter ('' = copy the video stream untouched)
     const build = (vf, withSubs, withOvl = false) => {
       const vMap = vf ? ['-map', '[v]'] : ['-map', '0:v:0'];
-      const enc = vf ? ['-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '27', '-pix_fmt', 'yuv420p', ...mtEnc()] : ['-c:v', 'copy'];
+      const enc = vf ? ['-c:v', 'libx264', '-preset', 'ultrafast', '-crf', fx && fx.hd ? '23' : '27', '-pix_fmt', 'yuv420p', ...mtEnc()] : ['-c:v', 'copy'];
       const tail = ['-c:a', 'aac', '-b:a', '128k', '-shortest', '-movflags', '+faststart', 'out.mp4'];
       const base = [...mtArgs(), ...mtIn(mainDec()), '-i', inName, ...mtIn(1), '-i', 'mix.wav', ...(withSubs ? [...mtIn(1), '-f', 'concat', '-safe', '0', '-i', 'subs.txt'] : []), ...(withOvl ? [...mtIn(1), '-i', 'ovl.png'] : [])];
       const list = [];
