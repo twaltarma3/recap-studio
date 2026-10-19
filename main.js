@@ -13,7 +13,7 @@ const state = {
   step: 1, showSrc: false, file: null, videoDur: 0, lang: 'auto', segs: [], sourceLines: [],
   burmese: [], personaId: 'TH', ...DEFAULTS, result: null, busy: false, origSegs: null,
   fxMirror: false, fxBlur: false, blurH: 15, blurY: 100, blurS: 50, blurO: 100, previewUrl: null, previewFor: null,
-  pStyle: 'recap', fxRatio: 'orig', fxFit: 'crop', fxZoom: 100, fxFast: true, fxHD: false, fxFps30: true, fxUnlock: false, wmOn: false, wmText: '', wmPos: 'br', wmSize: 4,
+  pStyle: 'chat', fxRatio: 'orig', fxFit: 'crop', fxZoom: 100, fxFast: true, fxHD: false, fxFps30: true, fxUnlock: false, wmOn: false, wmText: '', wmPos: 'br', wmSize: 4,
   logoOn: false, logoData: null, logoPos: 'tr', logoSize: 14, tab: 'video',
   frzOn: false, frzA: 4, frzB: 2, frzZoom: 'out', frzAmt: 20,
   fxSubs: false, subS: 5, subY: 88, subC: '#ffffff', subO: '#000000', subFont: 'pt16', fontOk: false
@@ -1055,7 +1055,7 @@ function step1() {
     </label>
     ${premPlan() ? `<div class="panel" style="margin-top:16px">
       <b>⚡ One-Click Auto <span class="pbadge">💎 Premium</span></b>
-      <p class="muted small" style="margin:6px 0 10px">ဘာသာပြန်ပုံစံနဲ့ အသံကို ရွေးပြီး <b>⚡ Auto နဲ့ Video ထုတ်မည်</b> ကိုနှိပ်ရင် စာသားထုတ် → ဘာသာပြန် → အသံထုတ် → Video ပေါင်း အကုန် အလိုအလျောက် လုပ်ပေးပါမယ်။ 🌐 VPN (US) ဖွင့်ထားပါ။</p>
+      <p class="muted small" style="margin:6px 0 10px">ဘာသာပြန်ပုံစံနဲ့ အသံကို ရွေးပြီး <b>⚡ Auto နဲ့ Video ထုတ်မည်</b> ကိုနှိပ်ရင် စာသားထုတ် → ဘာသာပြန် → အသံထုတ် → Video ပေါင်း အကုန် အလိုအလျောက် လုပ်ပေးပါမယ်။${IS_IOS ? ' 🌐 iPhone မှာ VPN (US) ဖွင့်ထားပါ။' : ''}</p>
       <b class="small">✍ ဘာသာပြန်ပုံစံ</b>
       <div class="chips" id="aStyle" style="margin:6px 0 0">${[['recap', '🔥 Recap (လှုပ်ရှား)'], ['chat', '💬 ရိုးရိုးစကားပြော']].map(([k, t]) => `<button type="button" class="chip ${state.pStyle === k ? 'on' : ''}" data-s="${k}">${t}</button>`).join('')}</div>
       ${voiceBlock()}
