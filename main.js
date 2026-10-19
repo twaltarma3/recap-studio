@@ -1557,7 +1557,7 @@ const AI_SAMPLE = `我去，你都干了什么？
 哦，现在不是讨论这的时候。你这家伙到底做了什么？
 我们可是夫妻。不是你说的，我们之间要慢慢培养感情吗？
 她发现自己被骗了，决定离开这个家。`;      // credit packages Admin hands out (≈ 87 / 187 / 312 minutes)
-const shareText = c => `🎬 Recap Studio${c.plan === 'premium' ? ' 💎 Premium' : ''}\nAccess Code: ${c.code}\n${c.plan === 'premium' ? `Credit ${fmtN(c.credits)} (≈ ${Math.floor((c.credits || 0) / L.CPM)} မိနစ်)` : `တစ်ရက် ${c.limit > 0 ? c.limit + ' ပုဒ်' : 'အကန့်အသတ်မရှိ'}`}${c.freeAai && c.plan !== 'premium' ? '\n🎁 AssemblyAI Key ထည့်စရာ မလို' : ''}${c.expires ? `\n${dateTxt(c.expires)} အထိ` : ''}\n${APP_URL}`;
+const shareText = c => `🎬 ClipZat MM${c.plan === 'premium' ? ' 💎 Premium' : ''}\nAccess Code: ${c.code}\n${c.plan === 'premium' ? `Credit ${fmtN(c.credits)} (≈ ${Math.floor((c.credits || 0) / L.CPM)} မိနစ်)` : `တစ်ရက် ${c.limit > 0 ? c.limit + ' ပုဒ်' : 'အကန့်အသတ်မရှိ'}`}${c.freeAai && c.plan !== 'premium' ? '\n🎁 AssemblyAI Key ထည့်စရာ မလို' : ''}${c.expires ? `\n${dateTxt(c.expires)} အထိ` : ''}\n${APP_URL}`;
 async function shareCode(c) {
   const text = shareText(c);
   try { if (navigator.share) { await navigator.share({ text }); return; } } catch (e) { if (e && e.name === 'AbortError') return; }
