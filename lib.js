@@ -72,8 +72,11 @@ export async function premiumAI(prompt, json = false) {
     if (busy && tries < 2) { await new Promise(res => setTimeout(res, tries ? 6000 : 2500)); continue; }
     if (busy) throw new Error('⏳ AI မှာ လူသုံးများနေလို့ ခဏ မအားပါ — ၁ မိနစ်လောက်နေ ပြန်နှိပ်ပါ');
     // customers see a calm "busy" note; only the owner (signed in to Admin on this phone) sees the quota detail
-    if (/ 429:/.test(j.detail || '')) throw new Error(access.adminPass
-      ? 'Admin: Gemini key ရဲ့ quota ပြည့်သွားပါပြီ — Admin → 🧪 မှာ key အသစ်ထည့်ပါ (သို့) Google AI Studio မှာ Billing ဖွင့်ပါ'
+    const keyOut = / 429:/.test(j.detail || ''), noPrepay = / 402:|prepay/i.test(j.detail || '');
+    if (keyOut || noPrepay) throw new Error(access.adminPass
+      ? (noPrepay
+        ? 'Admin: Gemini key ရဲ့ Billing project မှာ prepay credit $0 ဖြစ်နေပါတယ် — Admin → 🧪 မှာ free key ပြန်ထည့်ပါ (သို့) AI Studio မှာ credit ဝယ်ပါ'
+        : 'Admin: Gemini key ရဲ့ quota ပြည့်သွားပါပြီ — Admin → 🧪 မှာ key အသစ်ထည့်ပါ (သို့) Google AI Studio မှာ Billing ဖွင့်ပါ')
       : '⏳ AI က ခဏ မအားသေးပါ — ၅ မိနစ်လောက်နေ ပြန်နှိပ်ပါ။ အရေးကြီးရင် Copy Full Prompt နဲ့ Gemini မှာ ဘာသာပြန်လို့ရပါတယ်');
     if (/location is not supported/i.test(j.detail || '')) throw new Error('🌐 Auto ဘာသာပြန်ဖို့ VPN ဖွင့်ပြီး (US server ရွေးပြီး) ပြန်နှိပ်ပါ');
     throw new Error(PREMIUM_ERR[j.error] || ('AI မအောင်မြင်ပါ: ' + (j.detail || j.error || r.status)));
