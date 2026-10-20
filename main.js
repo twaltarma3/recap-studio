@@ -1321,6 +1321,14 @@ function bindVoice(onReset) {
   });
 }
 
+// 🎭 style: lines grouped by AssemblyAI's speaker letter, biggest first
+const spkGroups = () => {
+  const m = new Map();
+  state.segs.forEach((s, i) => { if (s.spk) { if (!m.has(s.spk)) m.set(s.spk, []); m.get(s.spk).push(i); } });
+  return [...m].sort((a, b) => b[1].length - a[1].length);
+};
+const spkIcon = ids => { const f = ids.filter(i => state.genders[i] === 'F').length; return f === 0 ? '🔵' : f === ids.length ? '🔴' : '🟣'; };
+
 function step3() {
   view.innerHTML = `
     <div class="row"><h2>မြန်မာဘာသာပြန်ကို စစ်ဆေးပါ</h2><button class="ghost" id="back">‹ နောက်သို့</button></div>
@@ -1329,6 +1337,9 @@ function step3() {
     ${state.pStyle === 'dub' && state.genders ? `<div class="panel" style="margin-top:12px">
       <b>🎭 ဘယ်စာကြောင်းကို ဘယ်အသံနဲ့ ပြောမလဲ</b>
       <p class="muted small" style="margin:4px 0 8px">🔵 သီဟ (ယောကျ်ား) · 🔴 နီလာ (မိန်းမ) — မှားနေရင် နှိပ်ပြီး ပြောင်းပါ</p>
+      ${spkGroups().length > 1 ? `<p class="small" style="margin:0 0 4px"><b>👥 လူတစ်ယောက်လုံး</b> <span class="muted">(အသံတူတဲ့ စာကြောင်းအားလုံး တစ်ချက်တည်း ပြောင်း)</span></p>
+      <div class="chips" id="gSpk" style="margin:0 0 10px">${spkGroups().map(([k, ids]) => `<button type="button" class="chip" data-k="${esc(k)}">${spkIcon(ids)} ${esc(k)} · ${ids.length} ကြောင်း</button>`).join('')}</div>
+      <p class="small" style="margin:0 0 4px"><b>📝 တစ်ကြောင်းချင်း</b></p>` : ''}
       <div id="gList" style="display:grid;gap:4px;max-height:320px;overflow:auto">${state.segs.map((s, i) => `<button type="button" class="chip" data-i="${i}" style="justify-content:flex-start;text-align:left;white-space:normal">${state.genders[i] === 'F' ? '🔴' : '🔵'} ${i + 1}. ${esc(state.burmese[i] || s.text)}</button>`).join('')}</div>
     </div>` : ''}
     ${voiceBlock()}
@@ -1341,9 +1352,21 @@ function step3() {
     return lines;
   };
   $('#mm').oninput = () => { state.burmese = read(); };
+  const paintG = () => {
+    view.querySelectorAll('#gList .chip').forEach(c => { const i = +c.dataset.i; c.textContent = `${state.genders[i] === 'F' ? '🔴' : '🔵'} ${i + 1}. ${state.burmese[i] || state.segs[i].text}`; });
+    const g = new Map(spkGroups());
+    view.querySelectorAll('#gSpk .chip').forEach(c => { const ids = g.get(c.dataset.k); c.textContent = `${spkIcon(ids)} ${c.dataset.k} · ${ids.length} ကြောင်း`; });
+  };
   view.querySelectorAll('#gList .chip').forEach(c => c.onclick = () => {
-    const i = +c.dataset.i; state.genders[i] = state.genders[i] === 'F' ? 'M' : 'F';
-    c.textContent = `${state.genders[i] === 'F' ? '🔴' : '🔵'} ${i + 1}. ${state.burmese[i] || state.segs[i].text}`;
+    const i = +c.dataset.i; state.genders[i] = state.genders[i] === 'F' ? 'M' : 'F'; paintG();
+  });
+  // a whole speaker (AssemblyAI's letter) at once: most lines of a voice are the same person
+  view.querySelectorAll('#gSpk .chip').forEach(c => c.onclick = () => {
+    const ids = new Map(spkGroups()).get(c.dataset.k);
+    // mixed (🟣) → all to the majority first; all the same → switch to the other voice
+    const f = ids.filter(i => state.genders[i] === 'F').length;
+    const to = f === 0 ? 'F' : f === ids.length ? 'M' : f * 2 > ids.length ? 'F' : 'M';
+    ids.forEach(i => { state.genders[i] = to; }); paintG();
   });
   $('#back').onclick = () => { state.burmese = read(); go(2); };
   bindVoice(() => { state.burmese = read(); step3(); });
