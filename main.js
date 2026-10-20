@@ -133,7 +133,10 @@ function clearResult() {
 }
 // friendly hint under an error box: what to check before trying again
 const errTip = html => view.insertAdjacentHTML('beforeend', `<div class="warn">${html}</div>`);
-const showErr = (e) => { const d = document.createElement('div'); d.className = 'err'; d.textContent = e.message || String(e); view.appendChild(d); };
+const showErr = (e) => {
+  const d = document.createElement('div'); d.className = 'err'; d.textContent = e.message || String(e); view.appendChild(d);
+  if (!view.querySelector('.errhelp')) view.insertAdjacentHTML('beforeend', `<p class="muted small errhelp" style="margin:6px 0 0">မဖြေရှင်းတတ်ရင် 👉 <a href="${TG_GROUP}" target="_blank" rel="noopener"><b>👥 Support Group</b></a> မှာ မေးပါ</p>`);
+};
 const IS_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 const download = (blob, name) => { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); };
 
@@ -200,6 +203,7 @@ function buildMenu() {
       <button class="ditem" data-p="premium"><span>💎</span><b>Premium</b><small>Auto ဘာသာပြန် · Key မလို</small></button>
       <button class="ditem" data-p="keys"><span>⚙</span><b>API Key Settings</b><small>AssemblyAI Key · FFmpeg Engine</small></button>
       <button class="ditem" data-p="guide"><span>📖</span><b>အသုံးပြုပုံ လမ်းညွှန်</b><small>အဆင့်လိုက် ရှင်းလင်းချက်</small></button>
+      <a class="ditem" href="${TG_GROUP}" target="_blank" rel="noopener" style="text-decoration:none"><span>👥</span><b>Support Group</b><small>မေးချင်တာ Telegram မှာ မေးပါ</small></a>
       <button class="ditem" data-p="history"><span>🗂</span><b>မှတ်တမ်း (History)</b><small>နောက်ဆုံး ထုတ်ထားတဲ့ Video ၂ ခု</small></button>
       <button class="ditem" data-p="cut"><span>✂</span><b>Video ဖြတ်မည်</b><small>အစ / အဆုံး ကို ပြန်မပေါင်းဘဲ အမြန်ဖြတ်</small></button>
       <button class="ditem" data-p="code" id="dCode" hidden><span>🔑</span><b>Access Code</b><small id="dCodeTxt">…</small></button>
@@ -208,7 +212,7 @@ function buildMenu() {
   burger.onclick = openDrawer;
   $('#scrim').onclick = closeDrawer;
   $('#dclose').onclick = closeDrawer;
-  document.querySelectorAll('.ditem').forEach(b => { b.onclick = () => {
+  document.querySelectorAll('.ditem[data-p]').forEach(b => { b.onclick = () => {
     if (b.dataset.p === 'free' && premPlan()) toast('💎 Premium Code နဲ့ ဝင်ထားလို့ Premium tab မှာ သုံးပါ');
     openPage(b.dataset.p);
   }; });
@@ -442,6 +446,7 @@ function pagePremium() {
 }
 
 const TG_BOT = 'https://t.me/RecapStudioMyanmar_bot';
+const TG_GROUP = 'https://t.me/Clipzatmm';
 
 /* ---------------- API Key Settings ---------------- */
 let ffBusy = false, ffCached = false;
