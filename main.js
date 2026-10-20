@@ -11,7 +11,7 @@ const $ = (s, r = document) => r.querySelector(s);
 const DEFAULTS = { pitch: 10, rate: 20, keepTalk: 0, keepGap: 0.3, offset: 0, maxTempo: 2.0, dubGain: 1.8 };
 const state = {
   step: 1, showSrc: false, file: null, videoDur: 0, lang: 'auto', segs: [], sourceLines: [],
-  burmese: [], personaId: 'TH', ...DEFAULTS, result: null, busy: false, origSegs: null,
+  burmese: [], genders: null, audioBlob: null, personaId: 'TH', ...DEFAULTS, result: null, busy: false, origSegs: null,
   fxMirror: false, fxBlur: false, blurH: 15, blurY: 100, blurS: 50, blurO: 100, previewUrl: null, previewFor: null,
   pStyle: 'chat', fxRatio: 'orig', fxFit: 'crop', fxZoom: 100, fxFast: true, fxHD: false, fxFps30: true, fxUnlock: false, wmOn: false, wmText: '', wmPos: 'br', wmSize: 4,
   logoOn: false, logoData: null, logoPos: 'tr', logoSize: 14, tab: 'video',
@@ -1062,7 +1062,8 @@ function step1() {
       <b>⚡ One-Click Auto <span class="pbadge">💎 Premium</span></b>
       <p class="muted small" style="margin:6px 0 10px">ဘာသာပြန်ပုံစံနဲ့ အသံကို ရွေးပြီး <b>⚡ Auto နဲ့ Video ထုတ်မည်</b> ကိုနှိပ်ရင် စာသားထုတ် → ဘာသာပြန် → အသံထုတ် → Video ပေါင်း အကုန် အလိုအလျောက် လုပ်ပေးပါမယ်။${IS_IOS ? ' 🌐 iPhone မှာ VPN (US) ဖွင့်ထားပါ။' : ''}</p>
       <b class="small">✍ ဘာသာပြန်ပုံစံ</b>
-      <div class="chips" id="aStyle" style="margin:6px 0 0">${[['recap', '🔥 Recap (လှုပ်ရှား)'], ['chat', '💬 ရိုးရိုးစကားပြော']].map(([k, t]) => `<button type="button" class="chip ${state.pStyle === k ? 'on' : ''}" data-s="${k}">${t}</button>`).join('')}</div>
+      <div class="chips" id="aStyle" style="margin:6px 0 0">${[['recap', '🔥 Recap (လှုပ်ရှား)'], ['chat', '💬 ရိုးရိုးစကားပြော'], ['dub', '🎭 ဇာတ်ကောင်စကား · Beta']].map(([k, t]) => `<button type="button" class="chip ${state.pStyle === k ? 'on' : ''}" data-s="${k}">${t}</button>`).join('')}</div>
+      <p class="muted small" style="margin:6px 0 0">🎭 <b>ဇာတ်ကောင်စကား</b> (စမ်းသပ်ဆဲ) — ဇာတ်ကောင်တွေ ပြောတဲ့အတိုင်း ဘာသာပြန်ပြီး ယောကျ်ားစကားကို သီဟ၊ မိန်းမစကားကို နီလာ အသံနဲ့ အလိုလို ခွဲထုတ်ပေးပါတယ်</p>
       ${voiceBlock()}
     </div>` : ''}
     <div style="position:sticky;bottom:0;z-index:4;margin:12px -6px 0;padding:10px 6px;background:linear-gradient(180deg,rgba(20,20,23,0),#141417 35%)">
@@ -1095,6 +1096,19 @@ function step1() {
   }
 }
 
+// 🎭 style: man or woman for each line — the AI's guess from the story, AssemblyAI's speaker letters and the
+// voice pitch; the user can still flip any line in step 3. Never fails: anything unknown gets the chosen voice.
+async function ensureGenders(onStatus) {
+  if (state.pStyle !== 'dub' || (state.genders && state.genders.length === state.segs.length)) return;
+  if (onStatus) onStatus('ယောကျ်ား / မိန်းမ အသံ ခွဲနေပါတယ်');
+  const main = L.PERSONAS.find(p => p.id === state.personaId)?.g === 'Female' ? 'F' : 'M';
+  const [ai, f0] = await Promise.all([
+    L.guessGenders(state.segs).catch(() => []),
+    state.audioBlob ? L.linePitch(state.audioBlob, state.segs).catch(() => []) : []
+  ]);
+  state.genders = L.pickVoices(state.segs, ai, f0, main);
+}
+
 // One-Click Auto, after the transcript: AI translation, then straight to the render (step 4).
 // Lines the AI left empty go to step 3 to fill in; an AI error goes to step 2 (Copy Full Prompt still works there).
 async function autoRest() {
@@ -1108,6 +1122,7 @@ async function autoRest() {
   const tick = setInterval(show, 500);
   try {
     const t = await L.autoTranslate(state.segs, state.pStyle, p => { real = Math.max(real, p); }).finally(() => clearInterval(tick));
+    await ensureGenders(txt => setProg(0.95, txt));
     stopClock(); state.busy = false;
     state.burmese = state.segs.map((_, i) => t[i] || '');
     const miss = state.burmese.filter(x => !x).length;
@@ -1135,7 +1150,9 @@ async function transcribeFlow(auto = false) {
     const names = { uploading: `Server သို့ ပို့နေပါသည် (${(wav.size / 1048576).toFixed(1)} MB)`, queued: 'တန်းစီစောင့်နေသည်', processing: 'စာသားထုတ်ယူနေပါသည်' };
     let tick = 0.3;
     state.origSegs = null;
-    state.segs = await L.transcribe(wav, state.lang, st => { tick = Math.min(tick + 0.04, 0.95); setProg(tick, names[st] || st); });
+    state.segs = await L.transcribe(wav, state.lang, st => { tick = Math.min(tick + 0.04, 0.95); setProg(tick, names[st] || st); },
+      { speakers: state.pStyle === 'dub' && premPlan() });
+    state.audioBlob = wav; state.genders = null;
     state.burmese = []; state.busy = false;
     if (premPlan()) L.accessCheck().then(r => { if (r && r.name) setQuota(r); }).catch(() => {});   // credits left after this video
     stopClock();
@@ -1157,7 +1174,7 @@ function step2() {
     <div class="row"><h2>မူရင်းစာသားကို စစ်ဆေးပါ</h2><button class="ghost" id="back">‹ နောက်သို့</button></div>
     <p class="muted">စာကြောင်းတစ်ကြောင်းလျှင် အချိန်တစ်ခု ကိုက်ထားသည်။ စာကြောင်းအရေအတွက် မပြောင်းပါနှင့်။ (${state.segs.length} lines)</p>
     <textarea id="src">${esc(state.segs.map(s => s.text).join('\n'))}</textarea>
-    <div class="chips" id="pStyle" style="margin:0 0 8px"><button type="button" class="chip" data-s="recap">🔥 Recap (လှုပ်ရှား)</button><button type="button" class="chip" data-s="chat">💬 ရိုးရိုးစကားပြော</button></div>
+    <div class="chips" id="pStyle" style="margin:0 0 8px"><button type="button" class="chip" data-s="recap">🔥 Recap (လှုပ်ရှား)</button><button type="button" class="chip" data-s="chat">💬 ရိုးရိုးစကားပြော</button>${premPlan() ? '<button type="button" class="chip" data-s="dub">🎭 ဇာတ်ကောင်စကား · Beta</button>' : ''}</div>
     ${isPremium() ? `<button id="autoTr" class="btn primary block">✨ Auto ဘာသာပြန်မည် <span class="pbadge">💎 Premium</span></button>
     <p class="muted small" style="margin:4px 0 10px">ခလုတ်တစ်ချက်နဲ့ AI က မြန်မာလို ဘာသာပြန်ပေးပါမယ် (စာကြောင်းများရင် ၁ မိနစ်လောက် ကြာနိုင်ပါတယ်)။</p>` : ''}
     <button id="copy" class="btn block">📋 Copy Full Prompt</button>
@@ -1206,17 +1223,19 @@ function step2() {
     const tick = setInterval(show, 500);
     try {
       const t = await L.autoTranslate(state.segs, state.pStyle, p => { real = Math.max(real, p); show(); }).finally(() => clearInterval(tick));
+      await ensureGenders(txt => { b.textContent = '🎭 ' + txt + '…'; });
       $('#json').value = JSON.stringify({ translations: t }, null, 1);
       const miss = t.filter(x => !x).length;
       toast(miss ? `⚠ ${miss} ကြောင်း ဘာသာမပြန်နိုင်ပါ — အဆင့် ၃ မှာ ဖြည့်ပါ (သို့) ထပ်နှိပ်ပါ` : `✅ ဘာသာပြန်ပြီးပါပြီ (${t.length} ကြောင်း) — စစ်ပြီး Next နှိပ်ပါ`);
     } catch (e) { toast(e.message.slice(0, 120)); }
     b.innerHTML = old; b.disabled = false; state.busy = false;
   });
-  $('#next').onclick = () => {
+  $('#next').onclick = async () => {
     try {
       const t = L.parseTranslations($('#json').value);
       if (t.length !== state.segs.length) toast(`အရေအတွက် မကိုက်ပါ (${t.length}/${state.segs.length}) — ဘာသာပြန် အဆင့်မှာ ပြင်ပါ`);
       state.burmese = state.segs.map((_, i) => t[i] || '');
+      if (state.pStyle === 'dub') { const b = $('#next'); b.disabled = true; await ensureGenders(txt => { b.textContent = '🎭 ' + txt + '…'; }); }
       go(3);
     } catch (e) { toast(e.message); }
   };
@@ -1302,11 +1321,27 @@ function bindVoice(onReset) {
   });
 }
 
+// 🎭 style: lines grouped by AssemblyAI's speaker letter, biggest first
+const spkGroups = () => {
+  const m = new Map();
+  state.segs.forEach((s, i) => { if (s.spk) { if (!m.has(s.spk)) m.set(s.spk, []); m.get(s.spk).push(i); } });
+  return [...m].sort((a, b) => b[1].length - a[1].length);
+};
+const spkIcon = ids => { const f = ids.filter(i => state.genders[i] === 'F').length; return f === 0 ? '🔵' : f === ids.length ? '🔴' : '🟣'; };
+
 function step3() {
   view.innerHTML = `
     <div class="row"><h2>မြန်မာဘာသာပြန်ကို စစ်ဆေးပါ</h2><button class="ghost" id="back">‹ နောက်သို့</button></div>
     <p class="muted">တစ်ကြောင်းလျှင် စာတစ်ကြောင်း။ (${state.segs.length} lines)</p>
     <textarea id="mm" style="min-height:300px">${esc(state.burmese.join('\n'))}</textarea>
+    ${state.pStyle === 'dub' && state.genders ? `<div class="panel" style="margin-top:12px">
+      <b>🎭 ဘယ်စာကြောင်းကို ဘယ်အသံနဲ့ ပြောမလဲ</b>
+      <p class="muted small" style="margin:4px 0 8px">🔵 သီဟ (ယောကျ်ား) · 🔴 နီလာ (မိန်းမ) — မှားနေရင် နှိပ်ပြီး ပြောင်းပါ</p>
+      ${spkGroups().length > 1 ? `<p class="small" style="margin:0 0 4px"><b>👥 လူတစ်ယောက်လုံး</b> <span class="muted">(အသံတူတဲ့ စာကြောင်းအားလုံး တစ်ချက်တည်း ပြောင်း)</span></p>
+      <div class="chips" id="gSpk" style="margin:0 0 10px">${spkGroups().map(([k, ids]) => `<button type="button" class="chip" data-k="${esc(k)}">${spkIcon(ids)} ${esc(k)} · ${ids.length} ကြောင်း</button>`).join('')}</div>
+      <p class="small" style="margin:0 0 4px"><b>📝 တစ်ကြောင်းချင်း</b></p>` : ''}
+      <div id="gList" style="display:grid;gap:4px;max-height:320px;overflow:auto">${state.segs.map((s, i) => `<button type="button" class="chip" data-i="${i}" style="justify-content:flex-start;text-align:left;white-space:normal">${state.genders[i] === 'F' ? '🔴' : '🔵'} ${i + 1}. ${esc(state.burmese[i] || s.text)}</button>`).join('')}</div>
+    </div>` : ''}
     ${voiceBlock()}
     <p id="cost" hidden></p>
     <button id="next" class="btn primary">အသံထုတ်ပြီး Video ပေါင်းမည်</button>`;
@@ -1317,6 +1352,22 @@ function step3() {
     return lines;
   };
   $('#mm').oninput = () => { state.burmese = read(); };
+  const paintG = () => {
+    view.querySelectorAll('#gList .chip').forEach(c => { const i = +c.dataset.i; c.textContent = `${state.genders[i] === 'F' ? '🔴' : '🔵'} ${i + 1}. ${state.burmese[i] || state.segs[i].text}`; });
+    const g = new Map(spkGroups());
+    view.querySelectorAll('#gSpk .chip').forEach(c => { const ids = g.get(c.dataset.k); c.textContent = `${spkIcon(ids)} ${c.dataset.k} · ${ids.length} ကြောင်း`; });
+  };
+  view.querySelectorAll('#gList .chip').forEach(c => c.onclick = () => {
+    const i = +c.dataset.i; state.genders[i] = state.genders[i] === 'F' ? 'M' : 'F'; paintG();
+  });
+  // a whole speaker (AssemblyAI's letter) at once: most lines of a voice are the same person
+  view.querySelectorAll('#gSpk .chip').forEach(c => c.onclick = () => {
+    const ids = new Map(spkGroups()).get(c.dataset.k);
+    // mixed (🟣) → all to the majority first; all the same → switch to the other voice
+    const f = ids.filter(i => state.genders[i] === 'F').length;
+    const to = f === 0 ? 'F' : f === ids.length ? 'M' : f * 2 > ids.length ? 'F' : 'M';
+    ids.forEach(i => { state.genders[i] = to; }); paintG();
+  });
   $('#back').onclick = () => { state.burmese = read(); go(2); };
   bindVoice(() => { state.burmese = read(); step3(); });
   $('#next').onclick = () => {
@@ -1357,9 +1408,12 @@ async function step4() {
       setQuota(a);
     }
     const persona = L.PERSONAS.find(p => p.id === state.personaId);
+    // 🎭 style: men's lines with သီဟ, women's with နီလာ (the voice settings apply to both)
+    const voices = state.pStyle === 'dub' && state.genders && state.genders.length === state.segs.length
+      ? state.genders.map(g => L.PERSONAS.find(p => p.g === (g === 'F' ? 'Female' : 'Male')) || persona) : null;
     const { video, placed, fellBack, fxFailed, fontFailed, diag, geoOk, ovlOk, subsOk, stats, timing, tries, src, out, engine, skipped } = await L.renderDub({
       file: state.file, videoDur: state.videoDur, segs: state.segs, burmese: state.burmese,
-      persona, pitch: state.pitch, rate: state.rate,
+      persona, voices, pitch: state.pitch, rate: state.rate,
       fx: {
         ratio: state.fxRatio, fit: state.fxFit, zoom: state.fxZoom, fast: state.fxFast, hd: state.fxHD && premPlan(), fps30: state.fxFps30,
         wm: { on: state.wmOn, text: state.wmText, pos: state.wmPos, size: state.wmSize },
