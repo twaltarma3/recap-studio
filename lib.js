@@ -492,16 +492,16 @@ function segmentWords(words) {
   const flush = () => {
     if (!cur) return;
     const text = tidy(cur.text);
-    if (text) segs.push({ start: cur.start / 1000, end: cur.end / 1000, text });
+    if (text) segs.push({ start: cur.start / 1000, end: cur.end / 1000, text, ...(cur.spk ? { spk: cur.spk } : {}) });
     cur = null;
   };
   for (const w of words) {
     if (cur) {
       const gap = (w.start - cur.end) / 1000;
       const dur = (w.end - cur.start) / 1000;
-      if (gap > SEG.gap || dur > SEG.maxDur || cur.text.length >= SEG.maxChars) flush();
+      if (gap > SEG.gap || dur > SEG.maxDur || cur.text.length >= SEG.maxChars || (w.speaker || '') !== (cur.spk || '')) flush();
     }
-    if (!cur) cur = { start: w.start, end: w.end, text: w.text };
+    if (!cur) cur = { start: w.start, end: w.end, text: w.text, spk: w.speaker || '' };
     else { cur.text += ' ' + w.text; cur.end = w.end; }
     if (ENDP.test(w.text.trim()) && (cur.end - cur.start) / 1000 >= SEG.minPunct) flush();
   }
@@ -538,10 +538,10 @@ function txSave(key, segs) {
   try { localStorage.setItem('txKeys', JSON.stringify(keys)); } catch {}
 }
 
-export async function transcribe(blob, lang, onStatus) {
+export async function transcribe(blob, lang, onStatus, opts = {}) {
   // same audio + same language -> reuse the earlier result (no new AssemblyAI call)
   const id = await audioId(blob);
-  const key = id ? `tx:${lang}:${blob.size}:${id}` : null;
+  const key = id ? `tx:${lang}:${blob.size}:${id}${opts.speakers ? ':spk' : ''}` : null;
   if (key) try {
     const hit = JSON.parse(localStorage.getItem(key) || 'null');
     if (Array.isArray(hit) && hit.length) { onStatus('processing'); return hit; }
@@ -551,13 +551,22 @@ export async function transcribe(blob, lang, onStatus) {
   const up = await aai('/v2/upload', { method: 'POST', body: blob, headers: { 'content-type': 'application/octet-stream' } });
   const body = { audio_url: up.upload_url };
   if (lang === 'auto') body.language_detection = true; else body.language_code = lang;
-  const t = await aai('/v2/transcript', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  if (opts.speakers) body.speaker_labels = true;         // 🎭 style: who is talking, from the voices themselves
+  let t;
   for (;;) {
-    await sleep(3000);
-    const s = await aai('/v2/transcript/' + t.id);
-    if (s.status === 'completed') break;
-    if (s.status === 'error') throw new Error('Server: ' + s.error);
-    onStatus(s.status);
+    t = await aai('/v2/transcript', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    let err = '';
+    for (;;) {
+      await sleep(3000);
+      const s = await aai('/v2/transcript/' + t.id);
+      if (s.status === 'completed') break;
+      if (s.status === 'error') { err = s.error || '?'; break; }
+      onStatus(s.status);
+    }
+    if (!err) break;
+    // speaker labels aren't offered for every language: transcribe again without them
+    if (body.speaker_labels && /speaker/i.test(err)) { delete body.speaker_labels; continue; }
+    throw new Error('Server: ' + err);
   }
 
   const full = await aai('/v2/transcript/' + t.id);
@@ -571,8 +580,102 @@ export async function transcribe(blob, lang, onStatus) {
   return segs;
 }
 
+// 🎭 style: what each character says, as they say it (dubbing), not a retold story
+function dubPrompt(segs) {
+  const lines = segs.map((s, i) => {
+    const slot = (i + 1 < segs.length ? segs[i + 1].start : s.end) - s.start;
+    return `ID: ${i} | Duration: ${Math.max(slot, s.end - s.start).toFixed(1)}s${s.spk ? ` | Speaker: ${s.spk}` : ''} | Text: "${s.text}"`;
+  }).join('\n');
+  return `You are a professional film DUBBING translator. First read ALL the lines to understand the story, the characters and how they are related. Then translate each line into natural spoken Burmese exactly as the character would SAY it on screen (Myanmar script ONLY, no English, no phonetic guides).
+
+FAITHFUL: Keep the meaning, intent and emotion of every line. Do NOT add, invent, explain or skip anything important. Keep dialogue as direct speech in first/second person (never "သူက ... လို့ ပြောတယ်"). A character's inner thought is also said in first person, as if talking to themself.
+
+SPOKEN BURMESE: Everyday colloquial Burmese (အပြောစကား), never literary forms (သည်၊ ၏၊ ၌၊ မည်၊ ၍၊ သို့၊ နှင့်၊ ထို၊ ၎င်း). Use spoken endings like တယ်၊ မယ်၊ လား၊ လဲ၊ နော်၊ ပေါ့၊ ကွာ၊ ဟ.
+
+WHO IS TALKING: Work out who is speaking to whom${segs.some(s => s.spk) ? ' (lines with the same Speaker letter are usually the same person)' : ''}. Choose pronouns and politeness that fit and keep them consistent. Use natural Burmese family and social titles: 爹/爸 → အဖေ, 妈 → အမေ, 阿姨 → အန်တီ, 叔叔 → ဦးလေး, 哥哥 → ကိုကို or အစ်ကို, 姐姐 → မမ, 二姐 → မမလတ်, 弟弟/妹妹 → ညီလေး/ညီမလေး. Questions stay questions, orders stay orders, surprise and shouting keep their feeling. Short sounds (嗯、哎、啊) become short Burmese sounds (အင်း၊ ဟူး၊ ဟာ).
+
+NAMES: Write Chinese names the way they sound in Burmese, short and the same every time (e.g. 许灵溪 → လင်းရှီ). Online nicknames: translate their meaning briefly.
+
+SLANG AND THINGS: Replace Chinese slang, internet words and brand nicknames with what a Burmese viewer would understand (e.g. 大牛 → လမ်ဘော်ဂီနီ, 上门女婿 → သမက်ဝင်စား, 八百遍 → အခါတစ်ရာ).
+
+TIMING (very important): Burmese is spoken at about 4 syllables per second. Each line must be at most (Duration × 4) syllables — for example 2.0s → at most 8 syllables, 1.0s → at most 4. If a line is too long, keep the key meaning and use the shortest natural words; drop filler, repeated words and small details.
+
+LINE SPLITS: Each line is spoken as a separate audio clip, so NEVER cut a Burmese word or phrase in half. Every line must start and end with a whole word and sound complete alone. If a sentence goes on to the next line, end this line at a natural pause and continue on the next line. Keep the same order and the same number of lines; never merge lines.
+
+PUNCTUATION: Do NOT use "...", "…", quotation marks or brackets. Use only ၊ and ။.
+
+Return ONLY a JSON object: {"translations": ["...", "..."]} with exactly one string per ID, in order.
+
+Inputs:
+${lines}`;
+}
+
+// 🎭 style: is each line said by a man or a woman? The AI judges from the story; AssemblyAI's speaker letters
+// (from the voices) and the voice pitch help. Returns 'M' / 'F' per line.
+export async function guessGenders(segs) {
+  const lines = segs.map((s, i) => `ID: ${i}${s.spk ? ` | Speaker: ${s.spk}` : ''} | Text: "${s.text}"`).join('\n');
+  const text = await premiumAI(`These are the subtitle lines of a movie clip, in order. For each line decide whether the person SAYING it is male (M) or female (F). Read all lines first to understand the story, the characters and who is talking to whom (titles like 爹/哥哥 = male, 妈/阿姨/姐姐/妹妹 = female; the person being addressed is not the speaker).${segs.some(s => s.spk) ? ' Lines with the same Speaker letter come from the same voice, so they are usually the same person.' : ''} For short sounds or unclear lines, use who is most likely talking at that moment.
+Return ONLY a JSON object: {"genders": ["M", "F", ...]} with exactly one entry per ID, in order.
+
+${lines}`, true);
+  const a = text.indexOf('{'), b = text.lastIndexOf('}');
+  const g = JSON.parse(text.slice(a, b + 1)).genders;
+  return Array.isArray(g) ? segs.map((_, i) => (String(g[i] || '').toUpperCase().startsWith('F') ? 'F' : String(g[i] || '').toUpperCase().startsWith('M') ? 'M' : '')) : [];
+}
+
+// voice pitch of each line (median, Hz) from the audio sent for transcription; null where it can't be told
+// (music, noise, too short). Men usually speak below ~150 Hz, women above ~190 Hz.
+export async function linePitch(blob, segs) {
+  const SR = 8000, W = 320;
+  const ctx = new OfflineAudioContext(1, SR, SR);
+  const buf = await ctx.decodeAudioData(await blob.arrayBuffer());
+  const x = buf.getChannelData(0);
+  const out = [];
+  for (let n = 0; n < segs.length; n++) {
+    const a = Math.floor(segs[n].start * SR), b = Math.min(x.length, Math.floor(segs[n].end * SR));
+    let all = 0; for (let k = a; k < b; k++) all += x[k] * x[k];
+    const rmsAll = Math.sqrt(all / Math.max(1, b - a)) + 1e-9;
+    const f = [];
+    for (let k = a; k + W <= b; k += W) {
+      let m = 0; for (let j = 0; j < W; j++) m += x[k + j]; m /= W;
+      let e = 0; for (let j = 0; j < W; j++) { const v = x[k + j] - m; e += v * v; }
+      if (Math.sqrt(e / W) < rmsAll * 0.6) continue;
+      let best = 0, bl = 0;
+      for (let lag = 20; lag < 115; lag++) {
+        let c = 0, p = 0, q = 0;
+        for (let j = 0; j + lag < W; j++) { const u = x[k + j] - m, v = x[k + j + lag] - m; c += u * v; p += u * u; q += v * v; }
+        c /= Math.sqrt(p * q) + 1e-9;
+        if (c > best) { best = c; bl = lag; }
+      }
+      if (best > 0.6) f.push(SR / bl);
+    }
+    f.sort((p, q) => p - q);
+    out.push(f.length >= 3 ? f[f.length >> 1] : null);
+    if (n % 20 === 19) await new Promise(r => setTimeout(r, 0));   // let the page breathe on long videos
+  }
+  return out;
+}
+
+// one decision per AssemblyAI speaker where there are speaker letters (the AI's vote, with the pitch as a
+// tie-breaker), otherwise per line; anything still unknown gets the voice the user picked
+export function pickVoices(segs, ai = [], f0 = [], main = 'M') {
+  const byPitch = hz => (hz == null ? '' : hz < 150 ? 'M' : hz > 190 ? 'F' : '');
+  const out = segs.map((_, i) => ai[i] || byPitch(f0[i]) || main);
+  const groups = new Map();
+  segs.forEach((s, i) => { if (s.spk) { if (!groups.has(s.spk)) groups.set(s.spk, []); groups.get(s.spk).push(i); } });
+  for (const ids of groups.values()) {
+    const m = ids.filter(i => ai[i] === 'M').length, w = ids.filter(i => ai[i] === 'F').length;
+    const hz = ids.map(i => f0[i]).filter(v => v != null).sort((p, q) => p - q);
+    const pv = byPitch(hz.length ? hz[hz.length >> 1] : null);
+    const g = m + w && Math.max(m, w) / (m + w) >= 0.7 ? (m >= w ? 'M' : 'F') : pv || (m > w ? 'M' : w > m ? 'F' : main);
+    for (const i of ids) out[i] = g;
+  }
+  return out;
+}
+
 /* ---------- Gemini prompt (same format as the original app) ---------- */
 export function buildPrompt(segs, style = 'recap') {
+  if (style === 'dub') return dubPrompt(segs);
   const lines = segs.map((s, i) => {
     const slot = (i + 1 < segs.length ? segs[i + 1].start : s.end) - s.start;
     return `ID: ${i} | Duration: ${Math.max(slot, s.end - s.start).toFixed(1)}s | Text: "${s.text}"`;
@@ -1282,7 +1385,7 @@ function dubStats(placed, maxTempo) {
   return { lateCount: d.filter(x => x > 0.5).length, maxDrift: Math.max(0, ...d), longLines };
 }
 
-export async function renderDub({ file, videoDur, segs, burmese, persona, pitch, rate = 0, fx = null, keepTalk = 0, keepGap = 0, offset = 0, maxTempo = 1.7, dubGain = 1.6, onProgress }) {
+export async function renderDub({ file, videoDur, segs, burmese, persona, voices = null, pitch, rate = 0, fx = null, keepTalk = 0, keepGap = 0, offset = 0, maxTempo = 1.7, dubGain = 1.6, onProgress }) {
   const n = segs.length;
   const f = await getFFmpeg();
   // flog: last 400 log lines (for error reports); fhead: first lines of the current run (input stream info)
@@ -1309,10 +1412,10 @@ export async function renderDub({ file, videoDur, segs, burmese, persona, pitch,
     const run = async lane => {
       while (todo.length && !failed && lane < lanes) {   // one line failed for good -> the other workers stop too
         const i = todo.shift();
-        try { raw[i] = await ttsCached(burmese[i], persona, pitch, rate, slowDown); }
+        try { raw[i] = await ttsCached(burmese[i], (voices && voices[i]) || persona, pitch, rate, slowDown); }
         catch (e) {
           if (!isNoAudio(e)) { failed = true; throw e; }
-          try { raw[i] = await ttsPieces(burmese[i], persona, pitch, rate); }
+          try { raw[i] = await ttsPieces(burmese[i], (voices && voices[i]) || persona, pitch, rate); }
           catch (e2) {
             if (!isNoAudio(e2) && !/no smaller pieces/.test(e2.message)) { failed = true; throw e2; }
             skipped.push(i);
