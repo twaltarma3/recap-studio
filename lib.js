@@ -92,14 +92,14 @@ export async function autoTranslate(segs, style, onProgress) {
   let done = 0;
   const tryAll = async () => {
     const text = await premiumAI(buildPrompt(segs, style), true);
-    try { const t = parseTranslations(text); return t.length === segs.length ? t : null; } catch { return null; }
+    try { const t = parseTranslations(text); return t.length === segs.length && !(t.keyed && t.some(x => !x)) ? t : null; } catch { return null; }
   };
   const run = async (from, to, tries = 0) => {
     const part = segs.slice(from, to);
     const text = await premiumAI(buildPrompt(part, style), true);
     let t = [];
     try { t = parseTranslations(text); } catch {}
-    if (t.length === part.length) {
+    if (t.length === part.length && !(t.keyed && t.some(x => !x))) {
       t.forEach((x, i) => { out[from + i] = x; });
       done += part.length; if (onProgress) onProgress(done / segs.length);
       return;
@@ -506,7 +506,31 @@ function segmentWords(words) {
     if (ENDP.test(w.text.trim()) && (cur.end - cur.start) / 1000 >= SEG.minPunct) flush();
   }
   flush();
-  return segs;
+  return joinScraps(segs);
+}
+// a line of one or two characters/words without an end mark, right before the next line, is a scrap of a cut
+// sentence or name: put it in front of the next line (keeping the speaker of the longer part)
+function joinScraps(segs) {
+  const size = t => { const c = t.replace(/[\s\p{P}]/gu, ''); return /[\u3000-\u9fff]/.test(c) ? c.length : t.split(/\s+/).filter(Boolean).length; };
+  const out = [];
+  for (let i = 0; i < segs.length; i++) {
+    let s = segs[i];
+    while (i + 1 < segs.length && size(s.text) <= 2 && !ENDP.test(s.text) && segs[i + 1].start - s.end < 1.0) {
+      const n = segs[++i];
+      const spk = size(n.text) >= size(s.text) ? n.spk : s.spk;
+      s = { start: s.start, end: n.end, text: tidy(s.text + ' ' + n.text), ...(spk ? { spk } : {}) };
+    }
+    out.push(s);
+  }
+  // "二姐，林" + "峰，你…": one or two Chinese characters after the last comma begin the next line's words
+  for (let i = 0; i + 1 < out.length; i++) {
+    const m = out[i].text.match(/^(.*[，,、；;：:])\s*([\u3400-\u9fff]{1,2})$/u);
+    if (m && out[i + 1].start - out[i].end < 1.0) {
+      out[i] = { ...out[i], text: m[1] };
+      out[i + 1] = { ...out[i + 1], text: tidy(m[2] + out[i + 1].text) };
+    }
+  }
+  return out;
 }
 
 // fingerprint of the audio itself (size alone is the same for any two videos of equal length)
@@ -604,7 +628,7 @@ LINE SPLITS: Each line is spoken as a separate audio clip, so NEVER cut a Burmes
 
 PUNCTUATION: Do NOT use "...", "…", quotation marks or brackets. Use only ၊ and ။.
 
-Return ONLY a JSON object: {"translations": ["...", "..."]} with exactly one string per ID, in order.
+Return ONLY a JSON object that maps EVERY ID to its Burmese line, for example {"lines": {"0": "...", "1": "...", "2": "..."}}. Every ID from the inputs must appear exactly once, even very short ones.
 
 Inputs:
 ${lines}`;
@@ -787,8 +811,15 @@ export function parseTranslations(raw) {
   if (a < 0 || b < 0) throw new Error('JSON မတွေ့ပါ — Gemini ရလဒ်ကို အကုန် paste လုပ်ပါ');
   let obj;
   try { obj = JSON.parse(s.slice(a, b + 1)); } catch { throw new Error('JSON ပုံစံ မမှန်ပါ'); }
+  const clean = x => String(x ?? '').replace(/\s*\n\s*/g, ' ').trim();
+  if (obj.lines && typeof obj.lines === 'object' && !Array.isArray(obj.lines)) {
+    const ids = Object.keys(obj.lines).map(Number).filter(n => Number.isInteger(n) && n >= 0);
+    const out = Array.from({ length: ids.length ? Math.max(...ids) + 1 : 0 }, (_, i) => clean(obj.lines[i]));
+    out.keyed = true;                                 // a missing ID is an empty line here, never a shift
+    return out;
+  }
   if (!Array.isArray(obj.translations)) throw new Error('"translations" array မတွေ့ပါ');
-  return obj.translations.map(x => String(x ?? '').replace(/\s*\n\s*/g, ' ').trim());
+  return obj.translations.map(clean);
 }
 
 /* ---------- cut a finished video (start / end) without re-encoding ---------- */
