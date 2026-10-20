@@ -1062,7 +1062,7 @@ function step1() {
       <b>⚡ One-Click Auto <span class="pbadge">💎 Premium</span></b>
       <p class="muted small" style="margin:6px 0 10px">ဘာသာပြန်ပုံစံနဲ့ အသံကို ရွေးပြီး <b>⚡ Auto နဲ့ Video ထုတ်မည်</b> ကိုနှိပ်ရင် စာသားထုတ် → ဘာသာပြန် → အသံထုတ် → Video ပေါင်း အကုန် အလိုအလျောက် လုပ်ပေးပါမယ်။${IS_IOS ? ' 🌐 iPhone မှာ VPN (US) ဖွင့်ထားပါ။' : ''}</p>
       <b class="small">✍ ဘာသာပြန်ပုံစံ</b>
-      <div class="chips" id="aStyle" style="margin:6px 0 0">${[['recap', '🔥 Recap (လှုပ်ရှား)'], ['chat', '💬 ရိုးရိုးစကားပြော'], ['dub', '🎭 ဇာတ်ကောင်စကား']].map(([k, t]) => `<button type="button" class="chip ${state.pStyle === k ? 'on' : ''}" data-s="${k}">${t}</button>`).join('')}</div>
+      <div class="chips" id="aStyle" style="margin:6px 0 0">${[['recap', '🔥 Recap (လှုပ်ရှား)'], ['chat', '💬 ရိုးရိုးစကားပြော'], ['dub', '🎭 ဇာတ်ကောင်စကား · Beta']].map(([k, t]) => `<button type="button" class="chip ${state.pStyle === k ? 'on' : ''}" data-s="${k}">${t}</button>`).join('')}</div>
       <p class="muted small" style="margin:6px 0 0">🎭 <b>ဇာတ်ကောင်စကား</b> (စမ်းသပ်ဆဲ) — ဇာတ်ကောင်တွေ ပြောတဲ့အတိုင်း ဘာသာပြန်ပြီး ယောကျ်ားစကားကို သီဟ၊ မိန်းမစကားကို နီလာ အသံနဲ့ အလိုလို ခွဲထုတ်ပေးပါတယ်</p>
       ${voiceBlock()}
     </div>` : ''}
@@ -1174,7 +1174,7 @@ function step2() {
     <div class="row"><h2>မူရင်းစာသားကို စစ်ဆေးပါ</h2><button class="ghost" id="back">‹ နောက်သို့</button></div>
     <p class="muted">စာကြောင်းတစ်ကြောင်းလျှင် အချိန်တစ်ခု ကိုက်ထားသည်။ စာကြောင်းအရေအတွက် မပြောင်းပါနှင့်။ (${state.segs.length} lines)</p>
     <textarea id="src">${esc(state.segs.map(s => s.text).join('\n'))}</textarea>
-    <div class="chips" id="pStyle" style="margin:0 0 8px"><button type="button" class="chip" data-s="recap">🔥 Recap (လှုပ်ရှား)</button><button type="button" class="chip" data-s="chat">💬 ရိုးရိုးစကားပြော</button>${premPlan() ? '<button type="button" class="chip" data-s="dub">🎭 ဇာတ်ကောင်စကား</button>' : ''}</div>
+    <div class="chips" id="pStyle" style="margin:0 0 8px"><button type="button" class="chip" data-s="recap">🔥 Recap (လှုပ်ရှား)</button><button type="button" class="chip" data-s="chat">💬 ရိုးရိုးစကားပြော</button>${premPlan() ? '<button type="button" class="chip" data-s="dub">🎭 ဇာတ်ကောင်စကား · Beta</button>' : ''}</div>
     ${isPremium() ? `<button id="autoTr" class="btn primary block">✨ Auto ဘာသာပြန်မည် <span class="pbadge">💎 Premium</span></button>
     <p class="muted small" style="margin:4px 0 10px">ခလုတ်တစ်ချက်နဲ့ AI က မြန်မာလို ဘာသာပြန်ပေးပါမယ် (စာကြောင်းများရင် ၁ မိနစ်လောက် ကြာနိုင်ပါတယ်)။</p>` : ''}
     <button id="copy" class="btn block">📋 Copy Full Prompt</button>
