@@ -54,6 +54,7 @@ async function premiumFetch(path, opts = {}) {
   }
 }
 const PREMIUM_ERR = {
+  bad_audio: 'Video ထဲက အသံကို ဖတ်မရပါ — Video ကို ပြန်ရွေးပြီး ပြန်စမ်းပါ',
   premium_only: 'Premium Code မဟုတ်တော့ပါ (သို့) ပိတ်ထားပါတယ်',
   no_credit: '💎 Credit မလောက်တော့ပါ — Admin ဆီက ထပ်ဖြည့်ပါ',
   premium_cap: 'ယနေ့အတွက် Premium အလိုအလျောက် သုံးခွင့် ပြည့်သွားပါပြီ — မနက်ဖြန် ပြန်သုံးပါ',
@@ -331,12 +332,41 @@ export async function extractAudio(file, onProg) {
   try { await f.writeFile(inName, await fetchFile(file)); }
   catch { throw new Error('Video ဖိုင်ကို ဖတ်မရပါ — ဖုန်း Downloads/Movies ထဲက ဖိုင်ကို ပြန်ရွေးပါ'); }
   keptInput = inName;
-  const code = await ffRun(f, ['-i', inName, '-vn', '-ac', '1', '-ar', '16000', '-f', 'wav', 'a.wav']);
+  // small MP3 (32 kbps, about 8× smaller than WAV) so the upload is quick on mobile data; WAV if MP3 fails
+  let out = 'a.mp3', code = await ffRun(f, ['-i', inName, '-vn', '-ac', '1', '-ar', '16000', '-c:a', 'libmp3lame', '-b:a', '32k', '-f', 'mp3', out]);
+  if (code !== 0) { out = 'a.wav'; code = await ffRun(f, ['-i', inName, '-vn', '-ac', '1', '-ar', '16000', '-f', 'wav', out]); }
   if (code !== 0) throw new Error('Video ထဲက အသံကို ထုတ်မရပါ');
-  const data = await f.readFile('a.wav');
-  await f.deleteFile('a.wav');
-  return new Blob([data.slice().buffer], { type: 'audio/wav' });
+  const data = await f.readFile(out);
+  await f.deleteFile(out);
+  const blob = new Blob([data.slice().buffer], { type: out === 'a.mp3' ? 'audio/mpeg' : 'audio/wav' });
+  blob.secs = audioSecs(data);
+  return blob;
 }
+// length in seconds of an uploaded audio file, read from the file itself (WAV header, or by counting MP3 frames)
+export function audioSecs(buf) {
+  const b = new Uint8Array(buf), n = b.length;
+  if (n > 44 && b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46) {          // "RIFF"
+    const rate = b[28] | b[29] << 8 | b[30] << 16 | b[31] << 24;                            // byte rate
+    return rate > 0 ? (n - 44) / rate : 0;
+  }
+  let i = 0;
+  if (n > 10 && b[0] === 0x49 && b[1] === 0x44 && b[2] === 0x33) i = 10 + ((b[6] & 127) << 21 | (b[7] & 127) << 14 | (b[8] & 127) << 7 | (b[9] & 127));   // ID3 tag
+  const BR = [[0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320], [0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160]];
+  const SR = [[44100, 48000, 32000], [22050, 24000, 16000], [11025, 12000, 8000]];
+  let secs = 0;
+  while (i + 4 <= n) {
+    if (b[i] !== 0xff || (b[i + 1] & 0xe0) !== 0xe0) { i++; continue; }
+    const ver = (b[i + 1] >> 3) & 3, layer = (b[i + 1] >> 1) & 3, bri = b[i + 2] >> 4, sri = (b[i + 2] >> 2) & 3, pad = (b[i + 2] >> 1) & 1;
+    if (ver === 1 || layer !== 1 || bri === 0 || bri === 15 || sri === 3) { i++; continue; }  // Layer III only
+    const v1 = ver === 3, sr = SR[v1 ? 0 : ver === 2 ? 1 : 2][sri], br = BR[v1 ? 0 : 1][bri] * 1000;
+    const len = Math.floor((v1 ? 144 : 72) * br / sr) + pad;
+    if (len < 24) { i++; continue; }
+    secs += (v1 ? 1152 : 576) / sr;
+    i += len;
+  }
+  return secs;
+}
+
 
 /* ---------- TikTok link -> video file (through the worker) ---------- */
 const DL_ERR = {
@@ -412,13 +442,14 @@ const FREE_ERR = {
   free_cap: 'ယနေ့အတွက် စာသားထုတ်ခွင့် ပြည့်သွားပါပြီ — မနက်ဖြန် ပြန်စမ်းပါ (သို့) ကိုယ်ပိုင် AssemblyAI key ထည့်ပါ',
   too_long: 'Key မလိုတဲ့ Code နဲ့ Video ၁၀ မိနစ်အထိပဲ ရပါတယ် — ဖြတ်ပြီး တင်ပါ (သို့) ကိုယ်ပိုင် AssemblyAI key ထည့်ပါ',
   no_free_key: 'Admin က Key မထည့်ရသေးပါ — ခဏနေ ပြန်စမ်းပါ (သို့) ကိုယ်ပိုင် AssemblyAI key ထည့်ပါ',
-  free_off: 'ဒီ Code မှာ Key မလို ခွင့် ပိတ်ထားပါတယ် — API Key Settings မှာ ကိုယ်ပိုင် key ထည့်ပါ'
+  free_off: 'ဒီ Code မှာ Key မလို ခွင့် ပိတ်ထားပါတယ် — API Key Settings မှာ ကိုယ်ပိုင် key ထည့်ပါ',
+  bad_audio: 'Video ထဲက အသံကို ဖတ်မရပါ — Video ကို ပြန်ရွေးပြီး ပြန်စမ်းပါ'
 };
 async function aai(path, opts = {}) {
   // Premium: the Worker uses the owner's AssemblyAI key, so the user needs none
   if (premium.on) {
-    // the Worker charges by length: 16 kHz mono 16-bit WAV is 32000 bytes a second (it also reads content-length)
-    if (opts.body instanceof Blob) opts = { ...opts, headers: { ...(opts.headers || {}), 'x-secs': String(Math.max(0, (opts.body.size - 44) / 32000)) } };
+    // the Worker charges by length, which it measures from the audio itself (x-secs is only a hint for old Workers)
+    if (opts.body instanceof Blob) opts = { ...opts, headers: { ...(opts.headers || {}), 'x-secs': String(opts.body.secs || Math.max(0, (opts.body.size - 44) / 32000)) } };
     const r = await premiumFetch('/premium/aai' + path, opts);
     if (!r.ok) {
       const t = await r.text(); let j = {}; try { j = JSON.parse(t); } catch {}

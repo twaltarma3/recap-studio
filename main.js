@@ -1126,8 +1126,8 @@ async function transcribeFlow(auto = false) {
     state.videoDur = await L.videoDuration(state.file).catch(() => 0);   // browser can't decode some codecs; ffmpeg still can
     setProg(0.05, 'အသံ ဆွဲထုတ်နေသည်');
     const wav = await L.extractAudio(state.file, p => setProg(0.05 + p * 0.2, 'အသံ ဆွဲထုတ်နေသည်'));
-    if (!state.videoDur) state.videoDur = Math.max(0, (wav.size - 44) / 32000);   // 16 kHz mono 16-bit wav
-    const names = { uploading: 'Server သို့ ပို့နေပါသည်', queued: 'တန်းစီစောင့်နေသည်', processing: 'စာသားထုတ်ယူနေပါသည်' };
+    if (!state.videoDur) state.videoDur = wav.secs || 0;
+    const names = { uploading: `Server သို့ ပို့နေပါသည် (${(wav.size / 1048576).toFixed(1)} MB)`, queued: 'တန်းစီစောင့်နေသည်', processing: 'စာသားထုတ်ယူနေပါသည်' };
     let tick = 0.3;
     state.origSegs = null;
     state.segs = await L.transcribe(wav, state.lang, st => { tick = Math.min(tick + 0.04, 0.95); setProg(tick, names[st] || st); });
