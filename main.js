@@ -61,10 +61,24 @@ function toast(msg) {
 // progress card: a ring with the %, what is happening now, the stages (One-Click Auto shows all four), time and tips
 const PSTEPS = [['text', '📝', 'စာသားထုတ်'], ['tr', '✨', 'ဘာသာပြန်'], ['voice', '🎙', 'အသံထုတ်'], ['video', '🎬', 'Video ပေါင်း']];
 const stageOf = t => /ဘာသာပြန်/.test(t) ? 'tr'
-  : /ဗီဒီယို|Video|Watermark|စာတန်းထိုး|သိမ်းနေ|ပြီးပါပြီ/.test(t) ? 'video'
-  : /မြန်မာအသံ|အသံကို|အသံတွေ/.test(t) ? 'voice' : 'text';
+  : /မြန်မာအသံ|အသံကို|အသံတွေ/.test(t) ? 'voice'        // before 'video': "အသံကို ဗီဒီယိုအချိန်နဲ့ ညှိ…" is still the voice
+  : /ဗီဒီယို|Video|Watermark|စာတန်းထိုး|သိမ်းနေ|ပြီးပါပြီ/.test(t) ? 'video' : 'text';
 const RING = 2 * Math.PI * 54;
-const bar = (stages = state.autoRun ? PSTEPS.map(x => x[0]) : []) => `<div class="prog">
+// the run's checklist: when each stage started and ended (One-Click Auto keeps it across its three pages)
+let prun = null;
+// seconds each stage took per minute of video on this phone, learnt from earlier runs (for the time left)
+const stageRates = () => { try { return JSON.parse(localStorage.getItem('stageRates') || '{}') || {}; } catch { return {}; } };
+function learnRates() {
+  const mins = (state.videoDur || 0) / 60; if (!prun || !(mins > 0.1)) return;
+  const r = stageRates();
+  for (const k of prun.stages) if (prun.start[k] && prun.end[k]) { const v = (prun.end[k] - prun.start[k]) / 1000 / mins; r[k] = r[k] ? r[k] * 0.6 + v * 0.4 : v; }
+  try { localStorage.setItem('stageRates', JSON.stringify(r)); } catch {}
+}
+const bar = (stages = state.autoRun ? PSTEPS.map(x => x[0]) : []) => {
+  const key = stages.join();
+  if (!prun || prun.key !== key || prun.done || !state.autoRun) prun = { key, stages, start: {}, end: {}, cur: null, t0: Date.now() };
+  prun.phaseT0 = Date.now(); prun.f = 0;
+  return `<div class="prog">
   <div class="prog-ring"><svg viewBox="0 0 120 120" aria-hidden="true">
     <defs><linearGradient id="pgGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#009cfd"/><stop offset=".55" stop-color="#00c5fe"/><stop offset="1" stop-color="#f5c451"/></linearGradient></defs>
     <circle cx="60" cy="60" r="54" class="pr-track"/><circle cx="60" cy="60" r="54" class="pr-fill" id="pring" stroke-dasharray="${RING.toFixed(1)}" stroke-dashoffset="${RING.toFixed(1)}"/>
@@ -72,10 +86,46 @@ const bar = (stages = state.autoRun ? PSTEPS.map(x => x[0]) : []) => `<div class
   <div class="prog-now"><span id="ptxt">စတင်နေပါတယ်</span><span class="pdots"><i></i><i></i><i></i></span></div>
   <div class="prog-sub" id="psub"></div>
   <div class="bar"><i id="fill"></i></div>
-  ${stages.length > 1 ? `<div class="prog-steps">${PSTEPS.filter(x => stages.includes(x[0])).map(([k, ic, t]) => `<span data-st="${k}"><em>${ic}</em>${t}</span>`).join('')}</div>` : ''}
-  <div class="ptime">⏱ ကြာချိန် <b id="ptime">0:00</b></div>
+  ${stages.length > 1 ? `<div class="prog-list">${PSTEPS.filter(x => stages.includes(x[0])).map(([k, ic, t]) => `<div data-st="${k}"><em>${ic}</em><span>${t}</span><small></small></div>`).join('')}</div>` : ''}
+  <div class="ptime">⏱ ကြာချိန် <b id="ptime">0:00</b><span id="pleft"></span></div>
   <p class="prog-tip" id="ptip"></p>
 </div>`;
+};
+// the video is out: close the checklist and keep how long each stage took on this phone
+function finishRun() {
+  if (!prun || prun.done) return;
+  if (prun.cur) prun.end[prun.cur] = Date.now();
+  prun.done = true; learnRates();
+}
+// time left: from earlier runs on this phone (each stage's seconds per minute of video) and from this page's
+// speed so far; the larger of the two, since a page's % can creep near its end
+function timeLeft() {
+  if (!prun || !prun.cur || prun.done) return null;
+  const now = Date.now(), el = (now - prun.phaseT0) / 1000, f = prun.f;
+  const r = stageRates(), mins = (state.videoDur || 0) / 60, rest = prun.stages.slice(prun.stages.indexOf(prun.cur));
+  const byRuns = mins && rest.every(k => r[k])
+    ? rest.reduce((t, k) => t + (k === prun.cur ? Math.max(0, r[k] * mins - (now - prun.start[k]) / 1000) : r[k] * mins), 0) : null;
+  let bySpeed = null;
+  if (prun.cur !== 'text' && prun.cur !== 'tr' && f >= 0.05 && f < 1 && el >= 5) {   // their % only creeps while the server works
+    const later = rest.slice(1).filter(k => !(prun.cur === 'voice' && k === 'video'));   // voice + video share one page
+    if (later.every(k => r[k] && mins)) bySpeed = el * (1 - f) / f + later.reduce((t, k) => t + r[k] * mins, 0);
+  }
+  const left = Math.max(byRuns ?? -1, bySpeed ?? -1);
+  return left < 0 ? null : Math.max(3, left);
+}
+function paintChecklist() {
+  if (!prun) return;
+  const rows = [...document.querySelectorAll('.prog-list > div')]; if (!rows.length) return;
+  const r = stageRates(), mins = (state.videoDur || 0) / 60, cur = prun.stages.indexOf(prun.cur), now = Date.now();
+  rows.forEach((row, i) => {
+    const k = row.dataset.st, done = prun.done || i < cur, on = !prun.done && i === cur;
+    row.classList.toggle('done', done); row.classList.toggle('now', on);
+    const sm = row.querySelector('small');
+    sm.textContent = done ? (prun.start[k] && prun.end[k] ? fmtDur((prun.end[k] - prun.start[k]) / 1000) : '')
+      : on ? (prun.start[k] ? fmtDur((now - prun.start[k]) / 1000) : '')
+      : (r[k] && mins ? '~' + fmtDur(r[k] * mins) : 'စောင့်ဆဲ');
+  });
+}
 const TIPS = [
   '🎬 မင်းရဲ့ Video က Viral ဖြစ်ဖို့ အသင့်ပြင်နေပါပြီ…',
   '🔥 ပထမ ၃ စက္ကန့်မှာ ဆွဲဆောင်နိုင်ရင် ကြည့်သူတွေ အဆုံးထိ ကြည့်တတ်ပါတယ်',
@@ -99,7 +149,11 @@ const fmtDur = sec => {
 function startClock() {
   const t0 = Date.now();
   const tick = () => {
-    const sec = (Date.now() - t0) / 1000, el = $('#ptime'); if (el) el.textContent = fmtDur(sec);
+    const sec = (Date.now() - t0) / 1000, el = $('#ptime');
+    if (el) el.textContent = fmtDur(state.autoRun && prun ? (Date.now() - prun.t0) / 1000 : sec);
+    const left = timeLeft(), pl = $('#pleft');
+    if (pl) { prun.leftShown = left == null ? null : prun.leftShown == null ? left : prun.leftShown * 0.7 + left * 0.3; pl.textContent = prun.leftShown == null ? '' : ` · ကျန်ချိန် ~${fmtDur(prun.leftShown)}`; }
+    paintChecklist();
     // a new tip every 6 s; near the end, a "nearly there" line instead
     const tip = $('#ptip'), pc = parseInt(($('#pnum') || {}).textContent, 10) || 0;
     const k = pc >= 92 ? 'end' : String((tipStart + Math.floor(sec / 6)) % TIPS.length);
@@ -121,8 +175,15 @@ function setProg(frac, text) {
     const [main, sub] = text.split('\n');                 // an optional second line: what is in the mix, in small type
     $('#ptxt').textContent = main.replace(/[.…]+$/, '');
     const ps = $('#psub'); if (ps) ps.textContent = sub || '';
-    const steps = [...document.querySelectorAll('.prog-steps span')], cur = steps.findIndex(x => x.dataset.st === stageOf(text));
-    if (cur >= 0) steps.forEach((x, i) => { x.classList.toggle('done', i < cur || pc >= 100); x.classList.toggle('now', i === cur && pc < 100); });
+    const k = stageOf(text);
+    if (prun && prun.stages.includes(k) && prun.stages.indexOf(k) > prun.stages.indexOf(prun.cur)) {   // only forwards
+      if (prun.cur) prun.end[prun.cur] = Date.now();
+      prun.start[k] = prun.start[k] || Date.now(); prun.cur = k;
+    }
+  }
+  if (prun) {
+    prun.f = frac;
+    paintChecklist();
   }
 }
 const esc = t => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;');
@@ -1107,7 +1168,7 @@ function step1() {
   $('#lang').onchange = e => { state.lang = e.target.value; };
   bindLinkBox();
   if (state.file) bindPreview();
-  if (state.file && premPlan()) {
+  if (state.file) {                                         // the length: cost line (Premium) and the time-left estimate
     const f = state.file;
     L.videoDuration(f).then(d => { if (state.file === f && d) { state.videoDur = d; costLine($('#cost'), d); } }).catch(() => {});
   }
@@ -1123,7 +1184,7 @@ function step1() {
     // one tap: transcribe (unless done already) -> AI translation -> voice + render -> the usual result page
     $('#autoGo').onclick = () => {
       if (!(acc.credits > 0) && !L.premium.on) { toast('💎 Credit ကုန်နေပါပြီ — Telegram မှာ ထပ်ဝယ်ပါ'); return; }
-      state.autoRun = true;                                   // the progress card shows all four stages until the video is out
+      state.autoRun = true; prun = null;                      // the progress card shows all four stages until the video is out
       state.segs.length ? autoRest() : transcribeFlow(true);
     };
   }
@@ -1469,6 +1530,7 @@ async function step4() {
     state.crashRetried = false;
     if (premPlan()) { const b = baseJob(); saveRenders(b, { ...renders(b), done: true }); }
     state.result = { video, url: URL.createObjectURL(video), srt: L.buildSrt(state.burmese, placed), stats, took, timing, tries, src, out, engine, skipped };
+    finishRun();
     showResult();
     H.histAdd({ name: state.file.name, video, srt: state.result.srt, size: video.size, dur: state.videoDur, took })
       .catch(() => toast('မှတ်တမ်းထဲ သိမ်းဖို့ ဖုန်းထဲ နေရာမလောက်ပါ — Video ကို Download လုပ်ထားပါ'));
@@ -1900,7 +1962,7 @@ async function thumbPanel() {
   // Premium: titles + caption are written by themselves (one AI call), while the shots are being found
   if (isPremium() && !th.packP && !(th.titles || []).length && !th.caption && (state.burmese || []).some(Boolean)) {
     th.packing = true;
-    th.packP = L.premiumAI(T.packPrompt(state.burmese), true).then(text => {
+    th.packP = L.premiumAI(T.packPrompt(state.burmese), true, { backup: true }).then(text => {
       th.titles = T.parseTitles(text); th.titleSel = th.titles.length ? 0 : -1;
       th.caption = T.parseCaption(text); th.packErr = '';
       th.backupT = th.backupC = L.premiumAI.backup;
@@ -2001,7 +2063,7 @@ async function thumbPanel() {
       th.outs = th.outs || {}; th.urls = th.urls || {};
       for (const r of ratios) {
         if (tok !== th.tok || !$('.tcards')) return;
-        const c = T.composeThumb(frame, th.shots[th.sel].face, curTitle(), r, fam, { subTop: band ? band.top : 0, style: th.style });
+        const c = T.composeThumb(frame, th.shots[th.sel].face, curTitle(), r, fam, { subTop: band ? band.top : 0, subH: band ? band.height : 0, style: th.style });
         const blob = await new Promise(res => c.toBlob(res, 'image/jpeg', 0.92));
         if (tok !== th.tok || !$('.tcards') || !blob) return;
         if (th.urls[r]) URL.revokeObjectURL(th.urls[r]);
@@ -2055,7 +2117,7 @@ async function thumbPanel() {
   const mkTitles = async () => {
     const b = $('#tbMkTitles'); if (b) { b.disabled = true; b.textContent = '✨ ခေါင်းစဉ် ရေးနေပါတယ်…'; }
     th.packing = true;
-    try { th.titles = T.parseTitles(await L.premiumAI(T.titlesPrompt(state.burmese), true)); th.titleSel = 0; th.packErr = ''; th.backupT = L.premiumAI.backup; }
+    try { th.titles = T.parseTitles(await L.premiumAI(T.titlesPrompt(state.burmese), true, { backup: true })); th.titleSel = 0; th.packErr = ''; th.backupT = L.premiumAI.backup; }
     catch (e) { th.packErr = e.message.slice(0, 200); }
     th.packing = false; packErr();
     if ((th.titles || []).length) { paintTitles(); paintThumb(); } else if (b) { b.disabled = false; b.textContent = '✨ ခေါင်းစဉ် ၃ ခု ထုတ်မည်'; }
@@ -2092,7 +2154,10 @@ async function thumbPanel() {
     if (!th.caption) {
       box.innerHTML = '<button type="button" class="btn block" id="capMk">📝 Caption + Hashtag ရေးမည်</button>';
     } else {
-      if (th.capFor !== th.caption) { Object.assign(th, splitCap(th.caption), { tagOff: [], capFor: th.caption }); }
+      if (th.capFor !== th.caption) {                    // 5 hashtags chosen at first; any more can be tapped in
+        const c = splitCap(th.caption);
+        Object.assign(th, c, { tagOff: c.tags.map((_, i) => i).filter(i => i >= 5), capFor: th.caption });
+      }
       box.innerHTML = `<textarea id="capTxt" rows="5">${esc(th.text)}</textarea>
         <div class="two"><button type="button" class="btn" id="capCopy">📋 Caption ကူး</button><button type="button" class="btn" id="capMk">🔄 အသစ်ရေးမည်</button></div>
         ${th.tags.length ? `<div class="row" style="margin-top:14px"><b># Hashtag</b><span class="muted small" id="tagN"></span></div>
@@ -2116,7 +2181,7 @@ async function thumbPanel() {
     }
     $('#capMk').onclick = async () => {
       const b = $('#capMk'); b.disabled = true; b.textContent = '📝 ရေးနေပါတယ်…';
-      try { th.caption = T.parseCaption(await L.premiumAI(T.captionPrompt(state.burmese), true)); th.backupC = L.premiumAI.backup; }
+      try { th.caption = T.parseCaption(await L.premiumAI(T.captionPrompt(state.burmese), true, { backup: true })); th.backupC = L.premiumAI.backup; }
       catch (e) { toast(e.message.slice(0, 120)); }
       paintCap(); packErr();
     };
