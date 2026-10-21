@@ -1921,6 +1921,8 @@ async function thumbPanel() {
   if (!$('#thumbBox')) return;
   const ratios = ['9:16', '3:4', '16:9'];
   th.ratio = th.ratio || '9:16';
+  if (!th.style) { try { th.style = localStorage.getItem('thumbStyle') || ''; } catch {} }
+  if (!T.THUMB_STYLES[th.style]) th.style = 'gold';
   box.innerHTML = `
     <div class="panel thumbp">
       <b>🖼 Thumbnail (စာပါပြီးသား)</b>
@@ -1929,6 +1931,7 @@ async function thumbPanel() {
         <button type="button" id="tbNext" class="btn" title="အသစ်">🔄 အသစ်</button>
         <button type="button" id="tbDl" class="btn primary">⬇ Download</button>
       </div>
+      <div class="tstyles">${Object.entries(T.THUMB_STYLES).map(([k, v]) => `<button type="button" data-s="${k}" class="${k === th.style ? 'on' : ''}">${v.label}</button>`).join('')}</div>
       <div class="tcards">${ratios.map(r => `<button type="button" data-r="${r}" class="${r === th.ratio ? 'on' : ''}">
         <span class="tcimg" style="aspect-ratio:${r.replace(':', '/')}"><img alt="" /><i>⏳</i></span>
         <small>${{ '9:16': 'TikTok', '3:4': 'Facebook', '16:9': 'YouTube' }[r]} · ${r}</small></button>`).join('')}</div>
@@ -1990,7 +1993,7 @@ async function thumbPanel() {
       th.outs = th.outs || {}; th.urls = th.urls || {};
       for (const r of ratios) {
         if (tok !== th.tok || !$('.tcards')) return;
-        const c = T.composeThumb(frame, th.shots[th.sel].face, curTitle(), r, fam, { subTop: band ? band.top : 0 });
+        const c = T.composeThumb(frame, th.shots[th.sel].face, curTitle(), r, fam, { subTop: band ? band.top : 0, style: th.style });
         const blob = await new Promise(res => c.toBlob(res, 'image/jpeg', 0.92));
         if (tok !== th.tok || !$('.tcards') || !blob) return;
         if (th.urls[r]) URL.revokeObjectURL(th.urls[r]);
@@ -2002,6 +2005,13 @@ async function thumbPanel() {
   };
   const pickShot = i => { th.sel = i; view.querySelectorAll('.tshots button').forEach(x => x.classList.toggle('on', +x.dataset.i === i)); paintThumb(); if (view.querySelector('.tgpt')?.open) prepShot().catch(() => {}); };
   view.querySelectorAll('.tshots button').forEach(b => { b.onclick = () => pickShot(+b.dataset.i); });
+  view.querySelectorAll('.tstyles button').forEach(b => {
+    b.onclick = () => {
+      th.style = b.dataset.s; try { localStorage.setItem('thumbStyle', th.style); } catch {}
+      view.querySelectorAll('.tstyles button').forEach(x => x.classList.toggle('on', x === b));
+      paintThumb();
+    };
+  });
   view.querySelectorAll('.tcards button').forEach(b => {
     b.onclick = () => { th.ratio = b.dataset.r; view.querySelectorAll('.tcards button').forEach(x => x.classList.toggle('on', x === b)); };
   });
