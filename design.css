@@ -252,3 +252,20 @@ body .prog .bar i::after{content:"";position:absolute;inset:0;background:linear-
   background:linear-gradient(90deg,rgba(124,92,255,.14),rgba(240,171,252,.10));border:1px solid rgba(167,139,250,.22)}
 .prog-sub{font-size:12.5px;color:var(--muted);margin-top:2px;min-height:0;letter-spacing:.2px}
 .prog-sub:empty{display:none}
+
+/* ready thumbnail: shape tabs, preview with the 🔄 / ⬇ buttons beside it */
+.tratio{display:flex;gap:6px;margin:10px 0}
+.tratio button{flex:1;margin:0;min-height:0;padding:8px 0;border-radius:10px;border:1px solid var(--stroke-2);background:var(--surface-2);color:var(--text);font-weight:700;cursor:pointer}
+.tratio button.on{border-color:var(--violet);background:var(--violet-soft)}
+.tbwrap{display:flex;gap:10px;align-items:center;justify-content:center}
+.tbimg{position:relative;flex:0 1 auto;width:100%;max-width:min(100%,calc(58vh * 9 / 16 * 1.0));max-height:58vh;border-radius:14px;overflow:hidden;background:#000}
+.tbimg[style*="16/9"]{max-width:100%}
+.tbimg[style*="3/4"]{max-width:min(100%,calc(58vh * 3 / 4))}
+.tbimg img{display:block;width:100%;height:100%;object-fit:contain}
+.tbimg i{position:absolute;inset:0;display:grid;place-items:center;font-style:normal;font-size:28px;background:rgba(0,0,0,.35)}
+.tbimg i[hidden]{display:none}
+.tbside{display:flex;flex-direction:column;gap:10px}
+.tbside button{width:48px;height:48px;min-height:0;margin:0;padding:0;border-radius:50%;border:1px solid var(--stroke-2);background:var(--surface-2);color:var(--text);font-size:22px;cursor:pointer}
+.tgpt{margin-top:16px;padding:10px 12px;border-radius:12px;border:1px solid var(--stroke-2)}
+.tgpt summary{cursor:pointer;font-weight:600}
+.tgpt[open] summary{margin-bottom:10px}

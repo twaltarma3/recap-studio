@@ -105,6 +105,11 @@ export async function pickCharacterShots(src, { samples = 36, keep = 6, onProgre
  * subtitles) is cut off, but never into the character's face.
  */
 export async function shotBlob(src, shot) {
+  const c = await shotCanvas(src, shot);
+  return new Promise(r => c.toBlob(r, 'image/jpeg', 0.93));
+}
+// the chosen frame at full size, bottom subtitle band cut off (never into the face)
+export async function shotCanvas(src, shot) {
   const v = await openVideo(src);
   await seek(v, shot.t);
   const W = Math.min(1920, v.videoWidth), H = Math.round(W * v.videoHeight / v.videoWidth);
@@ -114,7 +119,79 @@ export async function shotBlob(src, shot) {
   const c = document.createElement('canvas'); c.width = W; c.height = h;
   c.getContext('2d').drawImage(v, 0, 0, v.videoWidth, v.videoHeight * (1 - cut), 0, 0, W, h);
   v.removeAttribute('src'); v.load();
-  return new Promise(r => c.toBlob(r, 'image/jpeg', 0.93));
+  c.faceCut = cut;
+  return c;
+}
+
+/* ---- ready-made thumbnail: the shot cropped to the platform's shape, with the Burmese title on top ---- */
+export const THUMB_SIZES = { '9:16': [720, 1280], '3:4': [960, 1280], '16:9': [1280, 720] };
+// split a Burmese title into at most 2 lines that fit maxW (by words, else by letters)
+function wrapTitle(ctx, text, maxW) {
+  const seg = typeof Intl !== 'undefined' && Intl.Segmenter ? [...new Intl.Segmenter('my', { granularity: 'grapheme' }).segment(text)].map(x => x.segment) : [...text];
+  const words = text.includes(' ') ? text.split(/\s+/) : null;
+  const pieces = words && words.every(w => ctx.measureText(w).width <= maxW) ? words.map((w, i) => (i ? ' ' : '') + w) : seg;
+  const lines = ['']; for (const p of pieces) {
+    const tryL = lines[lines.length - 1] + p;
+    if (ctx.measureText(tryL.trim()).width <= maxW || !lines[lines.length - 1]) lines[lines.length - 1] = tryL;
+    else lines.push(p.trimStart());
+  }
+  return lines.map(l => l.trim()).filter(Boolean);
+}
+/**
+ * frame: canvas from shotCanvas(); face: {x,y,w,h} 0..1 of the original frame or null; title: Burmese text
+ * ratio: key of THUMB_SIZES; font: CSS font family (already loaded).
+ * subTop: where the video's burned-in subtitles start (0..1 of the original frame), kept out of the picture.
+ * Returns a canvas.
+ */
+export function composeThumb(frame, face, title, ratio, font, { subTop = 0 } = {}) {
+  const [TW, TH] = THUMB_SIZES[ratio] || THUMB_SIZES['16:9'];
+  const c = document.createElement('canvas'); c.width = TW; c.height = TH;
+  const ctx = c.getContext('2d');
+  // crop: cover the canvas, centred on the face, with the face a little below the middle (room for the title)
+  const cut = frame.faceCut || 0, fw = frame.width;
+  // usable height: above the subtitles, but never cutting into the face
+  const faceBot = face ? (face.y + face.h) / (1 - cut) + 0.02 : 0;
+  const keep = subTop > 0.4 ? Math.min(1, Math.max(subTop / (1 - cut) - 0.01, faceBot)) : 1;
+  const fh = frame.height, uh = fh * keep, sc = Math.max(TW / fw, TH / uh);
+  const fx = face ? (face.x + face.w / 2) * fw : fw / 2;
+  const fy = face ? Math.min(1, (face.y + face.h / 2) / (1 - cut)) * fh : fh * 0.45;
+  let ox = TW / 2 - fx * sc, oy = TH * (TH > TW ? 0.56 : 0.52) - fy * sc;
+  ox = Math.min(0, Math.max(TW - fw * sc, ox)); oy = Math.min(0, Math.max(TH - uh * sc, oy));
+  ctx.drawImage(frame, ox, oy, fw * sc, fh * sc);
+  // light grade: a bit more contrast, dark top for the title, soft vignette
+  const top = ctx.createLinearGradient(0, 0, 0, TH * 0.42);
+  top.addColorStop(0, 'rgba(0,0,0,.78)'); top.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = top; ctx.fillRect(0, 0, TW, TH * 0.42);
+  const vg = ctx.createRadialGradient(TW / 2, TH / 2, Math.min(TW, TH) * 0.35, TW / 2, TH / 2, Math.hypot(TW, TH) * 0.6);
+  vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,.55)');
+  ctx.fillStyle = vg; ctx.fillRect(0, 0, TW, TH);
+  // title: big yellow letters with a thick dark outline, up to 2 lines, shrunk until it fits
+  const t = String(title || '').trim();
+  if (t) {
+    const maxW = TW * 0.88;
+    let size = Math.round(Math.min(TW, TH) * (TW > TH ? 0.13 : 0.12)), lines;
+    for (; size > 18; size -= 2) {
+      ctx.font = `${size}px ${font}`;
+      lines = wrapTitle(ctx, t, maxW);
+      if (lines.length <= 2 && lines.every(l => ctx.measureText(l).width <= maxW)) break;
+    }
+    ctx.font = `${size}px ${font}`; ctx.textAlign = 'center'; ctx.textBaseline = 'top'; ctx.lineJoin = 'round';
+    const lh = size * 1.55, y0 = TH * 0.045;
+    lines.slice(0, 2).forEach((l, i) => {
+      const y = y0 + i * lh;
+      ctx.shadowColor = 'rgba(255,190,0,.55)'; ctx.shadowBlur = size * 0.35;
+      ctx.lineWidth = size * 0.2; ctx.strokeStyle = '#120a00'; ctx.strokeText(l, TW / 2, y);
+      ctx.shadowBlur = 0;
+      const g = ctx.createLinearGradient(0, y, 0, y + size * 1.3);
+      g.addColorStop(0, '#fff6b0'); g.addColorStop(0.45, '#ffd21f'); g.addColorStop(1, '#ff9f00');
+      ctx.fillStyle = g; ctx.fillText(l, TW / 2, y);
+    });
+  }
+  // thin gold frame
+  const m = Math.round(Math.min(TW, TH) * 0.025), lw = Math.max(3, Math.round(Math.min(TW, TH) * 0.007)), r = m * 1.4;
+  ctx.lineWidth = lw; ctx.strokeStyle = '#e8b64a';
+  ctx.beginPath(); ctx.roundRect ? ctx.roundRect(m, m, TW - 2 * m, TH - 2 * m, r) : ctx.rect(m, m, TW - 2 * m, TH - 2 * m); ctx.stroke();
+  return c;
 }
 
 // what the user pastes into ChatGPT together with the picture
