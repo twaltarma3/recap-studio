@@ -122,7 +122,7 @@ export async function shotBlob(src, shot) {
 export function titlesPrompt(burmese) {
   const story = burmese.filter(Boolean).join(' ').slice(0, 6000);
   return `Read this Burmese movie-recap story and write 5 short, catchy Burmese thumbnail titles for YouTube / TikTok.
-Rules: spoken Burmese (not formal written style), about 12-25 characters each, makes people curious, no spoilers, no emoji, no hashtags, no numbering, no quotes.
+Rules for the titles: spoken Burmese (not formal written style), 12-25 characters each, no emoji, no hashtags, no numbering, no quotes. Each title must make a Burmese viewer NEED to click: use a different hook for each one — a secret (…ရဲ့ လျှို့ဝှက်ချက်), a shocking twist or reveal, a strong emotion (betrayal, revenge, forbidden love), a mystery question, or an underdog / rich-poor contrast. Name the key character by role (အဖေ၊ သမီး၊ ဆင်းရဲသား၊ သူဌေးမ …), never by a foreign name. Tease, but never give away the ending.
 Return ONLY a JSON object: {"titles": ["...", "...", "...", "...", "..."]}
 
 Story:
@@ -140,7 +140,7 @@ export function parseTitles(text) {
 export function captionPrompt(burmese) {
   const story = burmese.filter(Boolean).join(' ').slice(0, 6000);
   return `Read this Burmese movie-recap story and write the post text for uploading the video to TikTok / Facebook.
-Rules: spoken Burmese, 2-3 short lines that hook people without spoilers, at most 2 fitting emoji, then 8-12 hashtags (mix Burmese and English, e.g. #movierecap #ဇာတ်လမ်းအကျဉ်း, plus the genre).
+Rules for the caption: spoken Burmese, 2-4 short lines. Line 1 is a hook (a question or a surprising fact from the story) that stops the scroll. Then 1-2 lines on the setup and the conflict, with real details from this story, without the ending. Last line asks people to watch to the end or follow (for example ဇာတ်သိမ်းကို အဆုံးထိ ကြည့်ပါ). At most 2 fitting emoji. Hashtags: 6-10 — 2-3 Burmese ones about the story and genre (e.g. #ဇာတ်လမ်းအကျဉ်း #အချစ်ဇာတ်လမ်း), plus #movierecap #shortdrama #myanmar #fyp.
 Return ONLY a JSON object: {"caption": "...", "hashtags": ["#...", "#..."]}
 
 Story:
@@ -155,6 +155,18 @@ export function parseCaption(text) {
   } catch {}
   return text.trim();
 }
+// Premium, right after the video: titles + caption in one AI call
+export function packPrompt(burmese) {
+  const story = burmese.filter(Boolean).join(' ').slice(0, 6000);
+  return `Read this Burmese movie-recap story. Write (1) 5 thumbnail titles and (2) the TikTok / Facebook post caption with hashtags.
+Rules for the titles: spoken Burmese (not formal written style), 12-25 characters each, no emoji, no hashtags, no numbering, no quotes. Each title must make a Burmese viewer NEED to click: use a different hook for each one — a secret (…ရဲ့ လျှို့ဝှက်ချက်), a shocking twist or reveal, a strong emotion (betrayal, revenge, forbidden love), a mystery question, or an underdog / rich-poor contrast. Name the key character by role (အဖေ၊ သမီး၊ ဆင်းရဲသား၊ သူဌေးမ …), never by a foreign name. Tease, but never give away the ending.
+Rules for the caption: spoken Burmese, 2-4 short lines. Line 1 is a hook (a question or a surprising fact from the story) that stops the scroll. Then 1-2 lines on the setup and the conflict, with real details from this story, without the ending. Last line asks people to watch to the end or follow (for example ဇာတ်သိမ်းကို အဆုံးထိ ကြည့်ပါ). At most 2 fitting emoji. Hashtags: 6-10 — 2-3 Burmese ones about the story and genre (e.g. #ဇာတ်လမ်းအကျဉ်း #အချစ်ဇာတ်လမ်း), plus #movierecap #shortdrama #myanmar #fyp.
+Return ONLY a JSON object: {"titles": ["...", "...", "...", "...", "..."], "caption": "...", "hashtags": ["#...", "#..."]}
+
+Story:
+${story}`;
+}
+
 // prompt with the title already chosen: ChatGPT goes straight to drawing
 export function chatgptPromptWithTitle(title) {
   return `I attached a frame from a movie. Create a YouTube / TikTok movie-recap thumbnail now (no questions):

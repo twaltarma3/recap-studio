@@ -78,7 +78,7 @@ export async function premiumAI(prompt, json = false) {
       ? (noPrepay
         ? 'Admin: Gemini key ရဲ့ Billing project မှာ prepay credit $0 ဖြစ်နေပါတယ် — Admin → 🧪 မှာ free key ပြန်ထည့်ပါ (သို့) AI Studio မှာ credit ဝယ်ပါ'
         : 'Admin: Gemini key ရဲ့ quota ပြည့်သွားပါပြီ — Admin → 🧪 မှာ key အသစ်ထည့်ပါ (သို့) Google AI Studio မှာ Billing ဖွင့်ပါ')
-      : '⏳ AI က ခဏ မအားသေးပါ — ၅ မိနစ်လောက်နေ ပြန်နှိပ်ပါ။ အရေးကြီးရင် Copy Full Prompt နဲ့ Gemini မှာ ဘာသာပြန်လို့ရပါတယ်');
+      : '⏳ AI က ခဏ မအားသေးပါ — ၅ မိနစ်လောက်နေ ပြန်နှိပ်ပါ။ အရေးကြီးရင် "Prompt ကူးပြီး Gemini ဖွင့်မည်" နဲ့ ဘာသာပြန်လို့ရပါတယ်');
     if (/location is not supported/i.test(j.detail || '')) throw new Error('🌐 Auto ဘာသာပြန်ဖို့ VPN ဖွင့်ပြီး (US server ရွေးပြီး) ပြန်နှိပ်ပါ');
     throw new Error(PREMIUM_ERR[j.error] || ('AI မအောင်မြင်ပါ: ' + (j.detail || j.error || r.status)));
   }

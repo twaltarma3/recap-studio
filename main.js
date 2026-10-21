@@ -275,8 +275,8 @@ function pageGuide() {
       ${sec(3, 'စာသားစစ်၊ Gemini နဲ့ ဘာသာပြန်', `
         <ol>
           <li>ထွက်လာတဲ့ စာသားကို စစ်ပါ။ မှားတာရှိရင် ပြင်ပါ။ <b>စာကြောင်းအရေအတွက် မပြောင်းပါနဲ့။</b></li>
-          <li><b>📋 Copy Full Prompt</b> ကိုနှိပ်ပါ။</li>
-          <li><b>Gemini App ဖွင့်မည်</b> ကိုနှိပ်ပြီး Gemini မှာ Prompt ကို Paste လုပ်ပါ။</li>
+          <li><b>📋 Prompt ကူးပြီး Gemini ဖွင့်မည်</b> ကိုနှိပ်ပါ — Prompt ကူးပြီး Gemini ပွင့်လာပါမယ်။</li>
+          <li>Gemini မှာ Prompt ကို Paste လုပ်ပြီး ပို့ပါ။</li>
           <li>Gemini ပေးတဲ့ <b>JSON ကို အကုန်ကူး</b>ပြီး အောက်က JSON ကွက်ထဲ Paste လုပ်ပါ။</li>
           <li><b>ဘာသာပြန်အတည်ပြုမည် (Next)</b> ကိုနှိပ်ပါ။</li>
         </ol>
@@ -1203,7 +1203,7 @@ function step2() {
     <div class="chips" id="pStyle" style="margin:0 0 8px"><button type="button" class="chip" data-s="recap">🔥 Recap (လှုပ်ရှား)</button><button type="button" class="chip" data-s="chat">💬 ရိုးရိုးစကားပြော</button>${premPlan() ? '<button type="button" class="chip" data-s="dub">🎭 ဇာတ်ကောင်စကား · Beta</button>' : ''}</div>
     ${isPremium() ? `<button id="autoTr" class="btn primary block">✨ Auto ဘာသာပြန်မည် <span class="pbadge">💎 Premium</span></button>
     <p class="muted small" style="margin:4px 0 10px">ခလုတ်တစ်ချက်နဲ့ AI က မြန်မာလို ဘာသာပြန်ပေးပါမယ် (စာကြောင်းများရင် ၁ မိနစ်လောက် ကြာနိုင်ပါတယ်)။</p>` : ''}
-    <button id="copy" class="btn block">📋 Copy Full Prompt</button>
+    <button id="copy" class="btn block">📋 Prompt ကူးပြီး Gemini ဖွင့်မည်</button>
     <div class="panel">
       <b>🤖 Gemini App ဖြင့် ဘာသာပြန်ရန် (Free)</b>
       <p class="muted small">Prompt ကို Copy ကူးပြီး Gemini တွင် Paste လုပ်ပါ။ ရလာသော JSON ကို အောက်တွင် ထည့်ပါ။</p>
@@ -1228,11 +1228,15 @@ function step2() {
   document.querySelectorAll('#pStyle .chip').forEach(c => c.onclick = () => { state.pStyle = c.dataset.s; paintS(); });
   paintS();
   $('#back').onclick = () => go(1);
+  // one tap: copy the prompt and open Gemini to paste it (both inside the tap, which iPhone needs)
   $('#copy').onclick = async () => {
     if (!syncSrc()) return;
     const text = L.buildPrompt(state.segs, state.pStyle);
-    try { await navigator.clipboard.writeText(text); toast('Prompt ကူးပြီးပါပြီ'); }
-    catch { $('#json').value = text; toast('ကူးမရပါ — အောက်ကနေ ရွေးကူးပါ'); }
+    let ok = copyNow(text);
+    window.open('https://gemini.google.com/app', '_blank', 'noopener');
+    if (!ok) { try { await navigator.clipboard.writeText(text); ok = true; } catch {} }
+    if (ok) toast('📋 Prompt ကူးပြီးပါပြီ — Gemini မှာ Paste လုပ်ပြီး ပို့ပါ');
+    else { $('#json').value = text; toast('ကူးမရပါ — အောက်ကနေ ရွေးကူးပါ'); }
   };
   $('#autoTr')?.addEventListener('click', async () => {
     if (!syncSrc()) return;
@@ -1569,7 +1573,7 @@ function showResult() {
   });
   $('#toStep2')?.addEventListener('click', () => { state.showSrc = true; go(2); });
   $('#thumbGo').onclick = () => thumbPanel();
-  if (state.thumb && state.thumb.shots) thumbPanel();
+  if ((state.thumb && state.thumb.shots) || isPremium()) thumbPanel();   // Premium: thumbnail shots, titles and caption come by themselves
   $('#back').onclick = () => { clearResult(); go(3); };
   $('#again').onclick = () => { clearResult(); Object.assign(state, { showSrc: false, file: null, segs: [], origSegs: null, burmese: [] }); go(1); };
 }
@@ -1882,15 +1886,20 @@ async function thumbPanel() {
         break;
       } catch (e) { err = e; }
     }
-    if (!th.shots) { box.innerHTML = `<div class="err">${esc((err && err.message) || 'ပုံထုတ်လို့ မရပါ')}</div><button id="thumbGo" class="btn block">ပြန်ကြိုးစားမည်</button>`; $('#thumbGo').onclick = () => thumbPanel(); return; }
+    // no shots (e.g. the face engine couldn't load): titles and caption still come; the shots can be tried again
+    if (!th.shots) {
+      if (!isPremium()) { box.innerHTML = `<div class="err">${esc((err && err.message) || 'ပုံထုတ်လို့ မရပါ')}</div><button id="thumbGo" class="btn block">ပြန်ကြိုးစားမည်</button>`; $('#thumbGo').onclick = () => thumbPanel(); return; }
+      th.shotErr = (err && err.message) || 'ပုံထုတ်လို့ မရပါ';
+    } else th.shotErr = '';
   }
   if (!$('#thumbBox')) return;
   box.innerHTML = `
     <div class="panel thumbp">
       <b>🖼 Thumbnail (ChatGPT နဲ့ 3D ပုံ)</b>
       <p class="tstep">၁) ဇာတ်ကောင်ပုံ တစ်ပုံ ရွေးပါ</p>
-      ${th.faces ? '' : '<p class="muted small">မျက်နှာ ရှင်းရှင်း မတွေ့လို့ ပုံအကြည်ဆုံးတွေကို ပြထားပါတယ်။</p>'}
-      <div class="tshots">${th.shots.map((f, i) => `<button type="button" data-i="${i}" class="${i === th.sel ? 'on' : ''}"><img src="${f.img}" alt="" /><small>${fmtDur(f.t)}</small></button>`).join('')}</div>
+      ${th.faces || th.shotErr ? '' : '<p class="muted small">မျက်နှာ ရှင်းရှင်း မတွေ့လို့ ပုံအကြည်ဆုံးတွေကို ပြထားပါတယ်။</p>'}
+      ${th.shotErr ? `<div class="err">${esc(th.shotErr)}</div><button type="button" id="tbRetry" class="btn block">🔄 ပုံ ပြန်ရှာမည်</button>` : ''}
+      <div class="tshots">${(th.shots || []).map((f, i) => `<button type="button" data-i="${i}" class="${i === th.sel ? 'on' : ''}"><img src="${f.img}" alt="" /><small>${fmtDur(f.t)}</small></button>`).join('')}</div>
       ${isPremium() ? `<p class="tstep">✨ ခေါင်းစဉ် ရွေးပါ <span class="pbadge">💎 Premium</span></p>
       <div id="tbTitles">${(th.titles || []).length ? '' : '<button type="button" class="btn block" id="tbMkTitles">✨ ခေါင်းစဉ် ၅ ခု ထုတ်မည်</button>'}</div>
       <p class="muted small" style="margin:4px 0 0">ခေါင်းစဉ် ရွေးထားရင် ChatGPT က ထပ်မမေးဘဲ ပုံကို တန်းဆွဲပေးပါမယ်။</p>` : ''}
@@ -1914,7 +1923,9 @@ async function thumbPanel() {
       <div id="tbCap"></div>
     </div>` : ''}`;
   // the picture is made as soon as a shot is chosen: iPhone only saves / shares a file straight from the tap
+  $('#tbRetry')?.addEventListener('click', () => { th.shots = null; th.shotErr = ''; thumbPanel(); });
   const prepShot = () => {
+    if (!(th.shots || []).length) return Promise.reject(new Error('ပုံ မရှိသေးပါ'));
     const i = th.sel; th.blobs = th.blobs || {};
     if (!th.blobs[i]) th.blobs[i] = T.shotBlob(th.src, th.shots[i]).then(b => { th.ready = { ...th.ready, [i]: b }; return b; }, e => { delete th.blobs[i]; throw e; });
     return th.blobs[i];
@@ -1938,6 +1949,21 @@ async function thumbPanel() {
   };
   $('#tbMkTitles')?.addEventListener('click', mkTitles);
   paintTitles();
+  // Premium: titles and caption are written by themselves as soon as the panel opens (one AI call)
+  if (isPremium() && !th.autoAi && !(th.titles || []).length && !th.caption) {
+    th.autoAi = true;
+    const tb = $('#tbMkTitles'); if (tb) { tb.disabled = true; tb.textContent = '✨ ခေါင်းစဉ် ရေးနေပါတယ်…'; }
+    const cb = () => { const c = $('#capMk'); if (c) { c.disabled = true; c.textContent = '📝 Caption ရေးနေပါတယ်…'; } };
+    setTimeout(cb, 0);
+    L.premiumAI(T.packPrompt(state.burmese), true).then(text => {
+      th.titles = T.parseTitles(text); th.titleSel = th.titles.length ? 0 : -1;
+      th.caption = T.parseCaption(text);
+    }).catch(e => toast(e.message.slice(0, 120))).finally(() => {
+      if (!$('#thumbBox')) return;
+      if ((th.titles || []).length) paintTitles(); else { const b = $('#tbMkTitles'); if (b) { b.disabled = false; b.textContent = '✨ ခေါင်းစဉ် ၅ ခု ထုတ်မည်'; } }
+      paintCap();
+    });
+  }
   const paintCap = () => {
     const box = $('#tbCap'); if (!box) return;
     box.innerHTML = th.caption ? `<textarea id="capTxt" rows="7" readonly>${esc(th.caption)}</textarea>
