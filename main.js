@@ -64,7 +64,7 @@ const stageOf = t => /ဘာသာပြန်/.test(t) ? 'tr'
 const RING = 2 * Math.PI * 54;
 const bar = (stages = state.autoRun ? PSTEPS.map(x => x[0]) : []) => `<div class="prog">
   <div class="prog-ring"><svg viewBox="0 0 120 120" aria-hidden="true">
-    <defs><linearGradient id="pgGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7c5cff"/><stop offset=".55" stop-color="#c084fc"/><stop offset="1" stop-color="#f0abfc"/></linearGradient></defs>
+    <defs><linearGradient id="pgGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#009cfd"/><stop offset=".55" stop-color="#00c5fe"/><stop offset="1" stop-color="#f5c451"/></linearGradient></defs>
     <circle cx="60" cy="60" r="54" class="pr-track"/><circle cx="60" cy="60" r="54" class="pr-fill" id="pring" stroke-dasharray="${RING.toFixed(1)}" stroke-dashoffset="${RING.toFixed(1)}"/>
   </svg><b id="pnum">0%</b></div>
   <div class="prog-now"><span id="ptxt">စတင်နေပါတယ်</span><span class="pdots"><i></i><i></i><i></i></span></div>
@@ -128,6 +128,7 @@ const esc = t => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;');
 const trimTail = (lines, n) => { while (lines.length > n && lines[lines.length - 1] === '') lines.pop(); return lines; };
 function clearResult() {
   state.thumb = null;                                                           // thumbnail belongs to that result
+  state.rTab = 'v';
   if (state.result && state.result.url) URL.revokeObjectURL(state.result.url);   // free the old video from memory
   state.result = null;
 }
@@ -158,6 +159,7 @@ function renderStepper() {
 }
 function go(step, opts = {}) { state.step = step; state.renderNow = !!opts.render; render(); window.scrollTo(0, 0); }
 function render() {
+  delete view.dataset.rt;                                            // the result tabs only apply on the result page
   histUrls.forEach(u => URL.revokeObjectURL(u)); histUrls = [];      // leaving / redrawing History: free its videos
   const stp = $('#stepper');
   if (acc.on && !acc.ok && !['code', 'admin', 'guide'].includes(page)) page = 'code';   // no valid code yet
@@ -1549,8 +1551,14 @@ function timingBlock() {
 }
 
 function showResult() {
+  // three tabs, so the video, the thumbnail and the caption each fit on the phone without long scrolling
+  const tabs = [['v', '🎬 Video'], ['t', '🖼 Thumbnail'], ...(isPremium() ? [['c', '📝 Caption']] : [])];
+  if (!tabs.some(([k]) => k === state.rTab)) state.rTab = 'v';
+  view.dataset.rt = state.rTab;
   view.innerHTML = `
     <h2>ရလဒ်များ (Results)</h2>
+    <div class="rtabs">${tabs.map(([k, l]) => `<button type="button" data-t="${k}" class="${k === state.rTab ? 'on' : ''}">${l}</button>`).join('')}</div>
+    <div class="rvid">
     <video src="${state.result.url}" controls playsinline></video>
     ${state.result.took ? `<p class="muted small">⏱ ထုတ်ချိန် ${fmtDur(state.result.took)} · 🗂 မှတ်တမ်းထဲမှာ ၂၄ နာရီ သိမ်းထားပါတယ်</p>` : ''}
     ${timingBlock()}
@@ -1558,11 +1566,20 @@ function showResult() {
     ${state.diag && /fxFailed:true|false\n[^]/.test(state.diag) && /fxFailed:true|failed|Error|error/i.test(state.diag) ? `<details style="margin:10px 0"><summary class="muted small">🛠 Effect log (အမှားရှာရန်)</summary><pre id="diagTxt" style="white-space:pre-wrap;font-size:11px;max-height:220px;overflow:auto">${esc(state.diag)}</pre><button class="btn block" id="diagCp" type="button">📋 Log ကူးမည်</button></details>` : ''}
     <button id="dl" class="btn primary">⬇ Video Download (.mp4)</button>
     <button id="srt" class="btn block">Download Subtitles (.srt)</button>
+    </div>
     <div id="thumbBox"><button id="thumbGo" class="btn block">🖼 Thumbnail ပြုလုပ်မည် (ChatGPT 3D)</button></div>
     <div class="row" style="margin-top:14px">
       <button id="back" class="ghost">‹ အသံရွေးချယ်မှုသို့</button>
       <button id="again" class="ghost">Video အသစ်</button>
     </div>`;
+  view.querySelectorAll('.rtabs button').forEach(b => {
+    b.onclick = () => {
+      state.rTab = view.dataset.rt = b.dataset.t;
+      view.querySelectorAll('.rtabs button').forEach(x => x.classList.toggle('on', x === b));
+      if (b.dataset.t !== 'v') view.querySelectorAll('.rvid video').forEach(v => v.pause());
+      scrollTo({ top: 0, behavior: 'smooth' });
+    };
+  });
   const base = state.file.name.replace(/\.[^.]+$/, '');
   $('#diagCp')?.addEventListener('click', async () => { try { await navigator.clipboard.writeText(state.diag); toast('ကူးပြီးပါပြီ'); } catch { toast('ကူးမရပါ'); } });
   $('#dl').onclick = () => download(state.result.video, base + '_recap.mp4');
@@ -1940,7 +1957,7 @@ async function thumbPanel() {
         </ol>
       </details>`}
     </div>
-    ${isPremium() ? `<div class="panel">
+    ${isPremium() ? `<div class="panel capp">
       <b>📝 Caption + Hashtag <span class="pbadge">💎 Premium</span></b>
       <p class="muted small" style="margin:4px 0 8px">TikTok / Facebook မှာ Video တင်တဲ့အခါ ရေးဖို့ စာ</p>
       <p class="warn small" id="capBackup" ${th.backupC ? '' : 'hidden'}>⚠ Thumbnail ခေါင်းစဉ် နဲ့ Caption စာသားများ လွဲနေခြင်း၊ အဓိပ္ပါယ် တလွဲများ ဖြစ်နေပါက <b>VPN ဖွင့်ပြီး 🔄</b> ခလုတ်ကို နှိပ်ပါ။</p>
