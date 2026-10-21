@@ -1920,7 +1920,7 @@ async function thumbPanel() {
       <p class="tstep">✏️ ခေါင်းစဉ်</p>
       <input id="tbCustom" type="text" maxlength="60" placeholder="ကိုယ်တိုင် ရေးချင်ရင် ဒီမှာ ရေးပါ" value="${esc(th.custom || '')}" />
       <div class="err small" id="tbErr" ${th.packErr ? '' : 'hidden'}>⚠ ${esc(th.packErr || '')}</div>
-      ${isPremium() ? `<p class="warn small" id="tbBackup" ${th.backupT ? '' : 'hidden'}>⚠ ဒီတစ်ခါ Google AI က မဖြေလို့ အရန် AI နဲ့ ရေးထားပါတယ် — စာ မမှန်ရင် <b>VPN ဖွင့်ပြီး</b> အောက်က <b>🔄</b> ခလုတ်ကို နှိပ်ပါ။ (Video ထုတ်တုန်း VPN မလိုပါ — ဒီနေရာရောက်မှ ဖွင့်ပါ)</p>
+      ${isPremium() ? `<p class="warn small" id="tbBackup" ${th.backupT ? '' : 'hidden'}>⚠ Thumbnail ခေါင်းစဉ် နဲ့ Caption စာသားများ လွဲနေခြင်း၊ အဓိပ္ပါယ် တလွဲများ ဖြစ်နေပါက <b>VPN ဖွင့်ပြီး 🔄</b> ခလုတ်ကို နှိပ်ပါ။</p>
       <div id="tbTitles" style="margin-top:8px">${(th.titles || []).length ? '' : '<button type="button" class="btn block" id="tbMkTitles">✨ ခေါင်းစဉ် ၃ ခု ထုတ်မည်</button>'}</div>` : ''}
       ${th.shotErr ? '' : `
       <details class="tgpt">
@@ -1943,7 +1943,7 @@ async function thumbPanel() {
     ${isPremium() ? `<div class="panel">
       <b>📝 Caption + Hashtag <span class="pbadge">💎 Premium</span></b>
       <p class="muted small" style="margin:4px 0 8px">TikTok / Facebook မှာ Video တင်တဲ့အခါ ရေးဖို့ စာ</p>
-      <p class="warn small" id="capBackup" ${th.backupC ? '' : 'hidden'}>⚠ ဒီတစ်ခါ Google AI က မဖြေလို့ အရန် AI နဲ့ ရေးထားပါတယ် — စာ မမှန်ရင် <b>VPN ဖွင့်ပြီး</b> အောက်က <b>🔄</b> ခလုတ်ကို နှိပ်ပါ။ (Video ထုတ်တုန်း VPN မလိုပါ — ဒီနေရာရောက်မှ ဖွင့်ပါ)</p>
+      <p class="warn small" id="capBackup" ${th.backupC ? '' : 'hidden'}>⚠ Thumbnail ခေါင်းစဉ် နဲ့ Caption စာသားများ လွဲနေခြင်း၊ အဓိပ္ပါယ် တလွဲများ ဖြစ်နေပါက <b>VPN ဖွင့်ပြီး 🔄</b> ခလုတ်ကို နှိပ်ပါ။</p>
       <div id="tbCap"></div>
     </div>` : ''}`;
   // the picture is made as soon as a shot is chosen: iPhone only saves / shares a file straight from the tap
