@@ -2063,7 +2063,7 @@ async function thumbPanel() {
       th.outs = th.outs || {}; th.urls = th.urls || {};
       for (const r of ratios) {
         if (tok !== th.tok || !$('.tcards')) return;
-        const c = T.composeThumb(frame, th.shots[th.sel].face, curTitle(), r, fam, { subTop: band ? band.top : 0, style: th.style });
+        const c = T.composeThumb(frame, th.shots[th.sel].face, curTitle(), r, fam, { subTop: band ? band.top : 0, subH: band ? band.height : 0, style: th.style });
         const blob = await new Promise(res => c.toBlob(res, 'image/jpeg', 0.92));
         if (tok !== th.tok || !$('.tcards') || !blob) return;
         if (th.urls[r]) URL.revokeObjectURL(th.urls[r]);

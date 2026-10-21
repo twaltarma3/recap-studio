@@ -152,11 +152,12 @@ function wrapTitle(ctx, text, maxW) {
 /**
  * frame: canvas from shotCanvas(); face: {x,y,w,h} 0..1 of the original frame or null; title: Burmese text
  * ratio: key of THUMB_SIZES; font: CSS font family (already loaded).
- * subTop: where the video's burned-in subtitles start (0..1 of the original frame), kept out of the picture.
+ * subTop / subH: where the video's burned-in subtitles are (0..1 of the original frame): kept out of the picture,
+ *   or blurred where a close-up face reaches into them.
  * style: a key of THUMB_STYLES.
  * Returns a canvas.
  */
-export function composeThumb(frame, face, title, ratio, font, { subTop = 0, style = 'gold' } = {}) {
+export function composeThumb(frame, face, title, ratio, font, { subTop = 0, subH = 0, style = 'gold' } = {}) {
   const [TW, TH] = THUMB_SIZES[ratio] || THUMB_SIZES['16:9'];
   const c = document.createElement('canvas'); c.width = TW; c.height = TH;
   const ctx = c.getContext('2d');
@@ -185,6 +186,18 @@ export function composeThumb(frame, face, title, ratio, font, { subTop = 0, styl
   ox = Math.min(0, Math.max(TW - iw, ox));
   oy = ih >= TH ? Math.min(0, Math.max(TH - ih, oy)) : Math.max(0, Math.min(TH - ih, oy));
   ctx.drawImage(frame, 0, 0, fw, uh, ox, oy, iw, ih);
+  // subtitle rows still in the picture (the face reaches into them): blur that strip
+  if (subTop > 0.4 && subH > 0) {
+    const s0 = Math.max(0, subTop - subH * 0.3) / (1 - cut) * fh, s1 = Math.min(uh, (subTop + subH * 1.3) / (1 - cut) * fh);
+    if (s1 - s0 > 2) {
+      const k = 24, y = oy + s0 * sc, h = (s1 - s0) * sc;
+      const tiny = document.createElement('canvas'); tiny.width = Math.max(4, Math.round(iw / k)); tiny.height = Math.max(2, Math.round(h / k));
+      const tc = tiny.getContext('2d'); tc.filter = 'blur(1px)';
+      tc.drawImage(frame, 0, s0, fw, s1 - s0, 0, 0, tiny.width, tiny.height);
+      ctx.save(); ctx.beginPath(); ctx.rect(0, y, TW, h); ctx.clip();
+      ctx.drawImage(tiny, ox, y, iw, h); ctx.restore();
+    }
+  }
   if (ih < TH) {                                  // soften the picture's top and bottom edges into the blur
     const e = Math.min(ih * 0.2, TH * 0.08);
     for (const [y0, y1] of [[oy, oy + e], [oy + ih, oy + ih - e]]) {
