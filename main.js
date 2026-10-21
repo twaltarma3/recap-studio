@@ -1293,6 +1293,7 @@ function voiceBlock() {
     <div class="voices">${voices}</div>
     <div class="panel">
       <button id="unlock" class="btn block" style="margin-top:0"></button>
+      <div id="vTune" hidden>
       <div class="row" style="margin-top:14px"><b>ဝါး/ကြည် (Pitch Offset)</b><span id="pv">${state.pitch >= 0 ? '+' : ''}${state.pitch}Hz</span></div>
       <input id="pitch" type="range" min="-30" max="30" value="${state.pitch}" />
       <div class="row muted small"><span>-30Hz (ဝါး)</span><span>+30Hz (ကြည်)</span></div>
@@ -1313,6 +1314,7 @@ function voiceBlock() {
         <div class="row" style="margin-top:12px"><b>🔊 မြန်မာသံ ပမာဏ</b><span id="dv">${Math.round(state.dubGain * 100)}%</span></div>
         <input id="dgain" type="range" min="100" max="250" value="${Math.round(state.dubGain * 100)}" />
       </details>
+      </div>
     </div>
     </div>`;
 }
@@ -1326,18 +1328,19 @@ function bindVoice(onReset) {
   $('#mtempo').oninput = e => { state.maxTempo = +e.target.value / 10; $('#mv').textContent = state.maxTempo.toFixed(1) + '×'; };
   $('#dgain').oninput = e => { state.dubGain = +e.target.value / 100; $('#dv').textContent = e.target.value + '%'; };
 
-  // sliders are locked by default so scrolling with a finger can't move them
+  // the settings stay folded (and locked) until opened, so scrolling with a finger can't move them
   const sliders = [...box.querySelectorAll('.panel input[type=range]')];
   let unlocked = false;
   const applyLock = () => {
     sliders.forEach(s => { s.disabled = !unlocked; });
+    $('#vTune').hidden = !unlocked;
     $('#unlock').textContent = unlocked ? '🔓 ပြင်လို့ရပါပြီ — ပြီးရင် လော့ခ်ချရန် နှိပ်ပါ' : '🔒 ချိန်ညှိထားပြီး — ပြင်ချင်ရင် နှိပ်ပါ';
   };
   $('#unlock').onclick = () => { unlocked = !unlocked; applyLock(); };
   applyLock();
   const rs = document.createElement('button');
   rs.className = 'btn block'; rs.textContent = '↺ ပုံမှန်တန်ဖိုးသို့ ပြန်ထားမည်';
-  $('#unlock').after(rs);
+  $('#vTune').prepend(rs);
   rs.onclick = () => { Object.assign(state, DEFAULTS); onReset(); toast('ပုံမှန်တန်ဖိုး ပြန်ထားပြီးပါပြီ'); };
   box.querySelectorAll('.voice').forEach(el => el.onclick = e => {
     if (e.target.dataset.prev) return;
