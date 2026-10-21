@@ -822,6 +822,66 @@ export function parseTranslations(raw) {
   return obj.translations.map(clean);
 }
 
+/* ---------- find the burned-in subtitles, to place the blur band ---------- */
+// Looks at a dozen frames: subtitle rows are full of sharp letter edges in most frames, but the words change
+// (and vanish between lines), while a fixed watermark or the background stays the same. So each row scores
+// "edges on average" minus "edges in its quietest frame"; the best band of rows is where the subtitles are.
+// Returns {top, height} as fractions of the frame, or null when no clear subtitle band is found.
+export async function findSubBand(file, frames = 12) {
+  const url = URL.createObjectURL(file);
+  const v = document.createElement('video');
+  v.muted = true; v.playsInline = true; v.preload = 'auto'; v.src = url;
+  const wait = (ev, ms) => new Promise((res, rej) => { const t = setTimeout(() => rej(new Error('timeout')), ms); v.addEventListener(ev, () => { clearTimeout(t); res(); }, { once: true }); });
+  try {
+    await wait('loadeddata', 15000);
+    if (!v.videoWidth || !(v.duration > 0)) return null;
+    const W = 320, H = Math.max(40, Math.round(W * v.videoHeight / v.videoWidth));
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const ctx = cv.getContext('2d', { willReadFrequently: true });
+    const rows = [];                                            // per frame: edge share of every row
+    for (let k = 0; k < frames; k++) {
+      v.currentTime = v.duration * (k + 0.5) / frames;
+      try { await wait('seeked', 5000); } catch { continue; }
+      ctx.drawImage(v, 0, 0, W, H);
+      const d = ctx.getImageData(0, 0, W, H).data;
+      const r = new Float32Array(H);
+      for (let y = 0; y < H; y++) {
+        let n = 0, prev = -1;
+        for (let x = 0; x < W; x++) {
+          const i = (y * W + x) * 4, g = d[i] * 0.3 + d[i + 1] * 0.59 + d[i + 2] * 0.11;
+          if (prev >= 0 && Math.abs(g - prev) > 60) n++;
+          prev = g;
+        }
+        r[y] = n / W;
+      }
+      rows.push(r);
+    }
+    if (rows.length < 4) return null;
+    const score = new Float32Array(H);
+    for (let y = 0; y < H; y++) {
+      let sum = 0, min = 1;
+      for (const r of rows) { sum += r[y]; if (r[y] < min) min = r[y]; }
+      score[y] = sum / rows.length - min;
+    }
+    // smooth over a few rows, then take the strongest run of rows above 35% of the best score
+    const sm = score.map((_, y) => { let a = 0, c = 0; for (let j = y - 2; j <= y + 2; j++) if (j >= 0 && j < H) { a += score[j]; c++; } return a / c; });
+    const best = Math.max(...sm);
+    if (!(best > 0.02)) return null;
+    let bestRun = null, run = null;
+    for (let y = 0; y <= H; y++) {
+      if (y < H && sm[y] >= best * 0.35) { if (!run) run = { a: y, sum: 0 }; run.sum += sm[y]; run.b = y; }
+      else if (run) { if (!bestRun || run.sum > bestRun.sum) bestRun = run; run = null; }
+    }
+    if (!bestRun) return null;
+    const h0 = (bestRun.b - bestRun.a + 1) / H;
+    if (h0 > 0.3) return null;                                  // too tall to be a subtitle line: not sure, leave it
+    const pad = Math.max(0.01, h0 * 0.35);
+    const top = Math.max(0, bestRun.a / H - pad), bottom = Math.min(1, (bestRun.b + 1) / H + pad);
+    return { top, height: bottom - top };
+  } catch { return null; }
+  finally { v.removeAttribute('src'); v.load(); URL.revokeObjectURL(url); }
+}
+
 /* ---------- cut a finished video (start / end) without re-encoding ---------- */
 // Stream copy: takes seconds and keeps the quality. The end is cut exactly; a cut at the start can land up
 // to a key frame earlier (about 1-2 s), because a copied video must begin on a key frame.
@@ -1400,7 +1460,7 @@ async function makeOverlay(f, fx, g) {
     ctx.font = `700 ${px}px ${fam}`; ctx.textBaseline = 'top';
     const tw = Math.ceil(ctx.measureText(wm.text).width), th = Math.round(px * 1.3);
     const p = place(wm.pos || 'br', tw, th);
-    ctx.globalAlpha = 0.75; ctx.lineJoin = 'round'; ctx.lineWidth = Math.max(2, px * 0.14);
+    ctx.globalAlpha = Math.max(0.1, Math.min(1, (+wm.op || 75) / 100)); ctx.lineJoin = 'round'; ctx.lineWidth = Math.max(2, px * 0.14);
     ctx.strokeStyle = '#000'; ctx.fillStyle = '#fff';
     ctx.strokeText(wm.text, p.x, p.y); ctx.fillText(wm.text, p.x, p.y);
   }

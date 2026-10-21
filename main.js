@@ -13,7 +13,7 @@ const state = {
   step: 1, showSrc: false, file: null, videoDur: 0, lang: 'auto', segs: [], sourceLines: [],
   burmese: [], genders: null, audioBlob: null, personaId: 'TH', ...DEFAULTS, result: null, busy: false, origSegs: null,
   fxMirror: false, fxBlur: false, blurH: 15, blurY: 100, blurS: 50, blurO: 100, previewUrl: null, previewFor: null,
-  pStyle: 'chat', fxRatio: 'orig', fxFit: 'crop', fxZoom: 100, fxFast: true, fxHD: false, fxFps30: true, fxUnlock: false, wmOn: false, wmText: '', wmPos: 'br', wmSize: 4,
+  pStyle: 'chat', fxRatio: 'orig', fxFit: 'crop', fxZoom: 100, fxFast: true, fxHD: false, fxFps30: true, fxUnlock: false, wmOn: false, wmText: '', wmPos: 'br', wmSize: 4, wmOp: 75,
   logoOn: false, logoData: null, logoPos: 'tr', logoSize: 14, tab: 'video',
   frzOn: false, frzA: 4, frzB: 2, frzZoom: 'out', frzAmt: 20,
   fxSubs: false, subS: 5, subY: 88, subC: '#ffffff', subO: '#000000', subFont: 'pt16', fontOk: false
@@ -708,6 +708,8 @@ function previewBlock() {
         🌫 Blur (စာတန်းထိုး ဖုံးမည်)
       </label>
       <div id="blurBox" ${state.fxBlur ? '' : 'hidden'}>
+        <button type="button" class="btn block" id="blurAuto" style="margin-top:10px" ${state.file ? '' : 'disabled'}>✨ စာတန်းနေရာ အလိုလို ရှာမည်</button>
+        <p class="muted small" id="blurAutoMsg" style="margin:4px 0 0">Video ထဲက မူရင်းစာတန်းကို ရှာပြီး Blur ကို အပေါ်မှာ အလိုလို ချိန်ပေးပါတယ် (မှားရင် အောက်မှာ ပြင်ပါ)</p>
         <div class="row" style="margin-top:14px"><b>↕ အကြီးအသေး (အမြင့်)</b><span id="bhv">${state.blurH}%</span></div>
         <input id="blurH" type="range" min="3" max="40" value="${state.blurH}" />
         <div class="row" style="margin-top:14px"><b>⇅ အပေါ်အောက် နေရာ</b><span id="byv">${state.blurY}%</span></div>
@@ -788,6 +790,8 @@ function previewBlock() {
           <div class="chips" data-pos="wmPos">${posChips()}</div>
           <div class="row" style="margin-top:14px"><b>အရွယ်အစား</b><span id="wmSizeV">${state.wmSize}%</span></div>
           ${pmRow('wmSize', 2, 10, 1, state.wmSize)}
+          <div class="row" style="margin-top:14px"><b>အရောင်မှိန်မှု (Opacity)</b><span id="wmOpV">${state.wmOp}%</span></div>
+          ${pmRow('wmOp', 10, 100, 5, state.wmOp)}
         </div>
         <label style="display:flex;align-items:center;gap:10px;font-weight:600;margin-top:18px">
           <input id="logoOn" type="checkbox" style="${chk}" ${state.logoOn ? 'checked' : ''} /> ⭕ Logo (စက်ဝိုင်း)
@@ -834,7 +838,7 @@ function bindPreview() {
     if (wm) {
       const on = state.wmOn && state.wmText.trim();
       wm.style.display = on ? 'block' : 'none';
-      if (on) { wm.textContent = state.wmText; wm.style.fontSize = Math.max(8, Math.round(mn * state.wmSize / 100)) + 'px'; wm.style.fontFamily = L.subFontFamily(selFont()); place(wm, state.wmPos); }
+      if (on) { wm.textContent = state.wmText; wm.style.fontSize = Math.max(8, Math.round(mn * state.wmSize / 100)) + 'px'; wm.style.fontFamily = L.subFontFamily(selFont()); wm.style.opacity = String(state.wmOp / 100); place(wm, state.wmPos); }
     }
     const lg = $('#pvLogo');
     if (lg) {
@@ -902,7 +906,28 @@ function bindPreview() {
     $('#fxUnlockT').textContent = (state.fxUnlock ? '🔓' : '🔒') + ' အချိုး / Zoom / 720p / 30fps ပြင်မည်';
   };
   $('#fxMirror').onchange = e => { state.fxMirror = e.target.checked; apply(); };
-  $('#fxBlur').onchange = e => { state.fxBlur = e.target.checked; $('#blurBox').hidden = !state.fxBlur; apply(); };
+  // find the source subtitles and put the blur band on them (once per video when Blur is switched on)
+  const autoBlur = async () => {
+    const b = $('#blurAuto'), msg = $('#blurAutoMsg'), f = state.file;
+    if (!b || !f) return;
+    b.disabled = true; b.textContent = '✨ စာတန်း ရှာနေပါတယ်…';
+    const r = await L.findSubBand(f).catch(() => null);
+    state.blurAutoFor = f;
+    if (!$('#blurAuto')) return;                              // left the page meanwhile
+    b.disabled = false; b.textContent = '✨ စာတန်းနေရာ အလိုလို ရှာမည်';
+    if (!r) { msg.textContent = '⚠ စာတန်း သေချာ မတွေ့ပါ — အောက်က ⇅ နဲ့ ↕ ကို ကိုယ်တိုင် ညှိပါ'; return; }
+    state.blurH = Math.max(3, Math.min(40, Math.round(r.height * 100)));
+    state.blurY = r.height >= 1 ? 100 : Math.max(0, Math.min(100, Math.round(r.top / (1 - r.height) * 100)));
+    $('#blurH').value = state.blurH; $('#bhv').textContent = state.blurH + '%';
+    $('#blurY').value = state.blurY; $('#byv').textContent = state.blurY + '%';
+    msg.textContent = '✅ စာတန်းနေရာ တွေ့ပြီး Blur ချိန်ပြီးပါပြီ — Preview မှာ စစ်ကြည့်ပါ';
+    apply();
+  };
+  $('#blurAuto')?.addEventListener('click', autoBlur);
+  $('#fxBlur').onchange = e => {
+    state.fxBlur = e.target.checked; $('#blurBox').hidden = !state.fxBlur; apply();
+    if (state.fxBlur && state.file && state.blurAutoFor !== state.file) autoBlur();
+  };
   $('#blurH').oninput = e => { state.blurH = +e.target.value; $('#bhv').textContent = e.target.value + '%'; apply(); };
   $('#blurY').oninput = e => { state.blurY = +e.target.value; $('#byv').textContent = e.target.value + '%'; apply(); };
   const bindPM = (id, key, min, max, step) => {
@@ -929,6 +954,7 @@ function bindPreview() {
   }; });
   bindPM('fxZoom', 'fxZoom', 100, 250, 10);
   bindPM('wmSize', 'wmSize', 2, 10, 1);
+  bindPM('wmOp', 'wmOp', 10, 100, 5);
   bindPM('logoSize', 'logoSize', 5, 40, 1);
   bindPM('blurO', 'blurO', 20, 100, 5);
 
@@ -1416,7 +1442,7 @@ async function step4() {
       persona, voices, pitch: state.pitch, rate: state.rate,
       fx: {
         ratio: state.fxRatio, fit: state.fxFit, zoom: state.fxZoom, fast: state.fxFast, hd: state.fxHD && premPlan(), fps30: state.fxFps30,
-        wm: { on: state.wmOn, text: state.wmText, pos: state.wmPos, size: state.wmSize },
+        wm: { on: state.wmOn, text: state.wmText, pos: state.wmPos, size: state.wmSize, op: state.wmOp },
         logo: { on: state.logoOn, data: state.logoData, pos: state.logoPos, size: state.logoSize },
         freeze: { on: state.frzOn, every: state.frzA, hold: state.frzB, zoom: state.frzZoom, amount: state.frzAmt },
         mirror: state.fxMirror, blur: state.fxBlur, blurH: state.blurH, blurY: state.blurY, blurS: state.blurS, blurO: state.blurO,
