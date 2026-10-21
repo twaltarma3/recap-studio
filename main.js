@@ -18,7 +18,7 @@ const state = {
   pStyle: 'chat', fxRatio: 'orig', fxFit: 'crop', fxZoom: 100, fxFast: true, fxHD: false, fxFps30: true, fxUnlock: false, wmOn: false, wmText: '', wmPos: 'br', wmSize: 4, wmOp: 75,
   logoOn: false, logoData: null, logoPos: 'tr', logoSize: 14, tab: 'video',
   frzOn: false, frzA: 4, frzB: 2, frzZoom: 'out', frzAmt: 20,
-  fxSubs: false, subS: 5, subY: 88, subC: '#ffffff', subO: '#000000', subFont: 'pt16', fontOk: false
+  fxSubs: false, subS: 5, subY: 88, subC: '#ffffff', subO: '#000000', subFont: 'akk', fontOk: false
 };
 // access codes: on only when the Worker has them set up (accessCheck answers something other than {open:true})
 const acc = { on: false, ok: false, name: '', limit: 0, used: 0, left: -1, plan: 'free', expires: 0, credits: 0 };
