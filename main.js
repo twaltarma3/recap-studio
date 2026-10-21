@@ -13,7 +13,7 @@ const state = {
   step: 1, showSrc: false, file: null, videoDur: 0, lang: 'auto', segs: [], sourceLines: [],
   burmese: [], genders: null, audioBlob: null, personaId: 'TH', ...DEFAULTS, result: null, busy: false, origSegs: null,
   fxMirror: false, fxBlur: false, blurH: 15, blurY: 100, blurS: 50, blurO: 100, previewUrl: null, previewFor: null,
-  pStyle: 'chat', fxRatio: 'orig', fxFit: 'crop', fxZoom: 100, fxFast: true, fxHD: false, fxFps30: true, fxUnlock: false, wmOn: false, wmText: '', wmPos: 'br', wmSize: 4,
+  pStyle: 'chat', fxRatio: 'orig', fxFit: 'crop', fxZoom: 100, fxFast: true, fxHD: false, fxFps30: true, fxUnlock: false, wmOn: false, wmText: '', wmPos: 'br', wmSize: 4, wmOp: 75,
   logoOn: false, logoData: null, logoPos: 'tr', logoSize: 14, tab: 'video',
   frzOn: false, frzA: 4, frzB: 2, frzZoom: 'out', frzAmt: 20,
   fxSubs: false, subS: 5, subY: 88, subC: '#ffffff', subO: '#000000', subFont: 'pt16', fontOk: false
@@ -275,8 +275,8 @@ function pageGuide() {
       ${sec(3, 'စာသားစစ်၊ Gemini နဲ့ ဘာသာပြန်', `
         <ol>
           <li>ထွက်လာတဲ့ စာသားကို စစ်ပါ။ မှားတာရှိရင် ပြင်ပါ။ <b>စာကြောင်းအရေအတွက် မပြောင်းပါနဲ့။</b></li>
-          <li><b>📋 Copy Full Prompt</b> ကိုနှိပ်ပါ။</li>
-          <li><b>Gemini App ဖွင့်မည်</b> ကိုနှိပ်ပြီး Gemini မှာ Prompt ကို Paste လုပ်ပါ။</li>
+          <li><b>📋 Prompt ကူးပြီး Gemini ဖွင့်မည်</b> ကိုနှိပ်ပါ — Prompt ကူးပြီး Gemini ပွင့်လာပါမယ်။</li>
+          <li>Gemini မှာ Prompt ကို Paste လုပ်ပြီး ပို့ပါ။</li>
           <li>Gemini ပေးတဲ့ <b>JSON ကို အကုန်ကူး</b>ပြီး အောက်က JSON ကွက်ထဲ Paste လုပ်ပါ။</li>
           <li><b>ဘာသာပြန်အတည်ပြုမည် (Next)</b> ကိုနှိပ်ပါ။</li>
         </ol>
@@ -429,7 +429,7 @@ function pagePremium() {
     <ul class="plist">
       ${row('🔑', 'AssemblyAI Key မလို', 'Key ဖွင့်စရာ၊ ထည့်စရာ မလိုဘဲ စာသားထုတ်လို့ရ')}
       ${row('✨', 'Auto ဘာသာပြန်', 'Gemini မှာ Copy/Paste မလုပ်ရတော့ဘဲ ခလုတ်တစ်ချက်နဲ့ မြန်မာလို ဘာသာပြန်')}
-      ${row('🖼', 'Auto Thumbnail ခေါင်းစဉ်', 'ဇာတ်ကြောင်းကနေ ခေါင်းစဉ် ၅ ခု ထုတ်ပေး — ရွေးပြီး ChatGPT ကို တန်းပို့')}
+      ${row('🖼', 'Auto Thumbnail ခေါင်းစဉ်', 'ဇာတ်ကြောင်းကနေ ခေါင်းစဉ် ၃ ခု ထုတ်ပေး — ရွေးပြီး ChatGPT ကို တန်းပို့')}
       ${row('🎟', 'တစ်ရက် ကန့်သတ်ချက် မရှိ', `ဝယ်ထားတဲ့ Credit ရှိသလောက် ထုတ်လို့ရ — ၁ မိနစ် = ${L.CPM} credit (စက္ကန့်နဲ့ တွက်၊ ဥပမာ 1:30 = ${L.creditCost(90)})၊ ထုတ်ပြီးသား Video ကို ပြန်ထုတ်ရင်လည်း နှုတ်ပါတယ် (Error တက်လို့ ပြန်စရင် မနှုတ်)`)}
       ${row('📝', 'Caption + Hashtag', 'TikTok / Facebook မှာ တင်ဖို့ စာနဲ့ Hashtag ကို AI က ရေးပေး')}
     </ul>
@@ -708,6 +708,8 @@ function previewBlock() {
         🌫 Blur (စာတန်းထိုး ဖုံးမည်)
       </label>
       <div id="blurBox" ${state.fxBlur ? '' : 'hidden'}>
+        <button type="button" class="btn block" id="blurAuto" style="margin-top:10px" ${state.file ? '' : 'disabled'}>✨ စာတန်းနေရာ အလိုလို ရှာမည်</button>
+        <p class="muted small" id="blurAutoMsg" style="margin:4px 0 0">Video ထဲက မူရင်းစာတန်းကို ရှာပြီး Blur ကို အပေါ်မှာ အလိုလို ချိန်ပေးပါတယ် (မှားရင် အောက်မှာ ပြင်ပါ)</p>
         <div class="row" style="margin-top:14px"><b>↕ အကြီးအသေး (အမြင့်)</b><span id="bhv">${state.blurH}%</span></div>
         <input id="blurH" type="range" min="3" max="40" value="${state.blurH}" />
         <div class="row" style="margin-top:14px"><b>⇅ အပေါ်အောက် နေရာ</b><span id="byv">${state.blurY}%</span></div>
@@ -788,6 +790,8 @@ function previewBlock() {
           <div class="chips" data-pos="wmPos">${posChips()}</div>
           <div class="row" style="margin-top:14px"><b>အရွယ်အစား</b><span id="wmSizeV">${state.wmSize}%</span></div>
           ${pmRow('wmSize', 2, 10, 1, state.wmSize)}
+          <div class="row" style="margin-top:14px"><b>အရောင်မှိန်မှု (Opacity)</b><span id="wmOpV">${state.wmOp}%</span></div>
+          ${pmRow('wmOp', 10, 100, 5, state.wmOp)}
         </div>
         <label style="display:flex;align-items:center;gap:10px;font-weight:600;margin-top:18px">
           <input id="logoOn" type="checkbox" style="${chk}" ${state.logoOn ? 'checked' : ''} /> ⭕ Logo (စက်ဝိုင်း)
@@ -834,7 +838,7 @@ function bindPreview() {
     if (wm) {
       const on = state.wmOn && state.wmText.trim();
       wm.style.display = on ? 'block' : 'none';
-      if (on) { wm.textContent = state.wmText; wm.style.fontSize = Math.max(8, Math.round(mn * state.wmSize / 100)) + 'px'; wm.style.fontFamily = L.subFontFamily(selFont()); place(wm, state.wmPos); }
+      if (on) { wm.textContent = state.wmText; wm.style.fontSize = Math.max(8, Math.round(mn * state.wmSize / 100)) + 'px'; wm.style.fontFamily = L.subFontFamily(selFont()); wm.style.opacity = String(state.wmOp / 100); place(wm, state.wmPos); }
     }
     const lg = $('#pvLogo');
     if (lg) {
@@ -902,7 +906,28 @@ function bindPreview() {
     $('#fxUnlockT').textContent = (state.fxUnlock ? '🔓' : '🔒') + ' အချိုး / Zoom / 720p / 30fps ပြင်မည်';
   };
   $('#fxMirror').onchange = e => { state.fxMirror = e.target.checked; apply(); };
-  $('#fxBlur').onchange = e => { state.fxBlur = e.target.checked; $('#blurBox').hidden = !state.fxBlur; apply(); };
+  // find the source subtitles and put the blur band on them (once per video when Blur is switched on)
+  const autoBlur = async () => {
+    const b = $('#blurAuto'), msg = $('#blurAutoMsg'), f = state.file;
+    if (!b || !f) return;
+    b.disabled = true; b.textContent = '✨ စာတန်း ရှာနေပါတယ်…';
+    const r = await L.findSubBand(f).catch(() => null);
+    state.blurAutoFor = f;
+    if (!$('#blurAuto')) return;                              // left the page meanwhile
+    b.disabled = false; b.textContent = '✨ စာတန်းနေရာ အလိုလို ရှာမည်';
+    if (!r) { msg.textContent = '⚠ စာတန်း သေချာ မတွေ့ပါ — အောက်က ⇅ နဲ့ ↕ ကို ကိုယ်တိုင် ညှိပါ'; return; }
+    state.blurH = Math.max(3, Math.min(40, Math.round(r.height * 100)));
+    state.blurY = r.height >= 1 ? 100 : Math.max(0, Math.min(100, Math.round(r.top / (1 - r.height) * 100)));
+    $('#blurH').value = state.blurH; $('#bhv').textContent = state.blurH + '%';
+    $('#blurY').value = state.blurY; $('#byv').textContent = state.blurY + '%';
+    msg.textContent = '✅ စာတန်းနေရာ တွေ့ပြီး Blur ချိန်ပြီးပါပြီ — Preview မှာ စစ်ကြည့်ပါ';
+    apply();
+  };
+  $('#blurAuto')?.addEventListener('click', autoBlur);
+  $('#fxBlur').onchange = e => {
+    state.fxBlur = e.target.checked; $('#blurBox').hidden = !state.fxBlur; apply();
+    if (state.fxBlur && state.file && state.blurAutoFor !== state.file) autoBlur();
+  };
   $('#blurH').oninput = e => { state.blurH = +e.target.value; $('#bhv').textContent = e.target.value + '%'; apply(); };
   $('#blurY').oninput = e => { state.blurY = +e.target.value; $('#byv').textContent = e.target.value + '%'; apply(); };
   const bindPM = (id, key, min, max, step) => {
@@ -929,6 +954,7 @@ function bindPreview() {
   }; });
   bindPM('fxZoom', 'fxZoom', 100, 250, 10);
   bindPM('wmSize', 'wmSize', 2, 10, 1);
+  bindPM('wmOp', 'wmOp', 10, 100, 5);
   bindPM('logoSize', 'logoSize', 5, 40, 1);
   bindPM('blurO', 'blurO', 20, 100, 5);
 
@@ -1177,7 +1203,7 @@ function step2() {
     <div class="chips" id="pStyle" style="margin:0 0 8px"><button type="button" class="chip" data-s="recap">🔥 Recap (လှုပ်ရှား)</button><button type="button" class="chip" data-s="chat">💬 ရိုးရိုးစကားပြော</button>${premPlan() ? '<button type="button" class="chip" data-s="dub">🎭 ဇာတ်ကောင်စကား · Beta</button>' : ''}</div>
     ${isPremium() ? `<button id="autoTr" class="btn primary block">✨ Auto ဘာသာပြန်မည် <span class="pbadge">💎 Premium</span></button>
     <p class="muted small" style="margin:4px 0 10px">ခလုတ်တစ်ချက်နဲ့ AI က မြန်မာလို ဘာသာပြန်ပေးပါမယ် (စာကြောင်းများရင် ၁ မိနစ်လောက် ကြာနိုင်ပါတယ်)။</p>` : ''}
-    <button id="copy" class="btn block">📋 Copy Full Prompt</button>
+    <button id="copy" class="btn block">📋 Prompt ကူးပြီး Gemini ဖွင့်မည်</button>
     <div class="panel">
       <b>🤖 Gemini App ဖြင့် ဘာသာပြန်ရန် (Free)</b>
       <p class="muted small">Prompt ကို Copy ကူးပြီး Gemini တွင် Paste လုပ်ပါ။ ရလာသော JSON ကို အောက်တွင် ထည့်ပါ။</p>
@@ -1202,11 +1228,15 @@ function step2() {
   document.querySelectorAll('#pStyle .chip').forEach(c => c.onclick = () => { state.pStyle = c.dataset.s; paintS(); });
   paintS();
   $('#back').onclick = () => go(1);
+  // one tap: copy the prompt and open Gemini to paste it (both inside the tap, which iPhone needs)
   $('#copy').onclick = async () => {
     if (!syncSrc()) return;
     const text = L.buildPrompt(state.segs, state.pStyle);
-    try { await navigator.clipboard.writeText(text); toast('Prompt ကူးပြီးပါပြီ'); }
-    catch { $('#json').value = text; toast('ကူးမရပါ — အောက်ကနေ ရွေးကူးပါ'); }
+    let ok = copyNow(text);
+    window.open('https://gemini.google.com/app', '_blank', 'noopener');
+    if (!ok) { try { await navigator.clipboard.writeText(text); ok = true; } catch {} }
+    if (ok) toast('📋 Prompt ကူးပြီးပါပြီ — Gemini မှာ Paste လုပ်ပြီး ပို့ပါ');
+    else { $('#json').value = text; toast('ကူးမရပါ — အောက်ကနေ ရွေးကူးပါ'); }
   };
   $('#autoTr')?.addEventListener('click', async () => {
     if (!syncSrc()) return;
@@ -1416,7 +1446,7 @@ async function step4() {
       persona, voices, pitch: state.pitch, rate: state.rate,
       fx: {
         ratio: state.fxRatio, fit: state.fxFit, zoom: state.fxZoom, fast: state.fxFast, hd: state.fxHD && premPlan(), fps30: state.fxFps30,
-        wm: { on: state.wmOn, text: state.wmText, pos: state.wmPos, size: state.wmSize },
+        wm: { on: state.wmOn, text: state.wmText, pos: state.wmPos, size: state.wmSize, op: state.wmOp },
         logo: { on: state.logoOn, data: state.logoData, pos: state.logoPos, size: state.logoSize },
         freeze: { on: state.frzOn, every: state.frzA, hold: state.frzB, zoom: state.frzZoom, amount: state.frzAmt },
         mirror: state.fxMirror, blur: state.fxBlur, blurH: state.blurH, blurY: state.blurY, blurS: state.blurS, blurO: state.blurO,
@@ -1543,7 +1573,7 @@ function showResult() {
   });
   $('#toStep2')?.addEventListener('click', () => { state.showSrc = true; go(2); });
   $('#thumbGo').onclick = () => thumbPanel();
-  if (state.thumb && state.thumb.shots) thumbPanel();
+  if ((state.thumb && state.thumb.shots) || isPremium()) thumbPanel();   // Premium: thumbnail shots, titles and caption come by themselves
   $('#back').onclick = () => { clearResult(); go(3); };
   $('#again').onclick = () => { clearResult(); Object.assign(state, { showSrc: false, file: null, segs: [], origSegs: null, burmese: [] }); go(1); };
 }
@@ -1838,10 +1868,19 @@ async function pageAdmin() {
   });
 }
 
-/* ---------------- Thumbnail: pick a shot of the main character, ChatGPT makes the 3D thumbnail ---------------- */
+/* ---------------- Thumbnail: a shot of the main character with the title on it, ready to download ---------------- */
 async function thumbPanel() {
   const box = $('#thumbBox'); if (!box) return;
   const th = state.thumb || (state.thumb = { shots: null, sel: 0, src: null });
+  // Premium: titles + caption are written by themselves (one AI call), while the shots are being found
+  if (isPremium() && !th.packP && !(th.titles || []).length && !th.caption && (state.burmese || []).some(Boolean)) {
+    th.packing = true;
+    th.packP = L.premiumAI(T.packPrompt(state.burmese), true).then(text => {
+      th.titles = T.parseTitles(text); th.titleSel = th.titles.length ? 0 : -1;
+      th.caption = T.parseCaption(text); th.packErr = '';
+      th.backupT = th.backupC = L.premiumAI.backup;
+    }).catch(e => { th.packErr = e.message.slice(0, 200); }).finally(() => { th.packing = false; });
+  }
   if (!th.shots) {
     box.innerHTML = `<div class="panel"><b>🖼 Thumbnail</b>
       <p class="muted small" id="tbMsg">အဓိက ဇာတ်ကောင်ရဲ့ ပုံတွေ ရှာနေပါတယ်… (ပထမဆုံးတစ်ကြိမ် မျက်နှာရှာ Engine ~13MB ဒေါင်းပါမယ်)</p>
@@ -1856,62 +1895,153 @@ async function thumbPanel() {
         break;
       } catch (e) { err = e; }
     }
-    if (!th.shots) { box.innerHTML = `<div class="err">${esc((err && err.message) || 'ပုံထုတ်လို့ မရပါ')}</div><button id="thumbGo" class="btn block">ပြန်ကြိုးစားမည်</button>`; $('#thumbGo').onclick = () => thumbPanel(); return; }
+    // no shots (e.g. the face engine couldn't load): titles and caption still come; the shots can be tried again
+    if (!th.shots) {
+      if (!isPremium()) { box.innerHTML = `<div class="err">${esc((err && err.message) || 'ပုံထုတ်လို့ မရပါ')}</div><button id="thumbGo" class="btn block">ပြန်ကြိုးစားမည်</button>`; $('#thumbGo').onclick = () => thumbPanel(); return; }
+      th.shotErr = (err && err.message) || 'ပုံထုတ်လို့ မရပါ';
+    } else th.shotErr = '';
   }
   if (!$('#thumbBox')) return;
+  const ratios = ['9:16', '3:4', '16:9'];
+  th.ratio = th.ratio || '9:16';
   box.innerHTML = `
     <div class="panel thumbp">
-      <b>🖼 Thumbnail (ChatGPT နဲ့ 3D ပုံ)</b>
-      <p class="tstep">၁) ဇာတ်ကောင်ပုံ တစ်ပုံ ရွေးပါ</p>
+      <b>🖼 Thumbnail (စာပါပြီးသား)</b>
+      ${th.shotErr ? `<div class="err">${esc(th.shotErr)}</div><button type="button" id="tbRetry" class="btn block">🔄 ပုံ ပြန်ရှာမည်</button>` : `
+      <div class="tbhead">
+        <button type="button" id="tbNext" class="btn" title="အသစ်">🔄 အသစ်</button>
+        <button type="button" id="tbDl" class="btn primary">⬇ Download</button>
+      </div>
+      <div class="tcards">${ratios.map(r => `<button type="button" data-r="${r}" class="${r === th.ratio ? 'on' : ''}">
+        <span class="tcimg" style="aspect-ratio:${r.replace(':', '/')}"><img alt="" /><i>⏳</i></span>
+        <small>${{ '9:16': 'TikTok', '3:4': 'Facebook', '16:9': 'YouTube' }[r]} · ${r}</small></button>`).join('')}</div>
+      <p class="muted small" id="tbNote" style="margin:6px 0 0">ပုံကို နှိပ်ပြီး ရွေးပါ · မကြိုက်ရင် 🔄 အသစ် ကို နှိပ်ပါ</p>
+      <div id="tbShow"></div>`}
+      <p class="tstep">✏️ ခေါင်းစဉ်</p>
+      <input id="tbCustom" type="text" maxlength="60" placeholder="ကိုယ်တိုင် ရေးချင်ရင် ဒီမှာ ရေးပါ" value="${esc(th.custom || '')}" />
+      <div class="err small" id="tbErr" ${th.packErr ? '' : 'hidden'}>⚠ ${esc(th.packErr || '')}</div>
+      ${isPremium() ? `<p class="warn small" id="tbBackup" ${th.backupT ? '' : 'hidden'}>⚠ Thumbnail ခေါင်းစဉ် နဲ့ Caption စာသားများ လွဲနေခြင်း၊ အဓိပ္ပါယ် တလွဲများ ဖြစ်နေပါက <b>VPN ဖွင့်ပြီး 🔄</b> ခလုတ်ကို နှိပ်ပါ။</p>
+      <div id="tbTitles" style="margin-top:8px">${(th.titles || []).length ? '' : '<button type="button" class="btn block" id="tbMkTitles">✨ ခေါင်းစဉ် ၃ ခု ထုတ်မည်</button>'}</div>` : ''}
+      ${th.shotErr ? '' : `
+      <details class="tgpt">
+      <summary>🧑 ဇာတ်ကောင်ပုံ ကိုယ်တိုင် ရွေးမည်</summary>
       ${th.faces ? '' : '<p class="muted small">မျက်နှာ ရှင်းရှင်း မတွေ့လို့ ပုံအကြည်ဆုံးတွေကို ပြထားပါတယ်။</p>'}
-      <div class="tshots">${th.shots.map((f, i) => `<button type="button" data-i="${i}" class="${i === th.sel ? 'on' : ''}"><img src="${f.img}" alt="" /><small>${fmtDur(f.t)}</small></button>`).join('')}</div>
-      ${isPremium() ? `<p class="tstep">✨ ခေါင်းစဉ် ရွေးပါ <span class="pbadge">💎 Premium</span></p>
-      <div id="tbTitles">${(th.titles || []).length ? '' : '<button type="button" class="btn block" id="tbMkTitles">✨ ခေါင်းစဉ် ၅ ခု ထုတ်မည်</button>'}</div>
-      <p class="muted small" style="margin:4px 0 0">ခေါင်းစဉ် ရွေးထားရင် ChatGPT က ထပ်မမေးဘဲ ပုံကို တန်းဆွဲပေးပါမယ်။</p>` : ''}
-      <p class="tstep">၂) ပုံ ဒေါင်းပြီး Prompt ကူးပါ</p>
-      <button type="button" class="btn primary block" id="tbGet">📋 ပုံ ဒေါင်း + Prompt ကူးမည်</button>
-      <button type="button" class="btn block" id="tbPrompt" style="margin-top:8px">📋 Prompt ပဲ ကူးမည်</button>
-      <div id="tbShow"></div>
-      <p class="tstep">၃) ChatGPT မှာ ပုံ ထုတ်ပါ</p>
-      <a class="btn block" id="tbOpen" href="https://chatgpt.com/" target="_blank" rel="noopener" style="display:block;text-align:center">💬 ChatGPT ဖွင့်မည်</a>
-      <ol class="muted small tsteps">
-        <li><b>+</b> ကိုနှိပ်ပြီး ဒေါင်းထားတဲ့ ပုံကို ထည့်ပါ</li>
-        <li>Prompt ကို paste လုပ်ပြီး ပို့ပါ</li>
-        <li>ChatGPT က ခေါင်းစဉ် ၅ ခုနဲ့ ဒီဇိုင်း ၅ မျိုး ပြပါမယ် — ကြိုက်တာ ရွေးပြီး ပြောပါ (ဥပမာ <b>"ခေါင်းစဉ် 2၊ ဒီဇိုင်း 3"</b>)</li>
-        <li>ထွက်လာတဲ့ 3D ပုံကို Download လုပ်ပြီး သုံးပါ</li>
-      </ol>
-      <p class="warn small" style="margin-top:10px">💡 ChatGPT က မြန်မာစာလုံးကို တစ်ခါတလေ မှားရေးတတ်ပါတယ်။ မှားနေရင် <b>"ခေါင်းစဉ်စာလုံး မှန်အောင် ပြန်ထုတ်ပေးပါ"</b> လို့ ထပ်ပြောပါ။</p>
+      <div class="tshots">${(th.shots || []).map((f, i) => `<button type="button" data-i="${i}" class="${i === th.sel ? 'on' : ''}"><img src="${f.img}" alt="" /><small>${fmtDur(f.t)}</small></button>`).join('')}</div>
+      </details>
+      <details class="tgpt">
+        <summary>🎨 ChatGPT နဲ့ 3D ပုံ လုပ်ချင်ရင် (မလုပ်လည်း ရပါတယ်)</summary>
+        <button type="button" class="btn block" id="tbGet">📋 ပုံ ဒေါင်း + Prompt ကူးမည်</button>
+        <button type="button" class="btn block" id="tbPrompt" style="margin-top:8px">📋 Prompt ပဲ ကူးမည်</button>
+        <a class="btn block" id="tbOpen" href="https://chatgpt.com/" target="_blank" rel="noopener" style="display:block;text-align:center;margin-top:8px">💬 ChatGPT ဖွင့်မည်</a>
+        <ol class="muted small tsteps">
+          <li><b>+</b> ကိုနှိပ်ပြီး ဒေါင်းထားတဲ့ ပုံကို ထည့်ပါ</li>
+          <li>Prompt ကို paste လုပ်ပြီး ပို့ပါ</li>
+          <li>ထွက်လာတဲ့ 3D ပုံကို Download လုပ်ပြီး သုံးပါ</li>
+        </ol>
+      </details>`}
     </div>
     ${isPremium() ? `<div class="panel">
       <b>📝 Caption + Hashtag <span class="pbadge">💎 Premium</span></b>
       <p class="muted small" style="margin:4px 0 8px">TikTok / Facebook မှာ Video တင်တဲ့အခါ ရေးဖို့ စာ</p>
+      <p class="warn small" id="capBackup" ${th.backupC ? '' : 'hidden'}>⚠ Thumbnail ခေါင်းစဉ် နဲ့ Caption စာသားများ လွဲနေခြင်း၊ အဓိပ္ပါယ် တလွဲများ ဖြစ်နေပါက <b>VPN ဖွင့်ပြီး 🔄</b> ခလုတ်ကို နှိပ်ပါ။</p>
       <div id="tbCap"></div>
     </div>` : ''}`;
   // the picture is made as soon as a shot is chosen: iPhone only saves / shares a file straight from the tap
+  $('#tbRetry')?.addEventListener('click', () => { th.shots = null; th.shotErr = ''; thumbPanel(); });
+  // each chosen frame is read from the video once
+  th.frames = th.frames || {};
+  const frameOf = i => th.frames[i] || (th.frames[i] = T.shotCanvas(th.src, th.shots[i]).catch(e => { delete th.frames[i]; throw e; }));
   const prepShot = () => {
+    if (!(th.shots || []).length) return Promise.reject(new Error('ပုံ မရှိသေးပါ'));
     const i = th.sel; th.blobs = th.blobs || {};
-    if (!th.blobs[i]) th.blobs[i] = T.shotBlob(th.src, th.shots[i]).then(b => { th.ready = { ...th.ready, [i]: b }; return b; }, e => { delete th.blobs[i]; throw e; });
+    if (!th.blobs[i]) th.blobs[i] = frameOf(i).then(c => new Promise(r => c.toBlob(r, 'image/jpeg', 0.93))).then(b => { th.ready = { ...th.ready, [i]: b }; return b; }, e => { delete th.blobs[i]; throw e; });
     return th.blobs[i];
   };
-  prepShot().catch(() => {});
-  view.querySelectorAll('.tshots button').forEach(b => {
-    b.onclick = () => { th.sel = +b.dataset.i; view.querySelectorAll('.tshots button').forEach(x => x.classList.toggle('on', x === b)); prepShot().catch(() => {}); };
+  // the ready thumbnail: chosen shot + title drawn on it, in the chosen shape
+  const THUMB_FONT = 'pt16';
+  const curTitle = () => (th.custom || '').trim() || (th.titles && th.titleSel >= 0 ? th.titles[th.titleSel] || '' : '');
+  const paintThumb = async () => {
+    if (!(th.shots || []).length || !$('.tcards')) return;
+    const tok = th.tok = (th.tok || 0) + 1;
+    view.querySelectorAll('.tcards i').forEach(i => { i.hidden = false; });
+    try {
+      const fam = L.subFontFamily(THUMB_FONT);
+      th.fontP = th.fontP || L.ensureSubFont(THUMB_FONT).catch(() => {}).then(() => document.fonts && document.fonts.load(`40px ${fam}`, 'က')).catch(() => {});
+      // the video's own burned-in subtitles are kept out of the picture
+      th.bandP = th.bandP || (th.src === (state.result && state.result.url) ? fetch(th.src).then(r => r.blob()) : Promise.resolve(state.file)).then(f => L.findSubBand(f)).catch(() => null);
+      const [frame, , band] = await Promise.all([frameOf(th.sel), th.fontP, th.bandP]);
+      th.outs = th.outs || {}; th.urls = th.urls || {};
+      for (const r of ratios) {
+        if (tok !== th.tok || !$('.tcards')) return;
+        const c = T.composeThumb(frame, th.shots[th.sel].face, curTitle(), r, fam, { subTop: band ? band.top : 0 });
+        const blob = await new Promise(res => c.toBlob(res, 'image/jpeg', 0.92));
+        if (tok !== th.tok || !$('.tcards') || !blob) return;
+        if (th.urls[r]) URL.revokeObjectURL(th.urls[r]);
+        th.outs[r] = blob; th.urls[r] = URL.createObjectURL(blob);
+        const card = view.querySelector(`.tcards [data-r="${r}"]`);
+        card.querySelector('img').src = th.urls[r]; card.querySelector('i').hidden = true;
+      }
+    } catch (e) { if (tok === th.tok) toast('ပုံ ထုတ်လို့ မရပါ'); }
+  };
+  const pickShot = i => { th.sel = i; view.querySelectorAll('.tshots button').forEach(x => x.classList.toggle('on', +x.dataset.i === i)); paintThumb(); if (view.querySelector('.tgpt')?.open) prepShot().catch(() => {}); };
+  view.querySelectorAll('.tshots button').forEach(b => { b.onclick = () => pickShot(+b.dataset.i); });
+  view.querySelectorAll('.tcards button').forEach(b => {
+    b.onclick = () => { th.ratio = b.dataset.r; view.querySelectorAll('.tcards button').forEach(x => x.classList.toggle('on', x === b)); };
   });
+  // 🔄: the next shot, and the next AI title (unless the user wrote their own)
+  $('#tbNext')?.addEventListener('click', () => {
+    const n = (th.titles || []).length;
+    if (n && !(th.custom || '').trim()) { th.titleSel = (th.titleSel + 1) % n; paintTitles(); }
+    else if (!n && isPremium() && !th.packing) mkTitles();
+    pickShot(((th.sel || 0) + 1) % th.shots.length);
+  });
+  let typing = 0;
+  $('#tbCustom')?.addEventListener('input', e => { th.custom = e.target.value; clearTimeout(typing); typing = setTimeout(paintThumb, 350); });
+  // saved straight from the tap (the picture is already made): iPhone only saves / shares a file that way
+  const saveThumb = async () => {
+    const blob = th.outs && th.outs[th.ratio]; if (!blob) { toast('ပုံ ပြင်နေတုန်းပါ — ခဏနေ ထပ်နှိပ်ပါ'); return; }
+    const name = state.file.name.replace(/\.[^.]+$/, '') + '_thumb_' + th.ratio.replace(':', 'x') + '.jpg';
+    const file = new File([blob], name, { type: 'image/jpeg' });
+    if (IS_IOS && navigator.canShare && navigator.canShare({ files: [file] })) {
+      try { await navigator.share({ files: [file] }); return; } catch (e) { if (e && e.name === 'AbortError') return; }
+    }
+    if (IS_IOS) { showShot(blob); return; }
+    download(blob, name); toast('✅ Thumbnail ဒေါင်းပြီးပါပြီ');
+  };
+  $('#tbDl')?.addEventListener('click', saveThumb);
+  paintThumb();
   const paintTitles = () => {
     const box = $('#tbTitles'); if (!box || !(th.titles || []).length) return;
     box.innerHTML = `<div class="ttitles">${th.titles.map((t, i) => `<button type="button" data-i="${i}" class="${i === th.titleSel ? 'on' : ''}">${esc(t)}</button>`).join('')}</div>
       <button type="button" class="btn block" id="tbMkTitles" style="margin-top:8px">🔄 ခေါင်းစဉ် အသစ်ထုတ်မည်</button>`;
-    box.querySelectorAll('.ttitles button').forEach(b => { b.onclick = () => { th.titleSel = th.titleSel === +b.dataset.i ? -1 : +b.dataset.i; paintTitles(); }; });
+    box.querySelectorAll('.ttitles button').forEach(b => { b.onclick = () => { th.titleSel = +b.dataset.i; th.custom = ''; const c = $('#tbCustom'); if (c) c.value = ''; paintTitles(); paintThumb(); }; });
     $('#tbMkTitles').onclick = mkTitles;
   };
   const mkTitles = async () => {
     const b = $('#tbMkTitles'); if (b) { b.disabled = true; b.textContent = '✨ ခေါင်းစဉ် ရေးနေပါတယ်…'; }
-    try { th.titles = T.parseTitles(await L.premiumAI(T.titlesPrompt(state.burmese), true)); th.titleSel = 0; }
-    catch (e) { toast(e.message.slice(0, 120)); }
-    if ((th.titles || []).length) paintTitles(); else if (b) { b.disabled = false; b.textContent = '✨ ခေါင်းစဉ် ၅ ခု ထုတ်မည်'; }
+    th.packing = true;
+    try { th.titles = T.parseTitles(await L.premiumAI(T.titlesPrompt(state.burmese), true)); th.titleSel = 0; th.packErr = ''; th.backupT = L.premiumAI.backup; }
+    catch (e) { th.packErr = e.message.slice(0, 200); }
+    th.packing = false; packErr();
+    if ((th.titles || []).length) { paintTitles(); paintThumb(); } else if (b) { b.disabled = false; b.textContent = '✨ ခေါင်းစဉ် ၃ ခု ထုတ်မည်'; }
   };
   $('#tbMkTitles')?.addEventListener('click', mkTitles);
   paintTitles();
+  // Premium: the pack call started with the panel; show its result (or why it failed) when it lands
+  if (th.packing) {
+    const tb = $('#tbMkTitles'); if (tb) { tb.disabled = true; tb.textContent = '✨ ခေါင်းစဉ် ရေးနေပါတယ်…'; }
+    setTimeout(() => { const c = $('#capMk'); if (c) { c.disabled = true; c.textContent = '📝 Caption ရေးနေပါတယ်…'; } }, 0);
+    th.packP.then(() => {
+      if (!$('#thumbBox')) return;
+      if ((th.titles || []).length) { paintTitles(); paintThumb(); } else { const b = $('#tbMkTitles'); if (b) { b.disabled = false; b.textContent = '✨ ခေါင်းစဉ် ၃ ခု ထုတ်မည်'; } }
+      paintCap(); packErr();
+    });
+  }
+  const packErr = () => {
+    const e = $('#tbErr'); if (e) { e.hidden = !th.packErr; e.textContent = '⚠ ' + (th.packErr || ''); }
+    const t = $('#tbBackup'); if (t) t.hidden = !th.backupT;
+    const c = $('#capBackup'); if (c) c.hidden = !th.backupC;
+  };
   const paintCap = () => {
     const box = $('#tbCap'); if (!box) return;
     box.innerHTML = th.caption ? `<textarea id="capTxt" rows="7" readonly>${esc(th.caption)}</textarea>
@@ -1919,16 +2049,18 @@ async function thumbPanel() {
       : '<button type="button" class="btn block" id="capMk">📝 Caption + Hashtag ရေးမည်</button>';
     $('#capMk').onclick = async () => {
       const b = $('#capMk'); b.disabled = true; b.textContent = '📝 ရေးနေပါတယ်…';
-      try { th.caption = T.parseCaption(await L.premiumAI(T.captionPrompt(state.burmese), true)); }
+      try { th.caption = T.parseCaption(await L.premiumAI(T.captionPrompt(state.burmese), true)); th.backupC = L.premiumAI.backup; }
       catch (e) { toast(e.message.slice(0, 120)); }
-      paintCap();
+      paintCap(); packErr();
     };
     const c = $('#capCopy');
     if (c) c.onclick = async () => { try { await navigator.clipboard.writeText(th.caption); toast('✅ ကူးပြီးပါပြီ'); } catch { $('#capTxt').select(); toast('ကူးမရပါ — ကိုယ်တိုင် ရွေးကူးပါ'); } };
   };
   paintCap();
+  if (!$('#tbGet')) return;
+  view.querySelector('.tgpt').addEventListener('toggle', e => { if (e.target.open) prepShot().catch(() => {}); });
   $('#tbPrompt').onclick = async () => {
-    const chosen = isPremium() && th.titles && th.titleSel >= 0 ? th.titles[th.titleSel] : '';
+    const chosen = curTitle();
     const prompt = chosen ? T.chatgptPromptWithTitle(chosen) : T.chatgptPrompt(state.burmese);
     let ok = copyNow(prompt);
     if (!ok) { try { await navigator.clipboard.writeText(prompt); ok = true; } catch {} }
@@ -1936,7 +2068,7 @@ async function thumbPanel() {
   };
   $('#tbGet').onclick = async () => {
     const b = $('#tbGet'); b.disabled = true;
-    const chosen = isPremium() && th.titles && th.titleSel >= 0 ? th.titles[th.titleSel] : '';
+    const chosen = curTitle();
     const prompt = chosen ? T.chatgptPromptWithTitle(chosen) : T.chatgptPrompt(state.burmese);
     // iPhone: copied at once, inside the tap; the share sheet that opens next would otherwise block the copy
     const copying = IS_IOS && copyNow(prompt) ? Promise.resolve(true) : navigator.clipboard.writeText(prompt).then(() => true, () => false);

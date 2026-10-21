@@ -105,6 +105,11 @@ export async function pickCharacterShots(src, { samples = 36, keep = 6, onProgre
  * subtitles) is cut off, but never into the character's face.
  */
 export async function shotBlob(src, shot) {
+  const c = await shotCanvas(src, shot);
+  return new Promise(r => c.toBlob(r, 'image/jpeg', 0.93));
+}
+// the chosen frame at full size, bottom subtitle band cut off (never into the face)
+export async function shotCanvas(src, shot) {
   const v = await openVideo(src);
   await seek(v, shot.t);
   const W = Math.min(1920, v.videoWidth), H = Math.round(W * v.videoHeight / v.videoWidth);
@@ -114,16 +119,115 @@ export async function shotBlob(src, shot) {
   const c = document.createElement('canvas'); c.width = W; c.height = h;
   c.getContext('2d').drawImage(v, 0, 0, v.videoWidth, v.videoHeight * (1 - cut), 0, 0, W, h);
   v.removeAttribute('src'); v.load();
-  return new Promise(r => c.toBlob(r, 'image/jpeg', 0.93));
+  c.faceCut = cut;
+  return c;
+}
+
+/* ---- ready-made thumbnail: the shot cropped to the platform's shape, with the Burmese title on top ---- */
+export const THUMB_SIZES = { '9:16': [720, 1280], '3:4': [960, 1280], '16:9': [1280, 720] };
+// split a Burmese title into 1 or 2 lines that fit maxW: break between words (spaces, else the browser's Burmese
+// word list, else letters), at the point that makes the two lines most even
+function wrapTitle(ctx, text, maxW) {
+  const w = x => ctx.measureText(x.trim()).width;
+  if (w(text) <= maxW) return [text.trim()];
+  const seg = g => typeof Intl !== 'undefined' && Intl.Segmenter ? [...new Intl.Segmenter('my', { granularity: g }).segment(text)].map(x => x.segment) : [...text];
+  const tries = [text.includes(' ') ? text.split(/(?<= )/) : null, seg('word'), seg('grapheme')].filter(p => p && p.length > 1);
+  for (const pieces of tries) {
+    let best = null;
+    for (let i = 1; i < pieces.length; i++) {
+      const a = pieces.slice(0, i).join(''), b = pieces.slice(i).join('');
+      const m = Math.max(w(a), w(b));
+      if (m <= maxW && (!best || m < best.m)) best = { m, lines: [a.trim(), b.trim()] };
+    }
+    if (best) return best.lines;
+  }
+  return [text.trim(), ''];                        // doesn't fit in 2 lines yet: the caller shrinks the letters
+}
+/**
+ * frame: canvas from shotCanvas(); face: {x,y,w,h} 0..1 of the original frame or null; title: Burmese text
+ * ratio: key of THUMB_SIZES; font: CSS font family (already loaded).
+ * subTop: where the video's burned-in subtitles start (0..1 of the original frame), kept out of the picture.
+ * Returns a canvas.
+ */
+export function composeThumb(frame, face, title, ratio, font, { subTop = 0 } = {}) {
+  const [TW, TH] = THUMB_SIZES[ratio] || THUMB_SIZES['16:9'];
+  const c = document.createElement('canvas'); c.width = TW; c.height = TH;
+  const ctx = c.getContext('2d');
+  // crop: cover the canvas, centred on the face, with the face a little below the middle (room for the title)
+  const cut = frame.faceCut || 0, fw = frame.width;
+  // usable height: above the subtitles, but never cutting into the face
+  const faceBot = face ? (face.y + face.h) / (1 - cut) + 0.02 : 0;
+  const keep = subTop > 0.4 ? Math.min(1, Math.max(subTop / (1 - cut) - 0.01, faceBot)) : 1;
+  const fh = frame.height, uh = fh * keep, cover = Math.max(TW / fw, TH / uh);
+  const fx = face ? (face.x + face.w / 2) * fw : fw / 2;
+  const fy = face ? Math.min(1, (face.y + face.h / 2) / (1 - cut)) * fh : fh * 0.45;
+  // a close-up cut to a tall shape would show only part of the face: zoom out (never narrower than the
+  // canvas) and fill above / below with a blurred, darker copy of the same picture
+  let sc = cover;
+  if (face && TH > TW) { const faceW = face.w * fw * cover; if (faceW > TW * 0.62) sc = Math.max(cover * TW * 0.62 / faceW, TW / fw); }
+  if (sc < cover - 1e-6) {
+    const k = 10, tiny = document.createElement('canvas'); tiny.width = Math.round(TW / k); tiny.height = Math.round(TH / k);
+    const bw = fw * cover, bh = uh * cover, tc = tiny.getContext('2d');
+    tc.filter = 'blur(3px)';                       // ignored where canvas filters are missing: the tiny copy still looks soft
+    tc.drawImage(frame, 0, 0, fw, uh, (TW - bw) / 2 / k, (TH - bh) / 2 / k, bw / k, bh / k);
+    ctx.imageSmoothingQuality = 'high'; ctx.drawImage(tiny, 0, 0, TW, TH);
+    ctx.fillStyle = 'rgba(0,0,0,.45)'; ctx.fillRect(0, 0, TW, TH);
+  }
+  const iw = fw * sc, ih = uh * sc;
+  let ox = TW / 2 - fx * sc, oy = TH * (TH > TW ? 0.56 : 0.52) - fy * sc;
+  ox = Math.min(0, Math.max(TW - iw, ox));
+  oy = ih >= TH ? Math.min(0, Math.max(TH - ih, oy)) : Math.max(0, Math.min(TH - ih, oy));
+  ctx.drawImage(frame, 0, 0, fw, uh, ox, oy, iw, ih);
+  if (ih < TH) {                                  // soften the picture's top and bottom edges into the blur
+    const e = Math.min(ih * 0.2, TH * 0.08);
+    for (const [y0, y1] of [[oy, oy + e], [oy + ih, oy + ih - e]]) {
+      const g = ctx.createLinearGradient(0, y0, 0, y1); g.addColorStop(0, 'rgba(0,0,0,.5)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = g; ctx.fillRect(0, Math.min(y0, y1), TW, e);
+    }
+  }
+  // light grade: a bit more contrast, dark top for the title, soft vignette
+  const top = ctx.createLinearGradient(0, 0, 0, TH * 0.42);
+  top.addColorStop(0, 'rgba(0,0,0,.78)'); top.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = top; ctx.fillRect(0, 0, TW, TH * 0.42);
+  const vg = ctx.createRadialGradient(TW / 2, TH / 2, Math.min(TW, TH) * 0.35, TW / 2, TH / 2, Math.hypot(TW, TH) * 0.6);
+  vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,.55)');
+  ctx.fillStyle = vg; ctx.fillRect(0, 0, TW, TH);
+  // title: big yellow letters with a thick dark outline, up to 2 lines, shrunk until it fits
+  const t = String(title || '').trim();
+  if (t) {
+    const maxW = TW * 0.88;
+    let size = Math.round(Math.min(TW, TH) * (TW > TH ? 0.13 : 0.12)), lines;
+    for (; size > 18; size -= 2) {
+      ctx.font = `${size}px ${font}`;
+      lines = wrapTitle(ctx, t, maxW);
+      if (lines.length <= 2 && lines[1] !== '' && lines.every(l => ctx.measureText(l).width <= maxW)) break;
+    }
+    ctx.font = `${size}px ${font}`; ctx.textAlign = 'center'; ctx.textBaseline = 'top'; ctx.lineJoin = 'round';
+    const lh = size * 1.55, y0 = TH * 0.045;
+    lines.filter(Boolean).slice(0, 2).forEach((l, i) => {
+      const y = y0 + i * lh;
+      ctx.shadowColor = 'rgba(255,190,0,.55)'; ctx.shadowBlur = size * 0.35;
+      ctx.lineWidth = size * 0.2; ctx.strokeStyle = '#120a00'; ctx.strokeText(l, TW / 2, y);
+      ctx.shadowBlur = 0;
+      const g = ctx.createLinearGradient(0, y, 0, y + size * 1.3);
+      g.addColorStop(0, '#fff6b0'); g.addColorStop(0.45, '#ffd21f'); g.addColorStop(1, '#ff9f00');
+      ctx.fillStyle = g; ctx.fillText(l, TW / 2, y);
+    });
+  }
+  // thin gold frame
+  const m = Math.round(Math.min(TW, TH) * 0.025), lw = Math.max(3, Math.round(Math.min(TW, TH) * 0.007)), r = m * 1.4;
+  ctx.lineWidth = lw; ctx.strokeStyle = '#e8b64a';
+  ctx.beginPath(); ctx.roundRect ? ctx.roundRect(m, m, TW - 2 * m, TH - 2 * m, r) : ctx.rect(m, m, TW - 2 * m, TH - 2 * m); ctx.stroke();
+  return c;
 }
 
 // what the user pastes into ChatGPT together with the picture
-// Premium: 5 Burmese titles from Gemini (one per line)
+// Premium: 3 Burmese titles from Gemini (one per line)
 export function titlesPrompt(burmese) {
   const story = burmese.filter(Boolean).join(' ').slice(0, 6000);
-  return `Read this Burmese movie-recap story and write 5 short, catchy Burmese thumbnail titles for YouTube / TikTok.
-Rules: spoken Burmese (not formal written style), about 12-25 characters each, makes people curious, no spoilers, no emoji, no hashtags, no numbering, no quotes.
-Return ONLY a JSON object: {"titles": ["...", "...", "...", "...", "..."]}
+  return `Read this Burmese movie-recap story and write 3 short, catchy Burmese thumbnail titles for YouTube / TikTok.
+Rules for the titles: spoken Burmese (not formal written style), 12-25 characters each, no emoji, no hashtags, no numbering, no quotes. Put a normal space between phrases (e.g. သမီးတွေရဲ့ လျှို့ဝှက်ချက်) so the title can break into two lines. Each title must make a Burmese viewer NEED to click: use a different hook for each one — a secret (…ရဲ့ လျှို့ဝှက်ချက်), a shocking twist or reveal, a strong emotion (betrayal, revenge, forbidden love), a mystery question, or an underdog / rich-poor contrast. Name the key character by role (အဖေ၊ သမီး၊ ဆင်းရဲသား၊ သူဌေးမ …), never by a foreign name. Tease, but never give away the ending.
+Return ONLY a JSON object: {"titles": ["...", "...", "..."]}
 
 Story:
 ${story}`;
@@ -132,15 +236,15 @@ export function parseTitles(text) {
   try {
     const a = text.indexOf('{'), b = text.lastIndexOf('}');
     const t = JSON.parse(text.slice(a, b + 1)).titles;
-    if (Array.isArray(t)) return t.map(x => String(x).trim()).filter(Boolean).slice(0, 5);
+    if (Array.isArray(t)) return t.map(x => String(x).trim()).filter(Boolean).slice(0, 3);
   } catch {}
-  return text.split('\n').map(x => x.replace(/^\s*[\d.)\-•]+\s*/, '').replace(/^["“]|["”]$/g, '').trim()).filter(Boolean).slice(0, 5);
+  return text.split('\n').map(x => x.replace(/^\s*[\d.)\-•]+\s*/, '').replace(/^["“]|["”]$/g, '').trim()).filter(Boolean).slice(0, 3);
 }
 // Premium: post caption + hashtags for TikTok / Facebook
 export function captionPrompt(burmese) {
   const story = burmese.filter(Boolean).join(' ').slice(0, 6000);
   return `Read this Burmese movie-recap story and write the post text for uploading the video to TikTok / Facebook.
-Rules: spoken Burmese, 2-3 short lines that hook people without spoilers, at most 2 fitting emoji, then 8-12 hashtags (mix Burmese and English, e.g. #movierecap #ဇာတ်လမ်းအကျဉ်း, plus the genre).
+Rules for the caption: spoken Burmese, 2-4 short lines. Line 1 is a hook (a question or a surprising fact from the story) that stops the scroll. Then 1-2 lines on the setup and the conflict, with real details from this story, without the ending. Last line asks people to watch to the end or follow (for example ဇာတ်သိမ်းကို အဆုံးထိ ကြည့်ပါ). At most 2 fitting emoji. Hashtags: 6-10 — 2-3 Burmese ones about the story and genre (e.g. #ဇာတ်လမ်းအကျဉ်း #အချစ်ဇာတ်လမ်း), plus #movierecap #shortdrama #myanmar #fyp.
 Return ONLY a JSON object: {"caption": "...", "hashtags": ["#...", "#..."]}
 
 Story:
@@ -155,6 +259,18 @@ export function parseCaption(text) {
   } catch {}
   return text.trim();
 }
+// Premium, right after the video: titles + caption in one AI call
+export function packPrompt(burmese) {
+  const story = burmese.filter(Boolean).join(' ').slice(0, 6000);
+  return `Read this Burmese movie-recap story. Write (1) 3 thumbnail titles and (2) the TikTok / Facebook post caption with hashtags.
+Rules for the titles: spoken Burmese (not formal written style), 12-25 characters each, no emoji, no hashtags, no numbering, no quotes. Put a normal space between phrases (e.g. သမီးတွေရဲ့ လျှို့ဝှက်ချက်) so the title can break into two lines. Each title must make a Burmese viewer NEED to click: use a different hook for each one — a secret (…ရဲ့ လျှို့ဝှက်ချက်), a shocking twist or reveal, a strong emotion (betrayal, revenge, forbidden love), a mystery question, or an underdog / rich-poor contrast. Name the key character by role (အဖေ၊ သမီး၊ ဆင်းရဲသား၊ သူဌေးမ …), never by a foreign name. Tease, but never give away the ending.
+Rules for the caption: spoken Burmese, 2-4 short lines. Line 1 is a hook (a question or a surprising fact from the story) that stops the scroll. Then 1-2 lines on the setup and the conflict, with real details from this story, without the ending. Last line asks people to watch to the end or follow (for example ဇာတ်သိမ်းကို အဆုံးထိ ကြည့်ပါ). At most 2 fitting emoji. Hashtags: 6-10 — 2-3 Burmese ones about the story and genre (e.g. #ဇာတ်လမ်းအကျဉ်း #အချစ်ဇာတ်လမ်း), plus #movierecap #shortdrama #myanmar #fyp.
+Return ONLY a JSON object: {"titles": ["...", "...", "..."], "caption": "...", "hashtags": ["#...", "#..."]}
+
+Story:
+${story}`;
+}
+
 // prompt with the title already chosen: ChatGPT goes straight to drawing
 export function chatgptPromptWithTitle(title) {
   return `I attached a frame from a movie. Create a YouTube / TikTok movie-recap thumbnail now (no questions):
