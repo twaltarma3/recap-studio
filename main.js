@@ -18,7 +18,7 @@ const state = {
   pStyle: 'chat', fxRatio: 'orig', fxFit: 'crop', fxZoom: 100, fxFast: true, fxHD: false, fxFps30: true, fxUnlock: false, wmOn: false, wmText: '', wmPos: 'br', wmSize: 4, wmOp: 75,
   logoOn: false, logoData: null, logoPos: 'tr', logoSize: 14, tab: 'video',
   frzOn: false, frzA: 4, frzB: 2, frzZoom: 'out', frzAmt: 20,
-  fxSubs: false, subS: 5, subY: 88, subC: '#ffffff', subO: '#000000', subFont: 'akk', fontOk: false
+  fxSubs: false, subS: 4, subY: 88, subC: '#ffffff', subO: '#000000', subFont: 'akk', fontOk: false
 };
 // access codes: on only when the Worker has them set up (accessCheck answers something other than {open:true})
 const acc = { on: false, ok: false, name: '', limit: 0, used: 0, left: -1, plan: 'free', expires: 0, credits: 0 };
@@ -1090,6 +1090,7 @@ function step1() {
           .map(([v, t]) => `<option value="${v}" ${v === state.lang ? 'selected' : ''}>${t}</option>`).join('')}
       </select>
     </label>
+    <p class="tip small" style="margin:6px 0 0">💡 Video ထဲက ပြောတဲ့ဘာသာကို ရွေးပေးပါ — တရုတ်ကားဆို <b>Chinese 中文</b>။ Auto detect က Video အစပိုင်းကို နားထောင်ပြီး ခန့်မှန်းတာမို့ အစမှာ သီချင်း၊ ဆူညံသံ ဒါမှမဟုတ် တခြားဘာသာ ရောနေရင် မှားခန့်မှန်းပြီး စာသား လွဲထွက်တတ်ပါတယ်။ ဘာသာ မှန်မှန်ရွေးထားရင် စာသားရော ဘာသာပြန်ရော ပိုမှန်ပါတယ်။</p>
     ${premPlan() ? `<div class="panel" style="margin-top:16px">
       <b>⚡ One-Click Auto <span class="pbadge">💎 Premium</span></b>
       <p class="muted small" style="margin:6px 0 10px">ဘာသာပြန်ပုံစံနဲ့ အသံကို ရွေးပြီး <b>⚡ Auto နဲ့ Video ထုတ်မည်</b> ကိုနှိပ်ရင် စာသားထုတ် → ဘာသာပြန် → အသံထုတ် → Video ပေါင်း အကုန် အလိုအလျောက် လုပ်ပေးပါမယ်။${IS_IOS ? ' 🌐 iPhone မှာ VPN (US) ဖွင့်ထားပါ။' : ''}</p>
