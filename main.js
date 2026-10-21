@@ -2077,19 +2077,49 @@ async function thumbPanel() {
     const t = $('#tbBackup'); if (t) t.hidden = !th.backupT;
     const c = $('#capBackup'); if (c) c.hidden = !th.backupC;
   };
+  // the caption text and its hashtags apart: tags are chips that can be left out (tap again to put back)
+  const splitCap = c => {
+    const m = String(c || '').match(/\n\s*\n((?:#\S+\s*)+)$/);
+    return m ? { text: c.slice(0, m.index).trim(), tags: m[1].trim().split(/\s+/) } : { text: String(c || '').trim(), tags: [] };
+  };
+  const copyText = async (text, ok) => {
+    let done = copyNow(text);
+    if (!done) { try { await navigator.clipboard.writeText(text); done = true; } catch {} }
+    toast(done ? ok : 'ကူးမရပါ — ထပ်နှိပ်ကြည့်ပါ');
+  };
   const paintCap = () => {
     const box = $('#tbCap'); if (!box) return;
-    box.innerHTML = th.caption ? `<textarea id="capTxt" rows="7" readonly>${esc(th.caption)}</textarea>
-      <div class="two"><button type="button" class="btn primary" id="capCopy">📋 ကူးမည်</button><button type="button" class="btn" id="capMk">🔄 အသစ်ရေးမည်</button></div>`
-      : '<button type="button" class="btn block" id="capMk">📝 Caption + Hashtag ရေးမည်</button>';
+    if (!th.caption) {
+      box.innerHTML = '<button type="button" class="btn block" id="capMk">📝 Caption + Hashtag ရေးမည်</button>';
+    } else {
+      if (th.capFor !== th.caption) { Object.assign(th, splitCap(th.caption), { tagOff: [], capFor: th.caption }); }
+      box.innerHTML = `<textarea id="capTxt" rows="5">${esc(th.text)}</textarea>
+        <div class="two"><button type="button" class="btn" id="capCopy">📋 Caption ကူး</button><button type="button" class="btn" id="capMk">🔄 အသစ်ရေးမည်</button></div>
+        ${th.tags.length ? `<div class="row" style="margin-top:14px"><b># Hashtag</b><span class="muted small" id="tagN"></span></div>
+        <div class="tagchips">${th.tags.map((t, i) => `<button type="button" data-i="${i}">${esc(t)}</button>`).join('')}</div>
+        <p class="muted small" style="margin:6px 0 0">မလိုတာကို နှိပ်ရင် ဖယ်ပါမယ် (ပြန်နှိပ်ရင် ပြန်ထည့်)</p>
+        <button type="button" class="btn block" id="tagCopy" style="margin-top:8px"># Hashtag ပဲ ကူးမည်</button>` : ''}
+        <button type="button" class="btn primary block" id="capAll">📋 Caption + Hashtag အကုန်ကူးမည်</button>`;
+      const tagsOn = () => th.tags.filter((_, i) => !th.tagOff.includes(i));
+      const paintTags = () => {
+        box.querySelectorAll('.tagchips button').forEach(b => b.classList.toggle('off', th.tagOff.includes(+b.dataset.i)));
+        const n = $('#tagN'); if (n) n.textContent = `${tagsOn().length} / ${th.tags.length} ခု ရွေးထား`;
+      };
+      box.querySelectorAll('.tagchips button').forEach(b => {
+        b.onclick = () => { const i = +b.dataset.i; th.tagOff = th.tagOff.includes(i) ? th.tagOff.filter(x => x !== i) : [...th.tagOff, i]; paintTags(); };
+      });
+      paintTags();
+      $('#capTxt').oninput = e => { th.text = e.target.value; };
+      $('#capCopy').onclick = () => copyText(th.text.trim(), '✅ Caption ကူးပြီးပါပြီ');
+      $('#tagCopy')?.addEventListener('click', () => copyText(tagsOn().join(' '), '✅ Hashtag ကူးပြီးပါပြီ'));
+      $('#capAll').onclick = () => copyText([th.text.trim(), tagsOn().join(' ')].filter(Boolean).join('\n\n'), '✅ Caption + Hashtag ကူးပြီးပါပြီ');
+    }
     $('#capMk').onclick = async () => {
       const b = $('#capMk'); b.disabled = true; b.textContent = '📝 ရေးနေပါတယ်…';
       try { th.caption = T.parseCaption(await L.premiumAI(T.captionPrompt(state.burmese), true)); th.backupC = L.premiumAI.backup; }
       catch (e) { toast(e.message.slice(0, 120)); }
       paintCap(); packErr();
     };
-    const c = $('#capCopy');
-    if (c) c.onclick = async () => { try { await navigator.clipboard.writeText(th.caption); toast('✅ ကူးပြီးပါပြီ'); } catch { $('#capTxt').select(); toast('ကူးမရပါ — ကိုယ်တိုင် ရွေးကူးပါ'); } };
   };
   paintCap();
   if (!$('#tbGet')) return;
