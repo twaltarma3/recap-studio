@@ -8,11 +8,13 @@ import * as H from './history.js';
 import * as T from './thumb.js';
 
 const $ = (s, r = document) => r.querySelector(s);
-const DEFAULTS = { pitch: 10, rate: 20, keepTalk: 0, keepGap: 0.3, offset: 0, maxTempo: 2.0, dubGain: 1.8 };
+// what the 🔒 switch on step 1 unlocks (kept at their defaults until then)
+const LOCK_T = 'အချိုး · Zoom · 720p · Blur · Freeze ပြင်မည်';
+const DEFAULTS = { pitch: 10, rate: 25, keepTalk: 0, keepGap: 0.3, offset: 0, maxTempo: 2.0, dubGain: 1.8 };
 const state = {
   step: 1, showSrc: false, file: null, videoDur: 0, lang: 'auto', segs: [], sourceLines: [],
   burmese: [], genders: null, audioBlob: null, personaId: 'TH', ...DEFAULTS, result: null, busy: false, origSegs: null,
-  fxMirror: false, fxBlur: false, blurH: 15, blurY: 100, blurS: 50, blurO: 100, previewUrl: null, previewFor: null,
+  fxMirror: false, fxBlur: true, blurH: 15, blurY: 100, blurS: 50, blurO: 100, previewUrl: null, previewFor: null,
   pStyle: 'chat', fxRatio: 'orig', fxFit: 'crop', fxZoom: 100, fxFast: true, fxHD: false, fxFps30: true, fxUnlock: false, wmOn: false, wmText: '', wmPos: 'br', wmSize: 4, wmOp: 75,
   logoOn: false, logoData: null, logoPos: 'tr', logoSize: 14, tab: 'video',
   frzOn: false, frzA: 4, frzB: 2, frzZoom: 'out', frzAmt: 20,
@@ -667,9 +669,9 @@ function previewBlock() {
       <div class="pane" data-pane="video">
         <label style="display:flex;align-items:center;gap:10px;font-weight:600;margin-top:12px">
           <input id="fxUnlock" type="checkbox" style="${chk}" ${state.fxUnlock ? 'checked' : ''} />
-          <span id="fxUnlockT">${state.fxUnlock ? '🔓' : '🔒'} အချိုး / Zoom / 720p / 30fps ပြင်မည်</span>
+          <span id="fxUnlockT">${state.fxUnlock ? '🔓' : '🔒'} ${LOCK_T}</span>
         </label>
-        <p class="muted small" style="margin:4px 0 0">ပုံမှန် Setting (မူရင်းအချိုး · Zoom 100% · 720p · 30fps) နဲ့ သော့ခတ်ထားပါတယ်။ ပြောင်းချင်မှ ဖွင့်ပါ။</p>
+        <p class="muted small" style="margin:4px 0 0">ပုံမှန် Setting (မူရင်းအချိုး · Zoom 100% · 720p · 30fps · Blur ဖွင့် · Freeze ပိတ်) နဲ့ သော့ခတ်ထားပါတယ်။ ပြောင်းချင်မှ ဖွင့်ပါ။</p>
         <div id="lockBox" class="lockbox ${state.fxUnlock ? '' : 'locked'}" ${state.fxUnlock ? '' : 'inert'}>
         <b style="display:block;margin-top:14px">📐 အချိုး (Ratio)</b>
         <div class="chips" id="ratioChips">
@@ -693,18 +695,6 @@ function previewBlock() {
         🎞 30 fps နဲ့ ထုတ်မည်
       </label>
       <p class="muted small" style="margin:4px 0 0">မူရင်း 60 fps Video တွေကို 30 fps နဲ့ ထုတ်လို့ ၂ ဆလောက် ပိုမြန်ပါတယ် (TikTok/Facebook မှာ ကွာခြားမှု မသိသာပါ)။ 30 fps နဲ့အောက် Video တွေကို မထိပါ။</p>
-        </div>
-      <label style="display:flex;align-items:center;gap:10px;font-weight:600;margin-top:12px;${premPlan() ? '' : 'opacity:.55'}">
-        <input id="fxHD" type="checkbox" style="${chk}" ${premPlan() ? '' : 'disabled'} ${state.fxHD && premPlan() ? 'checked' : ''} />
-        📺 1080p (Quality မြင့်) <span class="pbadge">💎 Premium</span>
-      </label>
-      <p class="muted small" style="margin:4px 0 0">${premPlan()
-        ? 'Monetization အတွက် Quality မြင့်မြင့် ထုတ်ပါ။ 720p ထက် ၂ ဆလောက် ပိုကြာပါတယ်။ မူရင်း Video က 1080p မပြည့်ရင် မူရင်းအရွယ်အတိုင်းပဲ ထွက်ပါမယ်။'
-        : '💎 Premium ဝယ်ထားသူတွေပဲ 1080p နဲ့ ထုတ်လို့ရပါတယ်။'}</p>
-      <label style="display:flex;align-items:center;gap:10px;font-weight:600;margin-top:12px">
-        <input id="fxMirror" type="checkbox" style="${chk}" ${state.fxMirror ? 'checked' : ''} />
-        ↔ Mirror (ဘယ်ညာ လှန်မည်)
-      </label>
       <label style="display:flex;align-items:center;gap:10px;font-weight:600;margin-top:12px">
         <input id="fxBlur" type="checkbox" style="${chk}" ${state.fxBlur ? 'checked' : ''} />
         🌫 Blur (စာတန်းထိုး ဖုံးမည်)
@@ -743,6 +733,18 @@ function previewBlock() {
           ${pmRow('frzAmt', 5, 50, 5, state.frzAmt)}
         </div>
       </div>
+        </div>
+      <label style="display:flex;align-items:center;gap:10px;font-weight:600;margin-top:12px;${premPlan() ? '' : 'opacity:.55'}">
+        <input id="fxHD" type="checkbox" style="${chk}" ${premPlan() ? '' : 'disabled'} ${state.fxHD && premPlan() ? 'checked' : ''} />
+        📺 1080p (Quality မြင့်) <span class="pbadge">💎 Premium</span>
+      </label>
+      <p class="muted small" style="margin:4px 0 0">${premPlan()
+        ? 'Monetization အတွက် Quality မြင့်မြင့် ထုတ်ပါ။ 720p ထက် ၂ ဆလောက် ပိုကြာပါတယ်။ မူရင်း Video က 1080p မပြည့်ရင် မူရင်းအရွယ်အတိုင်းပဲ ထွက်ပါမယ်။'
+        : '💎 Premium ဝယ်ထားသူတွေပဲ 1080p နဲ့ ထုတ်လို့ရပါတယ်။'}</p>
+      <label style="display:flex;align-items:center;gap:10px;font-weight:600;margin-top:12px">
+        <input id="fxMirror" type="checkbox" style="${chk}" ${state.fxMirror ? 'checked' : ''} />
+        ↔ Mirror (ဘယ်ညာ လှန်မည်)
+      </label>
       </div>
       <div class="pane" data-pane="caps">
       <label style="display:flex;align-items:center;gap:10px;font-weight:600;margin-top:12px">
@@ -905,7 +907,7 @@ function bindPreview() {
     const box = $('#lockBox');
     box.classList.toggle('locked', !state.fxUnlock);
     if (state.fxUnlock) box.removeAttribute('inert'); else box.setAttribute('inert', '');
-    $('#fxUnlockT').textContent = (state.fxUnlock ? '🔓' : '🔒') + ' အချိုး / Zoom / 720p / 30fps ပြင်မည်';
+    $('#fxUnlockT').textContent = (state.fxUnlock ? '🔓' : '🔒') + ' ' + LOCK_T;
   };
   $('#fxMirror').onchange = e => { state.fxMirror = e.target.checked; apply(); };
   // find the source subtitles and put the blur band on them (once per video when Blur is switched on)
@@ -926,6 +928,8 @@ function bindPreview() {
     apply();
   };
   $('#blurAuto')?.addEventListener('click', autoBlur);
+  // Blur is on by default: put the band on this video's subtitles as soon as it is loaded
+  if (state.fxBlur && state.file && state.blurAutoFor !== state.file) autoBlur();
   $('#fxBlur').onchange = e => {
     state.fxBlur = e.target.checked; $('#blurBox').hidden = !state.fxBlur; apply();
     if (state.fxBlur && state.file && state.blurAutoFor !== state.file) autoBlur();
@@ -1090,7 +1094,7 @@ function step1() {
       <b>⚡ One-Click Auto <span class="pbadge">💎 Premium</span></b>
       <p class="muted small" style="margin:6px 0 10px">ဘာသာပြန်ပုံစံနဲ့ အသံကို ရွေးပြီး <b>⚡ Auto နဲ့ Video ထုတ်မည်</b> ကိုနှိပ်ရင် စာသားထုတ် → ဘာသာပြန် → အသံထုတ် → Video ပေါင်း အကုန် အလိုအလျောက် လုပ်ပေးပါမယ်။${IS_IOS ? ' 🌐 iPhone မှာ VPN (US) ဖွင့်ထားပါ။' : ''}</p>
       <b class="small">✍ ဘာသာပြန်ပုံစံ</b>
-      <div class="chips" id="aStyle" style="margin:6px 0 0">${[['recap', '🔥 Recap (လှုပ်ရှား)'], ['chat', '💬 ရိုးရိုးစကားပြော'], ['dub', '🎭 ဇာတ်ကောင်စကား · Beta']].map(([k, t]) => `<button type="button" class="chip ${state.pStyle === k ? 'on' : ''}" data-s="${k}">${t}</button>`).join('')}</div>
+      <div class="chips" id="aStyle" style="margin:6px 0 0">${[['recap', '🔥', 'Recap', 'လှုပ်ရှား'], ['chat', '💬', 'ရိုးရိုး', 'စကားပြော'], ['dub', '🎭', 'ဇာတ်ကောင်', 'Beta']].map(([k, i, t, sub]) => `<button type="button" class="chip ${state.pStyle === k ? 'on' : ''}" data-s="${k}"><i>${i}</i><span>${t}</span><small>${sub}</small></button>`).join('')}</div>
       <p class="muted small" style="margin:6px 0 0">🎭 <b>ဇာတ်ကောင်စကား</b> (စမ်းသပ်ဆဲ) — ဇာတ်ကောင်တွေ ပြောတဲ့အတိုင်း ဘာသာပြန်ပြီး ယောကျ်ားစကားကို သီဟ၊ မိန်းမစကားကို နီလာ အသံနဲ့ အလိုလို ခွဲထုတ်ပေးပါတယ်</p>
       ${voiceBlock()}
     </div>` : ''}
