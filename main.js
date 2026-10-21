@@ -1962,7 +1962,7 @@ async function thumbPanel() {
   // Premium: titles + caption are written by themselves (one AI call), while the shots are being found
   if (isPremium() && !th.packP && !(th.titles || []).length && !th.caption && (state.burmese || []).some(Boolean)) {
     th.packing = true;
-    th.packP = L.premiumAI(T.packPrompt(state.burmese), true).then(text => {
+    th.packP = L.premiumAI(T.packPrompt(state.burmese), true, { backup: true }).then(text => {
       th.titles = T.parseTitles(text); th.titleSel = th.titles.length ? 0 : -1;
       th.caption = T.parseCaption(text); th.packErr = '';
       th.backupT = th.backupC = L.premiumAI.backup;
@@ -2117,7 +2117,7 @@ async function thumbPanel() {
   const mkTitles = async () => {
     const b = $('#tbMkTitles'); if (b) { b.disabled = true; b.textContent = '✨ ခေါင်းစဉ် ရေးနေပါတယ်…'; }
     th.packing = true;
-    try { th.titles = T.parseTitles(await L.premiumAI(T.titlesPrompt(state.burmese), true)); th.titleSel = 0; th.packErr = ''; th.backupT = L.premiumAI.backup; }
+    try { th.titles = T.parseTitles(await L.premiumAI(T.titlesPrompt(state.burmese), true, { backup: true })); th.titleSel = 0; th.packErr = ''; th.backupT = L.premiumAI.backup; }
     catch (e) { th.packErr = e.message.slice(0, 200); }
     th.packing = false; packErr();
     if ((th.titles || []).length) { paintTitles(); paintThumb(); } else if (b) { b.disabled = false; b.textContent = '✨ ခေါင်းစဉ် ၃ ခု ထုတ်မည်'; }
@@ -2178,7 +2178,7 @@ async function thumbPanel() {
     }
     $('#capMk').onclick = async () => {
       const b = $('#capMk'); b.disabled = true; b.textContent = '📝 ရေးနေပါတယ်…';
-      try { th.caption = T.parseCaption(await L.premiumAI(T.captionPrompt(state.burmese), true)); th.backupC = L.premiumAI.backup; }
+      try { th.caption = T.parseCaption(await L.premiumAI(T.captionPrompt(state.burmese), true, { backup: true })); th.backupC = L.premiumAI.backup; }
       catch (e) { toast(e.message.slice(0, 120)); }
       paintCap(); packErr();
     };

@@ -63,10 +63,12 @@ const PREMIUM_ERR = {
   no_aai_key: 'Admin က AssemblyAI key မထည့်ရသေးပါ'
 };
 // Premium: Gemini answers a prompt on the Worker (json = ask for a JSON reply)
-export async function premiumAI(prompt, json = false) {
+// backup: titles / caption only — may be written by the Worker's backup model when Google turns the call down.
+// Translation never is: a weaker model mixes Chinese into the Burmese, so it fails with the reason instead.
+export async function premiumAI(prompt, json = false, { backup = false } = {}) {
   // Gemini answers 503 "high demand" (or 500) now and then; that passes in seconds, so ask again twice
   for (let tries = 0; ; tries++) {
-    const r = await premiumFetch('/premium/ai', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ prompt, json }) });
+    const r = await premiumFetch('/premium/ai', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ prompt, json, backup }) });
     const j = await r.json().catch(() => ({}));
     if (r.ok && j.text) { premiumAI.backup = !!j.model && j.model !== 'gemini'; return j.text; }
     const busy = / 50[03]:/.test(j.detail || '');
