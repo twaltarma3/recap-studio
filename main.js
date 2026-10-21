@@ -429,7 +429,7 @@ function pagePremium() {
     <ul class="plist">
       ${row('🔑', 'AssemblyAI Key မလို', 'Key ဖွင့်စရာ၊ ထည့်စရာ မလိုဘဲ စာသားထုတ်လို့ရ')}
       ${row('✨', 'Auto ဘာသာပြန်', 'Gemini မှာ Copy/Paste မလုပ်ရတော့ဘဲ ခလုတ်တစ်ချက်နဲ့ မြန်မာလို ဘာသာပြန်')}
-      ${row('🖼', 'Auto Thumbnail ခေါင်းစဉ်', 'ဇာတ်ကြောင်းကနေ ခေါင်းစဉ် ၅ ခု ထုတ်ပေး — ရွေးပြီး ChatGPT ကို တန်းပို့')}
+      ${row('🖼', 'Auto Thumbnail ခေါင်းစဉ်', 'ဇာတ်ကြောင်းကနေ ခေါင်းစဉ် ၃ ခု ထုတ်ပေး — ရွေးပြီး ChatGPT ကို တန်းပို့')}
       ${row('🎟', 'တစ်ရက် ကန့်သတ်ချက် မရှိ', `ဝယ်ထားတဲ့ Credit ရှိသလောက် ထုတ်လို့ရ — ၁ မိနစ် = ${L.CPM} credit (စက္ကန့်နဲ့ တွက်၊ ဥပမာ 1:30 = ${L.creditCost(90)})၊ ထုတ်ပြီးသား Video ကို ပြန်ထုတ်ရင်လည်း နှုတ်ပါတယ် (Error တက်လို့ ပြန်စရင် မနှုတ်)`)}
       ${row('📝', 'Caption + Hashtag', 'TikTok / Facebook မှာ တင်ဖို့ စာနဲ့ Hashtag ကို AI က ရေးပေး')}
     </ul>
@@ -1878,6 +1878,7 @@ async function thumbPanel() {
     th.packP = L.premiumAI(T.packPrompt(state.burmese), true).then(text => {
       th.titles = T.parseTitles(text); th.titleSel = th.titles.length ? 0 : -1;
       th.caption = T.parseCaption(text); th.packErr = '';
+      th.backupT = th.backupC = L.premiumAI.backup;
     }).catch(e => { th.packErr = e.message.slice(0, 200); }).finally(() => { th.packing = false; });
   }
   if (!th.shots) {
@@ -1919,7 +1920,8 @@ async function thumbPanel() {
       <p class="tstep">✏️ ခေါင်းစဉ်</p>
       <input id="tbCustom" type="text" maxlength="60" placeholder="ကိုယ်တိုင် ရေးချင်ရင် ဒီမှာ ရေးပါ" value="${esc(th.custom || '')}" />
       <div class="err small" id="tbErr" ${th.packErr ? '' : 'hidden'}>⚠ ${esc(th.packErr || '')}</div>
-      ${isPremium() ? `<div id="tbTitles" style="margin-top:8px">${(th.titles || []).length ? '' : '<button type="button" class="btn block" id="tbMkTitles">✨ ခေါင်းစဉ် ၅ ခု ထုတ်မည်</button>'}</div>` : ''}
+      ${isPremium() ? `<p class="warn small" id="tbBackup" ${th.backupT ? '' : 'hidden'}>⚠ ဒီတစ်ခါ Google AI က မဖြေလို့ အရန် AI နဲ့ ရေးထားပါတယ် — စာ မမှန်ရင် <b>VPN ဖွင့်ပြီး</b> အောက်က <b>🔄</b> ခလုတ်ကို နှိပ်ပါ။ (Video ထုတ်တုန်း VPN မလိုပါ — ဒီနေရာရောက်မှ ဖွင့်ပါ)</p>
+      <div id="tbTitles" style="margin-top:8px">${(th.titles || []).length ? '' : '<button type="button" class="btn block" id="tbMkTitles">✨ ခေါင်းစဉ် ၃ ခု ထုတ်မည်</button>'}</div>` : ''}
       ${th.shotErr ? '' : `
       <details class="tgpt">
       <summary>🧑 ဇာတ်ကောင်ပုံ ကိုယ်တိုင် ရွေးမည်</summary>
@@ -1941,6 +1943,7 @@ async function thumbPanel() {
     ${isPremium() ? `<div class="panel">
       <b>📝 Caption + Hashtag <span class="pbadge">💎 Premium</span></b>
       <p class="muted small" style="margin:4px 0 8px">TikTok / Facebook မှာ Video တင်တဲ့အခါ ရေးဖို့ စာ</p>
+      <p class="warn small" id="capBackup" ${th.backupC ? '' : 'hidden'}>⚠ ဒီတစ်ခါ Google AI က မဖြေလို့ အရန် AI နဲ့ ရေးထားပါတယ် — စာ မမှန်ရင် <b>VPN ဖွင့်ပြီး</b> အောက်က <b>🔄</b> ခလုတ်ကို နှိပ်ပါ။ (Video ထုတ်တုန်း VPN မလိုပါ — ဒီနေရာရောက်မှ ဖွင့်ပါ)</p>
       <div id="tbCap"></div>
     </div>` : ''}`;
   // the picture is made as soon as a shot is chosen: iPhone only saves / shares a file straight from the tap
@@ -2017,10 +2020,10 @@ async function thumbPanel() {
   const mkTitles = async () => {
     const b = $('#tbMkTitles'); if (b) { b.disabled = true; b.textContent = '✨ ခေါင်းစဉ် ရေးနေပါတယ်…'; }
     th.packing = true;
-    try { th.titles = T.parseTitles(await L.premiumAI(T.titlesPrompt(state.burmese), true)); th.titleSel = 0; th.packErr = ''; }
+    try { th.titles = T.parseTitles(await L.premiumAI(T.titlesPrompt(state.burmese), true)); th.titleSel = 0; th.packErr = ''; th.backupT = L.premiumAI.backup; }
     catch (e) { th.packErr = e.message.slice(0, 200); }
     th.packing = false; packErr();
-    if ((th.titles || []).length) { paintTitles(); paintThumb(); } else if (b) { b.disabled = false; b.textContent = '✨ ခေါင်းစဉ် ၅ ခု ထုတ်မည်'; }
+    if ((th.titles || []).length) { paintTitles(); paintThumb(); } else if (b) { b.disabled = false; b.textContent = '✨ ခေါင်းစဉ် ၃ ခု ထုတ်မည်'; }
   };
   $('#tbMkTitles')?.addEventListener('click', mkTitles);
   paintTitles();
@@ -2030,11 +2033,15 @@ async function thumbPanel() {
     setTimeout(() => { const c = $('#capMk'); if (c) { c.disabled = true; c.textContent = '📝 Caption ရေးနေပါတယ်…'; } }, 0);
     th.packP.then(() => {
       if (!$('#thumbBox')) return;
-      if ((th.titles || []).length) { paintTitles(); paintThumb(); } else { const b = $('#tbMkTitles'); if (b) { b.disabled = false; b.textContent = '✨ ခေါင်းစဉ် ၅ ခု ထုတ်မည်'; } }
+      if ((th.titles || []).length) { paintTitles(); paintThumb(); } else { const b = $('#tbMkTitles'); if (b) { b.disabled = false; b.textContent = '✨ ခေါင်းစဉ် ၃ ခု ထုတ်မည်'; } }
       paintCap(); packErr();
     });
   }
-  const packErr = () => { const e = $('#tbErr'); if (e) { e.hidden = !th.packErr; e.textContent = '⚠ ' + (th.packErr || ''); } };
+  const packErr = () => {
+    const e = $('#tbErr'); if (e) { e.hidden = !th.packErr; e.textContent = '⚠ ' + (th.packErr || ''); }
+    const t = $('#tbBackup'); if (t) t.hidden = !th.backupT;
+    const c = $('#capBackup'); if (c) c.hidden = !th.backupC;
+  };
   const paintCap = () => {
     const box = $('#tbCap'); if (!box) return;
     box.innerHTML = th.caption ? `<textarea id="capTxt" rows="7" readonly>${esc(th.caption)}</textarea>
@@ -2042,9 +2049,9 @@ async function thumbPanel() {
       : '<button type="button" class="btn block" id="capMk">📝 Caption + Hashtag ရေးမည်</button>';
     $('#capMk').onclick = async () => {
       const b = $('#capMk'); b.disabled = true; b.textContent = '📝 ရေးနေပါတယ်…';
-      try { th.caption = T.parseCaption(await L.premiumAI(T.captionPrompt(state.burmese), true)); }
+      try { th.caption = T.parseCaption(await L.premiumAI(T.captionPrompt(state.burmese), true)); th.backupC = L.premiumAI.backup; }
       catch (e) { toast(e.message.slice(0, 120)); }
-      paintCap();
+      paintCap(); packErr();
     };
     const c = $('#capCopy');
     if (c) c.onclick = async () => { try { await navigator.clipboard.writeText(th.caption); toast('✅ ကူးပြီးပါပြီ'); } catch { $('#capTxt').select(); toast('ကူးမရပါ — ကိုယ်တိုင် ရွေးကူးပါ'); } };

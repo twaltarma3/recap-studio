@@ -68,7 +68,7 @@ export async function premiumAI(prompt, json = false) {
   for (let tries = 0; ; tries++) {
     const r = await premiumFetch('/premium/ai', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ prompt, json }) });
     const j = await r.json().catch(() => ({}));
-    if (r.ok && j.text) return j.text;
+    if (r.ok && j.text) { premiumAI.backup = !!j.model && j.model !== 'gemini'; return j.text; }
     const busy = / 50[03]:/.test(j.detail || '');
     if (busy && tries < 2) { await new Promise(res => setTimeout(res, tries ? 6000 : 2500)); continue; }
     if (busy) throw new Error('⏳ AI မှာ လူသုံးများနေလို့ ခဏ မအားပါ — ၁ မိနစ်လောက်နေ ပြန်နှိပ်ပါ');

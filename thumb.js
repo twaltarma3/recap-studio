@@ -125,17 +125,23 @@ export async function shotCanvas(src, shot) {
 
 /* ---- ready-made thumbnail: the shot cropped to the platform's shape, with the Burmese title on top ---- */
 export const THUMB_SIZES = { '9:16': [720, 1280], '3:4': [960, 1280], '16:9': [1280, 720] };
-// split a Burmese title into at most 2 lines that fit maxW (by words, else by letters)
+// split a Burmese title into 1 or 2 lines that fit maxW: break between words (spaces, else the browser's Burmese
+// word list, else letters), at the point that makes the two lines most even
 function wrapTitle(ctx, text, maxW) {
-  const seg = typeof Intl !== 'undefined' && Intl.Segmenter ? [...new Intl.Segmenter('my', { granularity: 'grapheme' }).segment(text)].map(x => x.segment) : [...text];
-  const words = text.includes(' ') ? text.split(/\s+/) : null;
-  const pieces = words && words.every(w => ctx.measureText(w).width <= maxW) ? words.map((w, i) => (i ? ' ' : '') + w) : seg;
-  const lines = ['']; for (const p of pieces) {
-    const tryL = lines[lines.length - 1] + p;
-    if (ctx.measureText(tryL.trim()).width <= maxW || !lines[lines.length - 1]) lines[lines.length - 1] = tryL;
-    else lines.push(p.trimStart());
+  const w = x => ctx.measureText(x.trim()).width;
+  if (w(text) <= maxW) return [text.trim()];
+  const seg = g => typeof Intl !== 'undefined' && Intl.Segmenter ? [...new Intl.Segmenter('my', { granularity: g }).segment(text)].map(x => x.segment) : [...text];
+  const tries = [text.includes(' ') ? text.split(/(?<= )/) : null, seg('word'), seg('grapheme')].filter(p => p && p.length > 1);
+  for (const pieces of tries) {
+    let best = null;
+    for (let i = 1; i < pieces.length; i++) {
+      const a = pieces.slice(0, i).join(''), b = pieces.slice(i).join('');
+      const m = Math.max(w(a), w(b));
+      if (m <= maxW && (!best || m < best.m)) best = { m, lines: [a.trim(), b.trim()] };
+    }
+    if (best) return best.lines;
   }
-  return lines.map(l => l.trim()).filter(Boolean);
+  return [text.trim(), ''];                        // doesn't fit in 2 lines yet: the caller shrinks the letters
 }
 /**
  * frame: canvas from shotCanvas(); face: {x,y,w,h} 0..1 of the original frame or null; title: Burmese text
@@ -194,11 +200,11 @@ export function composeThumb(frame, face, title, ratio, font, { subTop = 0 } = {
     for (; size > 18; size -= 2) {
       ctx.font = `${size}px ${font}`;
       lines = wrapTitle(ctx, t, maxW);
-      if (lines.length <= 2 && lines.every(l => ctx.measureText(l).width <= maxW)) break;
+      if (lines.length <= 2 && lines[1] !== '' && lines.every(l => ctx.measureText(l).width <= maxW)) break;
     }
     ctx.font = `${size}px ${font}`; ctx.textAlign = 'center'; ctx.textBaseline = 'top'; ctx.lineJoin = 'round';
     const lh = size * 1.55, y0 = TH * 0.045;
-    lines.slice(0, 2).forEach((l, i) => {
+    lines.filter(Boolean).slice(0, 2).forEach((l, i) => {
       const y = y0 + i * lh;
       ctx.shadowColor = 'rgba(255,190,0,.55)'; ctx.shadowBlur = size * 0.35;
       ctx.lineWidth = size * 0.2; ctx.strokeStyle = '#120a00'; ctx.strokeText(l, TW / 2, y);
@@ -216,12 +222,12 @@ export function composeThumb(frame, face, title, ratio, font, { subTop = 0 } = {
 }
 
 // what the user pastes into ChatGPT together with the picture
-// Premium: 5 Burmese titles from Gemini (one per line)
+// Premium: 3 Burmese titles from Gemini (one per line)
 export function titlesPrompt(burmese) {
   const story = burmese.filter(Boolean).join(' ').slice(0, 6000);
-  return `Read this Burmese movie-recap story and write 5 short, catchy Burmese thumbnail titles for YouTube / TikTok.
-Rules for the titles: spoken Burmese (not formal written style), 12-25 characters each, no emoji, no hashtags, no numbering, no quotes. Each title must make a Burmese viewer NEED to click: use a different hook for each one — a secret (…ရဲ့ လျှို့ဝှက်ချက်), a shocking twist or reveal, a strong emotion (betrayal, revenge, forbidden love), a mystery question, or an underdog / rich-poor contrast. Name the key character by role (အဖေ၊ သမီး၊ ဆင်းရဲသား၊ သူဌေးမ …), never by a foreign name. Tease, but never give away the ending.
-Return ONLY a JSON object: {"titles": ["...", "...", "...", "...", "..."]}
+  return `Read this Burmese movie-recap story and write 3 short, catchy Burmese thumbnail titles for YouTube / TikTok.
+Rules for the titles: spoken Burmese (not formal written style), 12-25 characters each, no emoji, no hashtags, no numbering, no quotes. Put a normal space between phrases (e.g. သမီးတွေရဲ့ လျှို့ဝှက်ချက်) so the title can break into two lines. Each title must make a Burmese viewer NEED to click: use a different hook for each one — a secret (…ရဲ့ လျှို့ဝှက်ချက်), a shocking twist or reveal, a strong emotion (betrayal, revenge, forbidden love), a mystery question, or an underdog / rich-poor contrast. Name the key character by role (အဖေ၊ သမီး၊ ဆင်းရဲသား၊ သူဌေးမ …), never by a foreign name. Tease, but never give away the ending.
+Return ONLY a JSON object: {"titles": ["...", "...", "..."]}
 
 Story:
 ${story}`;
@@ -230,9 +236,9 @@ export function parseTitles(text) {
   try {
     const a = text.indexOf('{'), b = text.lastIndexOf('}');
     const t = JSON.parse(text.slice(a, b + 1)).titles;
-    if (Array.isArray(t)) return t.map(x => String(x).trim()).filter(Boolean).slice(0, 5);
+    if (Array.isArray(t)) return t.map(x => String(x).trim()).filter(Boolean).slice(0, 3);
   } catch {}
-  return text.split('\n').map(x => x.replace(/^\s*[\d.)\-•]+\s*/, '').replace(/^["“]|["”]$/g, '').trim()).filter(Boolean).slice(0, 5);
+  return text.split('\n').map(x => x.replace(/^\s*[\d.)\-•]+\s*/, '').replace(/^["“]|["”]$/g, '').trim()).filter(Boolean).slice(0, 3);
 }
 // Premium: post caption + hashtags for TikTok / Facebook
 export function captionPrompt(burmese) {
@@ -256,10 +262,10 @@ export function parseCaption(text) {
 // Premium, right after the video: titles + caption in one AI call
 export function packPrompt(burmese) {
   const story = burmese.filter(Boolean).join(' ').slice(0, 6000);
-  return `Read this Burmese movie-recap story. Write (1) 5 thumbnail titles and (2) the TikTok / Facebook post caption with hashtags.
-Rules for the titles: spoken Burmese (not formal written style), 12-25 characters each, no emoji, no hashtags, no numbering, no quotes. Each title must make a Burmese viewer NEED to click: use a different hook for each one — a secret (…ရဲ့ လျှို့ဝှက်ချက်), a shocking twist or reveal, a strong emotion (betrayal, revenge, forbidden love), a mystery question, or an underdog / rich-poor contrast. Name the key character by role (အဖေ၊ သမီး၊ ဆင်းရဲသား၊ သူဌေးမ …), never by a foreign name. Tease, but never give away the ending.
+  return `Read this Burmese movie-recap story. Write (1) 3 thumbnail titles and (2) the TikTok / Facebook post caption with hashtags.
+Rules for the titles: spoken Burmese (not formal written style), 12-25 characters each, no emoji, no hashtags, no numbering, no quotes. Put a normal space between phrases (e.g. သမီးတွေရဲ့ လျှို့ဝှက်ချက်) so the title can break into two lines. Each title must make a Burmese viewer NEED to click: use a different hook for each one — a secret (…ရဲ့ လျှို့ဝှက်ချက်), a shocking twist or reveal, a strong emotion (betrayal, revenge, forbidden love), a mystery question, or an underdog / rich-poor contrast. Name the key character by role (အဖေ၊ သမီး၊ ဆင်းရဲသား၊ သူဌေးမ …), never by a foreign name. Tease, but never give away the ending.
 Rules for the caption: spoken Burmese, 2-4 short lines. Line 1 is a hook (a question or a surprising fact from the story) that stops the scroll. Then 1-2 lines on the setup and the conflict, with real details from this story, without the ending. Last line asks people to watch to the end or follow (for example ဇာတ်သိမ်းကို အဆုံးထိ ကြည့်ပါ). At most 2 fitting emoji. Hashtags: 6-10 — 2-3 Burmese ones about the story and genre (e.g. #ဇာတ်လမ်းအကျဉ်း #အချစ်ဇာတ်လမ်း), plus #movierecap #shortdrama #myanmar #fyp.
-Return ONLY a JSON object: {"titles": ["...", "...", "...", "...", "..."], "caption": "...", "hashtags": ["#...", "#..."]}
+Return ONLY a JSON object: {"titles": ["...", "...", "..."], "caption": "...", "hashtags": ["#...", "#..."]}
 
 Story:
 ${story}`;
