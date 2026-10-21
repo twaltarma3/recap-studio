@@ -287,7 +287,7 @@ export function parseTitles(text) {
 export function captionPrompt(burmese) {
   const story = burmese.filter(Boolean).join(' ').slice(0, 6000);
   return `Read this Burmese movie-recap story and write the post text for uploading the video to TikTok / Facebook.
-Rules for the caption: spoken Burmese, 2-4 short lines. Line 1 is a hook (a question or a surprising fact from the story) that stops the scroll. Then 1-2 lines on the setup and the conflict, with real details from this story, without the ending. Last line asks people to watch to the end or follow (for example ဇာတ်သိမ်းကို အဆုံးထိ ကြည့်ပါ). At most 2 fitting emoji. Hashtags: 6-10 — 2-3 Burmese ones about the story and genre (e.g. #ဇာတ်လမ်းအကျဉ်း #အချစ်ဇာတ်လမ်း), plus #movierecap #shortdrama #myanmar #fyp.
+Rules for the caption: spoken Burmese, 2-4 short lines. Line 1 is a hook (a question or a surprising fact from the story) that stops the scroll. Then 1-2 lines on the setup and the conflict, with real details from this story, without the ending. Last line asks people to watch to the end or follow (for example ဇာတ်သိမ်းကို အဆုံးထိ ကြည့်ပါ). At most 2 fitting emoji. Hashtags: exactly 5 — 2 Burmese ones about the story and genre (e.g. #ဇာတ်လမ်းအကျဉ်း #အချစ်ဇာတ်လမ်း), plus #movierecap #shortdrama #fyp.
 Return ONLY a JSON object: {"caption": "...", "hashtags": ["#...", "#..."]}
 
 Story:
@@ -307,7 +307,7 @@ export function packPrompt(burmese) {
   const story = burmese.filter(Boolean).join(' ').slice(0, 6000);
   return `Read this Burmese movie-recap story. Write (1) 3 thumbnail titles and (2) the TikTok / Facebook post caption with hashtags.
 Rules for the titles: spoken Burmese (not formal written style), 12-25 characters each, no emoji, no hashtags, no numbering, no quotes. Put a normal space between phrases (e.g. သမီးတွေရဲ့ လျှို့ဝှက်ချက်) so the title can break into two lines. Each title must make a Burmese viewer NEED to click: use a different hook for each one — a secret (…ရဲ့ လျှို့ဝှက်ချက်), a shocking twist or reveal, a strong emotion (betrayal, revenge, forbidden love), a mystery question, or an underdog / rich-poor contrast. Name the key character by role (အဖေ၊ သမီး၊ ဆင်းရဲသား၊ သူဌေးမ …), never by a foreign name. Tease, but never give away the ending.
-Rules for the caption: spoken Burmese, 2-4 short lines. Line 1 is a hook (a question or a surprising fact from the story) that stops the scroll. Then 1-2 lines on the setup and the conflict, with real details from this story, without the ending. Last line asks people to watch to the end or follow (for example ဇာတ်သိမ်းကို အဆုံးထိ ကြည့်ပါ). At most 2 fitting emoji. Hashtags: 6-10 — 2-3 Burmese ones about the story and genre (e.g. #ဇာတ်လမ်းအကျဉ်း #အချစ်ဇာတ်လမ်း), plus #movierecap #shortdrama #myanmar #fyp.
+Rules for the caption: spoken Burmese, 2-4 short lines. Line 1 is a hook (a question or a surprising fact from the story) that stops the scroll. Then 1-2 lines on the setup and the conflict, with real details from this story, without the ending. Last line asks people to watch to the end or follow (for example ဇာတ်သိမ်းကို အဆုံးထိ ကြည့်ပါ). At most 2 fitting emoji. Hashtags: exactly 5 — 2 Burmese ones about the story and genre (e.g. #ဇာတ်လမ်းအကျဉ်း #အချစ်ဇာတ်လမ်း), plus #movierecap #shortdrama #fyp.
 Return ONLY a JSON object: {"titles": ["...", "...", "..."], "caption": "...", "hashtags": ["#...", "#..."]}
 
 Story:

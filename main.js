@@ -2154,7 +2154,10 @@ async function thumbPanel() {
     if (!th.caption) {
       box.innerHTML = '<button type="button" class="btn block" id="capMk">📝 Caption + Hashtag ရေးမည်</button>';
     } else {
-      if (th.capFor !== th.caption) { Object.assign(th, splitCap(th.caption), { tagOff: [], capFor: th.caption }); }
+      if (th.capFor !== th.caption) {                    // 5 hashtags chosen at first; any more can be tapped in
+        const c = splitCap(th.caption);
+        Object.assign(th, c, { tagOff: c.tags.map((_, i) => i).filter(i => i >= 5), capFor: th.caption });
+      }
       box.innerHTML = `<textarea id="capTxt" rows="5">${esc(th.text)}</textarea>
         <div class="two"><button type="button" class="btn" id="capCopy">📋 Caption ကူး</button><button type="button" class="btn" id="capMk">🔄 အသစ်ရေးမည်</button></div>
         ${th.tags.length ? `<div class="row" style="margin-top:14px"><b># Hashtag</b><span class="muted small" id="tagN"></span></div>
