@@ -152,12 +152,33 @@ export function composeThumb(frame, face, title, ratio, font, { subTop = 0 } = {
   // usable height: above the subtitles, but never cutting into the face
   const faceBot = face ? (face.y + face.h) / (1 - cut) + 0.02 : 0;
   const keep = subTop > 0.4 ? Math.min(1, Math.max(subTop / (1 - cut) - 0.01, faceBot)) : 1;
-  const fh = frame.height, uh = fh * keep, sc = Math.max(TW / fw, TH / uh);
+  const fh = frame.height, uh = fh * keep, cover = Math.max(TW / fw, TH / uh);
   const fx = face ? (face.x + face.w / 2) * fw : fw / 2;
   const fy = face ? Math.min(1, (face.y + face.h / 2) / (1 - cut)) * fh : fh * 0.45;
+  // a close-up cut to a tall shape would show only part of the face: zoom out (never narrower than the
+  // canvas) and fill above / below with a blurred, darker copy of the same picture
+  let sc = cover;
+  if (face && TH > TW) { const faceW = face.w * fw * cover; if (faceW > TW * 0.62) sc = Math.max(cover * TW * 0.62 / faceW, TW / fw); }
+  if (sc < cover - 1e-6) {
+    const k = 10, tiny = document.createElement('canvas'); tiny.width = Math.round(TW / k); tiny.height = Math.round(TH / k);
+    const bw = fw * cover, bh = uh * cover, tc = tiny.getContext('2d');
+    tc.filter = 'blur(3px)';                       // ignored where canvas filters are missing: the tiny copy still looks soft
+    tc.drawImage(frame, 0, 0, fw, uh, (TW - bw) / 2 / k, (TH - bh) / 2 / k, bw / k, bh / k);
+    ctx.imageSmoothingQuality = 'high'; ctx.drawImage(tiny, 0, 0, TW, TH);
+    ctx.fillStyle = 'rgba(0,0,0,.45)'; ctx.fillRect(0, 0, TW, TH);
+  }
+  const iw = fw * sc, ih = uh * sc;
   let ox = TW / 2 - fx * sc, oy = TH * (TH > TW ? 0.56 : 0.52) - fy * sc;
-  ox = Math.min(0, Math.max(TW - fw * sc, ox)); oy = Math.min(0, Math.max(TH - uh * sc, oy));
-  ctx.drawImage(frame, ox, oy, fw * sc, fh * sc);
+  ox = Math.min(0, Math.max(TW - iw, ox));
+  oy = ih >= TH ? Math.min(0, Math.max(TH - ih, oy)) : Math.max(0, Math.min(TH - ih, oy));
+  ctx.drawImage(frame, 0, 0, fw, uh, ox, oy, iw, ih);
+  if (ih < TH) {                                  // soften the picture's top and bottom edges into the blur
+    const e = Math.min(ih * 0.2, TH * 0.08);
+    for (const [y0, y1] of [[oy, oy + e], [oy + ih, oy + ih - e]]) {
+      const g = ctx.createLinearGradient(0, y0, 0, y1); g.addColorStop(0, 'rgba(0,0,0,.5)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = g; ctx.fillRect(0, Math.min(y0, y1), TW, e);
+    }
+  }
   // light grade: a bit more contrast, dark top for the title, soft vignette
   const top = ctx.createLinearGradient(0, 0, 0, TH * 0.42);
   top.addColorStop(0, 'rgba(0,0,0,.78)'); top.addColorStop(1, 'rgba(0,0,0,0)');

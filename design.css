@@ -253,19 +253,20 @@ body .prog .bar i::after{content:"";position:absolute;inset:0;background:linear-
 .prog-sub{font-size:12.5px;color:var(--muted);margin-top:2px;min-height:0;letter-spacing:.2px}
 .prog-sub:empty{display:none}
 
-/* ready thumbnail: shape tabs, preview with the 🔄 / ⬇ buttons beside it */
-.tratio{display:flex;gap:6px;margin:10px 0}
-.tratio button{flex:1;margin:0;min-height:0;padding:8px 0;border-radius:10px;border:1px solid var(--stroke-2);background:var(--surface-2);color:var(--text);font-weight:700;cursor:pointer}
-.tratio button.on{border-color:var(--violet);background:var(--violet-soft)}
-.tbwrap{display:flex;gap:10px;align-items:center;justify-content:center}
-.tbimg{position:relative;flex:0 1 auto;width:100%;max-width:min(100%,calc(58vh * 9 / 16 * 1.0));max-height:58vh;border-radius:14px;overflow:hidden;background:#000}
-.tbimg[style*="16/9"]{max-width:100%}
-.tbimg[style*="3/4"]{max-width:min(100%,calc(58vh * 3 / 4))}
-.tbimg img{display:block;width:100%;height:100%;object-fit:contain}
-.tbimg i{position:absolute;inset:0;display:grid;place-items:center;font-style:normal;font-size:28px;background:rgba(0,0,0,.35)}
-.tbimg i[hidden]{display:none}
-.tbside{display:flex;flex-direction:column;gap:10px}
-.tbside button{width:48px;height:48px;min-height:0;margin:0;padding:0;border-radius:50%;border:1px solid var(--stroke-2);background:var(--surface-2);color:var(--text);font-size:22px;cursor:pointer}
+/* ready thumbnails: one card per platform, all the same height; the chosen one is downloaded */
+.tbhead{display:flex;gap:8px;margin:10px 0}
+.tbhead .btn{margin:0;flex:1;min-height:0;padding:10px 12px}
+.tbhead .btn.primary{flex:1.4}
+.tcards{display:grid;grid-template-columns:9fr 12fr 32fr;gap:8px;align-items:start}
+.tcards button{padding:0;margin:0;min-height:0;border:0;background:none;color:var(--text);cursor:pointer;text-align:center}
+.tcimg{position:relative;display:block;border-radius:10px;overflow:hidden;background:#000;border:3px solid transparent}
+.tcards button.on .tcimg{border-color:var(--violet);box-shadow:0 0 0 3px rgba(139,92,246,.35)}
+.tcards button.on .tcimg::after{content:'✓';position:absolute;top:4px;right:4px;width:22px;height:22px;border-radius:50%;background:var(--violet);color:#fff;font-weight:700;font-size:13px;display:grid;place-items:center}
+.tcimg img{display:block;width:100%;height:100%;object-fit:cover}
+.tcimg i{position:absolute;inset:0;display:grid;place-items:center;font-style:normal;font-size:20px;background:rgba(0,0,0,.4)}
+.tcimg i[hidden]{display:none}
+.tcards small{display:block;margin-top:4px;font-size:11px;font-weight:600;line-height:1.3;color:var(--muted)}
+.tcards button.on small{color:var(--text)}
 .tgpt{margin-top:16px;padding:10px 12px;border-radius:12px;border:1px solid var(--stroke-2)}
 .tgpt summary{cursor:pointer;font-weight:600}
 .tgpt[open] summary{margin-bottom:10px}
