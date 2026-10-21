@@ -8,15 +8,17 @@ import * as H from './history.js';
 import * as T from './thumb.js';
 
 const $ = (s, r = document) => r.querySelector(s);
-const DEFAULTS = { pitch: 10, rate: 20, keepTalk: 0, keepGap: 0.3, offset: 0, maxTempo: 2.0, dubGain: 1.8 };
+// what the 🔒 switch on step 1 unlocks (kept at their defaults until then)
+const LOCK_T = 'အချိုး · Zoom · 720p · Blur · Freeze ပြင်မည်';
+const DEFAULTS = { pitch: 10, rate: 25, keepTalk: 0, keepGap: 0.3, offset: 0, maxTempo: 2.0, dubGain: 1.8 };
 const state = {
   step: 1, showSrc: false, file: null, videoDur: 0, lang: 'auto', segs: [], sourceLines: [],
   burmese: [], genders: null, audioBlob: null, personaId: 'TH', ...DEFAULTS, result: null, busy: false, origSegs: null,
-  fxMirror: false, fxBlur: false, blurH: 15, blurY: 100, blurS: 50, blurO: 100, previewUrl: null, previewFor: null,
+  fxMirror: false, fxBlur: true, blurH: 15, blurY: 100, blurS: 50, blurO: 100, previewUrl: null, previewFor: null,
   pStyle: 'chat', fxRatio: 'orig', fxFit: 'crop', fxZoom: 100, fxFast: true, fxHD: false, fxFps30: true, fxUnlock: false, wmOn: false, wmText: '', wmPos: 'br', wmSize: 4, wmOp: 75,
   logoOn: false, logoData: null, logoPos: 'tr', logoSize: 14, tab: 'video',
   frzOn: false, frzA: 4, frzB: 2, frzZoom: 'out', frzAmt: 20,
-  fxSubs: false, subS: 5, subY: 88, subC: '#ffffff', subO: '#000000', subFont: 'pt16', fontOk: false
+  fxSubs: false, subS: 4, subY: 88, subC: '#ffffff', subO: '#000000', subFont: 'akk', fontOk: false
 };
 // access codes: on only when the Worker has them set up (accessCheck answers something other than {open:true})
 const acc = { on: false, ok: false, name: '', limit: 0, used: 0, left: -1, plan: 'free', expires: 0, credits: 0 };
@@ -667,9 +669,9 @@ function previewBlock() {
       <div class="pane" data-pane="video">
         <label style="display:flex;align-items:center;gap:10px;font-weight:600;margin-top:12px">
           <input id="fxUnlock" type="checkbox" style="${chk}" ${state.fxUnlock ? 'checked' : ''} />
-          <span id="fxUnlockT">${state.fxUnlock ? '🔓' : '🔒'} အချိုး / Zoom / 720p / 30fps ပြင်မည်</span>
+          <span id="fxUnlockT">${state.fxUnlock ? '🔓' : '🔒'} ${LOCK_T}</span>
         </label>
-        <p class="muted small" style="margin:4px 0 0">ပုံမှန် Setting (မူရင်းအချိုး · Zoom 100% · 720p · 30fps) နဲ့ သော့ခတ်ထားပါတယ်။ ပြောင်းချင်မှ ဖွင့်ပါ။</p>
+        <p class="muted small" style="margin:4px 0 0">ပုံမှန် Setting (မူရင်းအချိုး · Zoom 100% · 720p · 30fps · Blur ဖွင့် · Freeze ပိတ်) နဲ့ သော့ခတ်ထားပါတယ်။ ပြောင်းချင်မှ ဖွင့်ပါ။</p>
         <div id="lockBox" class="lockbox ${state.fxUnlock ? '' : 'locked'}" ${state.fxUnlock ? '' : 'inert'}>
         <b style="display:block;margin-top:14px">📐 အချိုး (Ratio)</b>
         <div class="chips" id="ratioChips">
@@ -693,18 +695,6 @@ function previewBlock() {
         🎞 30 fps နဲ့ ထုတ်မည်
       </label>
       <p class="muted small" style="margin:4px 0 0">မူရင်း 60 fps Video တွေကို 30 fps နဲ့ ထုတ်လို့ ၂ ဆလောက် ပိုမြန်ပါတယ် (TikTok/Facebook မှာ ကွာခြားမှု မသိသာပါ)။ 30 fps နဲ့အောက် Video တွေကို မထိပါ။</p>
-        </div>
-      <label style="display:flex;align-items:center;gap:10px;font-weight:600;margin-top:12px;${premPlan() ? '' : 'opacity:.55'}">
-        <input id="fxHD" type="checkbox" style="${chk}" ${premPlan() ? '' : 'disabled'} ${state.fxHD && premPlan() ? 'checked' : ''} />
-        📺 1080p (Quality မြင့်) <span class="pbadge">💎 Premium</span>
-      </label>
-      <p class="muted small" style="margin:4px 0 0">${premPlan()
-        ? 'Monetization အတွက် Quality မြင့်မြင့် ထုတ်ပါ။ 720p ထက် ၂ ဆလောက် ပိုကြာပါတယ်။ မူရင်း Video က 1080p မပြည့်ရင် မူရင်းအရွယ်အတိုင်းပဲ ထွက်ပါမယ်။'
-        : '💎 Premium ဝယ်ထားသူတွေပဲ 1080p နဲ့ ထုတ်လို့ရပါတယ်။'}</p>
-      <label style="display:flex;align-items:center;gap:10px;font-weight:600;margin-top:12px">
-        <input id="fxMirror" type="checkbox" style="${chk}" ${state.fxMirror ? 'checked' : ''} />
-        ↔ Mirror (ဘယ်ညာ လှန်မည်)
-      </label>
       <label style="display:flex;align-items:center;gap:10px;font-weight:600;margin-top:12px">
         <input id="fxBlur" type="checkbox" style="${chk}" ${state.fxBlur ? 'checked' : ''} />
         🌫 Blur (စာတန်းထိုး ဖုံးမည်)
@@ -743,6 +733,18 @@ function previewBlock() {
           ${pmRow('frzAmt', 5, 50, 5, state.frzAmt)}
         </div>
       </div>
+        </div>
+      <label style="display:flex;align-items:center;gap:10px;font-weight:600;margin-top:12px;${premPlan() ? '' : 'opacity:.55'}">
+        <input id="fxHD" type="checkbox" style="${chk}" ${premPlan() ? '' : 'disabled'} ${state.fxHD && premPlan() ? 'checked' : ''} />
+        📺 1080p (Quality မြင့်) <span class="pbadge">💎 Premium</span>
+      </label>
+      <p class="muted small" style="margin:4px 0 0">${premPlan()
+        ? 'Monetization အတွက် Quality မြင့်မြင့် ထုတ်ပါ။ 720p ထက် ၂ ဆလောက် ပိုကြာပါတယ်။ မူရင်း Video က 1080p မပြည့်ရင် မူရင်းအရွယ်အတိုင်းပဲ ထွက်ပါမယ်။'
+        : '💎 Premium ဝယ်ထားသူတွေပဲ 1080p နဲ့ ထုတ်လို့ရပါတယ်။'}</p>
+      <label style="display:flex;align-items:center;gap:10px;font-weight:600;margin-top:12px">
+        <input id="fxMirror" type="checkbox" style="${chk}" ${state.fxMirror ? 'checked' : ''} />
+        ↔ Mirror (ဘယ်ညာ လှန်မည်)
+      </label>
       </div>
       <div class="pane" data-pane="caps">
       <label style="display:flex;align-items:center;gap:10px;font-weight:600;margin-top:12px">
@@ -905,7 +907,7 @@ function bindPreview() {
     const box = $('#lockBox');
     box.classList.toggle('locked', !state.fxUnlock);
     if (state.fxUnlock) box.removeAttribute('inert'); else box.setAttribute('inert', '');
-    $('#fxUnlockT').textContent = (state.fxUnlock ? '🔓' : '🔒') + ' အချိုး / Zoom / 720p / 30fps ပြင်မည်';
+    $('#fxUnlockT').textContent = (state.fxUnlock ? '🔓' : '🔒') + ' ' + LOCK_T;
   };
   $('#fxMirror').onchange = e => { state.fxMirror = e.target.checked; apply(); };
   // find the source subtitles and put the blur band on them (once per video when Blur is switched on)
@@ -926,6 +928,8 @@ function bindPreview() {
     apply();
   };
   $('#blurAuto')?.addEventListener('click', autoBlur);
+  // Blur is on by default: put the band on this video's subtitles as soon as it is loaded
+  if (state.fxBlur && state.file && state.blurAutoFor !== state.file) autoBlur();
   $('#fxBlur').onchange = e => {
     state.fxBlur = e.target.checked; $('#blurBox').hidden = !state.fxBlur; apply();
     if (state.fxBlur && state.file && state.blurAutoFor !== state.file) autoBlur();
@@ -1086,11 +1090,12 @@ function step1() {
           .map(([v, t]) => `<option value="${v}" ${v === state.lang ? 'selected' : ''}>${t}</option>`).join('')}
       </select>
     </label>
+    <p class="tip small" style="margin:6px 0 0">💡 Video ထဲက ပြောတဲ့ဘာသာကို ရွေးပေးပါ — တရုတ်ကားဆို <b>Chinese 中文</b>။ Auto detect က Video အစပိုင်းကို နားထောင်ပြီး ခန့်မှန်းတာမို့ အစမှာ သီချင်း၊ ဆူညံသံ ဒါမှမဟုတ် တခြားဘာသာ ရောနေရင် မှားခန့်မှန်းပြီး စာသား လွဲထွက်တတ်ပါတယ်။ ဘာသာ မှန်မှန်ရွေးထားရင် စာသားရော ဘာသာပြန်ရော ပိုမှန်ပါတယ်။</p>
     ${premPlan() ? `<div class="panel" style="margin-top:16px">
       <b>⚡ One-Click Auto <span class="pbadge">💎 Premium</span></b>
       <p class="muted small" style="margin:6px 0 10px">ဘာသာပြန်ပုံစံနဲ့ အသံကို ရွေးပြီး <b>⚡ Auto နဲ့ Video ထုတ်မည်</b> ကိုနှိပ်ရင် စာသားထုတ် → ဘာသာပြန် → အသံထုတ် → Video ပေါင်း အကုန် အလိုအလျောက် လုပ်ပေးပါမယ်။${IS_IOS ? ' 🌐 iPhone မှာ VPN (US) ဖွင့်ထားပါ။' : ''}</p>
       <b class="small">✍ ဘာသာပြန်ပုံစံ</b>
-      <div class="chips" id="aStyle" style="margin:6px 0 0">${[['recap', '🔥 Recap (လှုပ်ရှား)'], ['chat', '💬 ရိုးရိုးစကားပြော'], ['dub', '🎭 ဇာတ်ကောင်စကား · Beta']].map(([k, t]) => `<button type="button" class="chip ${state.pStyle === k ? 'on' : ''}" data-s="${k}">${t}</button>`).join('')}</div>
+      <div class="chips" id="aStyle" style="margin:6px 0 0">${[['recap', '🔥', 'Recap', 'လှုပ်ရှား'], ['chat', '💬', 'ရိုးရိုး', 'စကားပြော'], ['dub', '🎭', 'ဇာတ်ကောင်', 'Beta']].map(([k, i, t, sub]) => `<button type="button" class="chip ${state.pStyle === k ? 'on' : ''}" data-s="${k}"><i>${i}</i><span>${t}</span><small>${sub}</small></button>`).join('')}</div>
       <p class="muted small" style="margin:6px 0 0">🎭 <b>ဇာတ်ကောင်စကား</b> (စမ်းသပ်ဆဲ) — ဇာတ်ကောင်တွေ ပြောတဲ့အတိုင်း ဘာသာပြန်ပြီး ယောကျ်ားစကားကို သီဟ၊ မိန်းမစကားကို နီလာ အသံနဲ့ အလိုလို ခွဲထုတ်ပေးပါတယ်</p>
       ${voiceBlock()}
     </div>` : ''}
@@ -1289,6 +1294,7 @@ function voiceBlock() {
     <div class="voices">${voices}</div>
     <div class="panel">
       <button id="unlock" class="btn block" style="margin-top:0"></button>
+      <div id="vTune" hidden>
       <div class="row" style="margin-top:14px"><b>ဝါး/ကြည် (Pitch Offset)</b><span id="pv">${state.pitch >= 0 ? '+' : ''}${state.pitch}Hz</span></div>
       <input id="pitch" type="range" min="-30" max="30" value="${state.pitch}" />
       <div class="row muted small"><span>-30Hz (ဝါး)</span><span>+30Hz (ကြည်)</span></div>
@@ -1309,6 +1315,7 @@ function voiceBlock() {
         <div class="row" style="margin-top:12px"><b>🔊 မြန်မာသံ ပမာဏ</b><span id="dv">${Math.round(state.dubGain * 100)}%</span></div>
         <input id="dgain" type="range" min="100" max="250" value="${Math.round(state.dubGain * 100)}" />
       </details>
+      </div>
     </div>
     </div>`;
 }
@@ -1322,18 +1329,19 @@ function bindVoice(onReset) {
   $('#mtempo').oninput = e => { state.maxTempo = +e.target.value / 10; $('#mv').textContent = state.maxTempo.toFixed(1) + '×'; };
   $('#dgain').oninput = e => { state.dubGain = +e.target.value / 100; $('#dv').textContent = e.target.value + '%'; };
 
-  // sliders are locked by default so scrolling with a finger can't move them
+  // the settings stay folded (and locked) until opened, so scrolling with a finger can't move them
   const sliders = [...box.querySelectorAll('.panel input[type=range]')];
   let unlocked = false;
   const applyLock = () => {
     sliders.forEach(s => { s.disabled = !unlocked; });
+    $('#vTune').hidden = !unlocked;
     $('#unlock').textContent = unlocked ? '🔓 ပြင်လို့ရပါပြီ — ပြီးရင် လော့ခ်ချရန် နှိပ်ပါ' : '🔒 ချိန်ညှိထားပြီး — ပြင်ချင်ရင် နှိပ်ပါ';
   };
   $('#unlock').onclick = () => { unlocked = !unlocked; applyLock(); };
   applyLock();
   const rs = document.createElement('button');
   rs.className = 'btn block'; rs.textContent = '↺ ပုံမှန်တန်ဖိုးသို့ ပြန်ထားမည်';
-  $('#unlock').after(rs);
+  $('#vTune').prepend(rs);
   rs.onclick = () => { Object.assign(state, DEFAULTS); onReset(); toast('ပုံမှန်တန်ဖိုး ပြန်ထားပြီးပါပြီ'); };
   box.querySelectorAll('.voice').forEach(el => el.onclick = e => {
     if (e.target.dataset.prev) return;
@@ -1921,6 +1929,8 @@ async function thumbPanel() {
   if (!$('#thumbBox')) return;
   const ratios = ['9:16', '3:4', '16:9'];
   th.ratio = th.ratio || '9:16';
+  if (!th.style) { try { th.style = localStorage.getItem('thumbStyle') || ''; } catch {} }
+  if (!T.THUMB_STYLES[th.style]) th.style = 'gold';
   box.innerHTML = `
     <div class="panel thumbp">
       <b>🖼 Thumbnail (စာပါပြီးသား)</b>
@@ -1929,6 +1939,7 @@ async function thumbPanel() {
         <button type="button" id="tbNext" class="btn" title="အသစ်">🔄 အသစ်</button>
         <button type="button" id="tbDl" class="btn primary">⬇ Download</button>
       </div>
+      <div class="tstyles">${Object.entries(T.THUMB_STYLES).map(([k, v]) => `<button type="button" data-s="${k}" class="${k === th.style ? 'on' : ''}">${v.label}</button>`).join('')}</div>
       <div class="tcards">${ratios.map(r => `<button type="button" data-r="${r}" class="${r === th.ratio ? 'on' : ''}">
         <span class="tcimg" style="aspect-ratio:${r.replace(':', '/')}"><img alt="" /><i>⏳</i></span>
         <small>${{ '9:16': 'TikTok', '3:4': 'Facebook', '16:9': 'YouTube' }[r]} · ${r}</small></button>`).join('')}</div>
@@ -1990,7 +2001,7 @@ async function thumbPanel() {
       th.outs = th.outs || {}; th.urls = th.urls || {};
       for (const r of ratios) {
         if (tok !== th.tok || !$('.tcards')) return;
-        const c = T.composeThumb(frame, th.shots[th.sel].face, curTitle(), r, fam, { subTop: band ? band.top : 0 });
+        const c = T.composeThumb(frame, th.shots[th.sel].face, curTitle(), r, fam, { subTop: band ? band.top : 0, style: th.style });
         const blob = await new Promise(res => c.toBlob(res, 'image/jpeg', 0.92));
         if (tok !== th.tok || !$('.tcards') || !blob) return;
         if (th.urls[r]) URL.revokeObjectURL(th.urls[r]);
@@ -2002,6 +2013,13 @@ async function thumbPanel() {
   };
   const pickShot = i => { th.sel = i; view.querySelectorAll('.tshots button').forEach(x => x.classList.toggle('on', +x.dataset.i === i)); paintThumb(); if (view.querySelector('.tgpt')?.open) prepShot().catch(() => {}); };
   view.querySelectorAll('.tshots button').forEach(b => { b.onclick = () => pickShot(+b.dataset.i); });
+  view.querySelectorAll('.tstyles button').forEach(b => {
+    b.onclick = () => {
+      th.style = b.dataset.s; try { localStorage.setItem('thumbStyle', th.style); } catch {}
+      view.querySelectorAll('.tstyles button').forEach(x => x.classList.toggle('on', x === b));
+      paintThumb();
+    };
+  });
   view.querySelectorAll('.tcards button').forEach(b => {
     b.onclick = () => { th.ratio = b.dataset.r; view.querySelectorAll('.tcards button').forEach(x => x.classList.toggle('on', x === b)); };
   });

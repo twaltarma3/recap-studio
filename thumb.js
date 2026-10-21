@@ -124,6 +124,12 @@ export async function shotCanvas(src, shot) {
 }
 
 /* ---- ready-made thumbnail: the shot cropped to the platform's shape, with the Burmese title on top ---- */
+// the looks the user can switch between: gold glow, red news band, plain white with a black outline
+export const THUMB_STYLES = {
+  gold: { label: '🟡 ရွှေ', fill: ['#fff6b0', '#ffd21f', '#ff9f00'], hi: ['#ffffff', '#fff3c4', '#ffd86b'], stroke: '#120a00', strokeW: 0.2, glow: 'rgba(255,190,0,.55)', frame: '#e8b64a' },
+  news: { label: '🔴 သတင်း', fill: '#ffffff', hi: '#ffe14d', stroke: '#5a0008', strokeW: 0.1, band: true, frame: '#ff3b47' },
+  clean: { label: '⚪ စာဖြူ', fill: '#ffffff', hi: '#ffd21f', stroke: '#000000', strokeW: 0.24, glow: 'rgba(0,0,0,.6)', frame: '' }
+};
 export const THUMB_SIZES = { '9:16': [720, 1280], '3:4': [960, 1280], '16:9': [1280, 720] };
 // split a Burmese title into 1 or 2 lines that fit maxW: break between words (spaces, else the browser's Burmese
 // word list, else letters), at the point that makes the two lines most even
@@ -147,9 +153,10 @@ function wrapTitle(ctx, text, maxW) {
  * frame: canvas from shotCanvas(); face: {x,y,w,h} 0..1 of the original frame or null; title: Burmese text
  * ratio: key of THUMB_SIZES; font: CSS font family (already loaded).
  * subTop: where the video's burned-in subtitles start (0..1 of the original frame), kept out of the picture.
+ * style: a key of THUMB_STYLES.
  * Returns a canvas.
  */
-export function composeThumb(frame, face, title, ratio, font, { subTop = 0 } = {}) {
+export function composeThumb(frame, face, title, ratio, font, { subTop = 0, style = 'gold' } = {}) {
   const [TW, TH] = THUMB_SIZES[ratio] || THUMB_SIZES['16:9'];
   const c = document.createElement('canvas'); c.width = TW; c.height = TH;
   const ctx = c.getContext('2d');
@@ -192,32 +199,55 @@ export function composeThumb(frame, face, title, ratio, font, { subTop = 0 } = {
   const vg = ctx.createRadialGradient(TW / 2, TH / 2, Math.min(TW, TH) * 0.35, TW / 2, TH / 2, Math.hypot(TW, TH) * 0.6);
   vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,.55)');
   ctx.fillStyle = vg; ctx.fillRect(0, 0, TW, TH);
-  // title: big yellow letters with a thick dark outline, up to 2 lines, shrunk until it fits
+  // title: up to 2 lines, shrunk until it fits; the second line (or the last word) stands out in another colour
+  const S = THUMB_STYLES[style] || THUMB_STYLES.gold;
   const t = String(title || '').trim();
   if (t) {
-    const maxW = TW * 0.88;
+    const maxW = TW * (S.band ? 0.84 : 0.88);
     let size = Math.round(Math.min(TW, TH) * (TW > TH ? 0.13 : 0.12)), lines;
     for (; size > 18; size -= 2) {
       ctx.font = `${size}px ${font}`;
       lines = wrapTitle(ctx, t, maxW);
       if (lines.length <= 2 && lines[1] !== '' && lines.every(l => ctx.measureText(l).width <= maxW)) break;
     }
-    ctx.font = `${size}px ${font}`; ctx.textAlign = 'center'; ctx.textBaseline = 'top'; ctx.lineJoin = 'round';
-    const lh = size * 1.55, y0 = TH * 0.045;
-    lines.filter(Boolean).slice(0, 2).forEach((l, i) => {
-      const y = y0 + i * lh;
-      ctx.shadowColor = 'rgba(255,190,0,.55)'; ctx.shadowBlur = size * 0.35;
-      ctx.lineWidth = size * 0.2; ctx.strokeStyle = '#120a00'; ctx.strokeText(l, TW / 2, y);
-      ctx.shadowBlur = 0;
-      const g = ctx.createLinearGradient(0, y, 0, y + size * 1.3);
-      g.addColorStop(0, '#fff6b0'); g.addColorStop(0.45, '#ffd21f'); g.addColorStop(1, '#ff9f00');
-      ctx.fillStyle = g; ctx.fillText(l, TW / 2, y);
+    lines = lines.filter(Boolean).slice(0, 2);
+    // [[text, highlighted?], ...] per line
+    const parts = lines.length > 1 ? [[[lines[0], false]], [[lines[1], true]]]
+      : lines[0].includes(' ') ? [[[lines[0].slice(0, lines[0].lastIndexOf(' ') + 1), false], [lines[0].slice(lines[0].lastIndexOf(' ') + 1), true]]]
+      : [[[lines[0], false]]];
+    ctx.font = `${size}px ${font}`; ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.lineJoin = 'round';
+    const lh = size * 1.55, y0 = TH * (S.band ? 0.06 : 0.045);
+    if (S.band) {                                  // news: a red band behind the title, a yellow strip under it
+      const pad = size * 0.28, bw = Math.min(TW * 0.94, Math.max(...lines.map(l => ctx.measureText(l).width)) + size * 1.2);
+      const bx = (TW - bw) / 2, by = y0 - pad, bh = lines.length * lh - size * 0.25 + pad * 2;
+      const g = ctx.createLinearGradient(0, by, 0, by + bh); g.addColorStop(0, '#ff3445'); g.addColorStop(1, '#c00018');
+      ctx.shadowColor = 'rgba(0,0,0,.5)'; ctx.shadowBlur = size * 0.4; ctx.fillStyle = g;
+      ctx.beginPath(); ctx.roundRect ? ctx.roundRect(bx, by, bw, bh, size * 0.18) : ctx.rect(bx, by, bw, bh); ctx.fill();
+      ctx.shadowBlur = 0; ctx.fillStyle = '#ffd400'; ctx.fillRect(bx + size * 0.3, by + bh, bw - size * 0.6, Math.max(4, size * 0.09));
+    }
+    parts.forEach((line, i) => {
+      const y = y0 + i * lh, ws = line.map(([x]) => ctx.measureText(x).width);
+      let x = TW / 2 - ws.reduce((a, b) => a + b, 0) / 2;
+      line.forEach(([txt, hi], k) => {
+        if (S.glow) { ctx.shadowColor = S.glow; ctx.shadowBlur = size * 0.35; }
+        if (S.stroke) { ctx.lineWidth = size * S.strokeW; ctx.strokeStyle = S.stroke; ctx.strokeText(txt, x, y); }
+        ctx.shadowBlur = 0;
+        const fill = hi ? S.hi : S.fill;
+        if (Array.isArray(fill)) {
+          const g = ctx.createLinearGradient(0, y, 0, y + size * 1.3);
+          fill.forEach((c, j) => g.addColorStop(j / (fill.length - 1), c)); ctx.fillStyle = g;
+        } else ctx.fillStyle = fill;
+        ctx.fillText(txt, x, y);
+        x += ws[k];
+      });
     });
   }
-  // thin gold frame
-  const m = Math.round(Math.min(TW, TH) * 0.025), lw = Math.max(3, Math.round(Math.min(TW, TH) * 0.007)), r = m * 1.4;
-  ctx.lineWidth = lw; ctx.strokeStyle = '#e8b64a';
-  ctx.beginPath(); ctx.roundRect ? ctx.roundRect(m, m, TW - 2 * m, TH - 2 * m, r) : ctx.rect(m, m, TW - 2 * m, TH - 2 * m); ctx.stroke();
+  // thin frame in the style's colour
+  if (S.frame) {
+    const m = Math.round(Math.min(TW, TH) * 0.025), lw = Math.max(3, Math.round(Math.min(TW, TH) * 0.007)), r = m * 1.4;
+    ctx.lineWidth = lw; ctx.strokeStyle = S.frame;
+    ctx.beginPath(); ctx.roundRect ? ctx.roundRect(m, m, TW - 2 * m, TH - 2 * m, r) : ctx.rect(m, m, TW - 2 * m, TH - 2 * m); ctx.stroke();
+  }
   return c;
 }
 

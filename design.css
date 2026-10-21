@@ -186,9 +186,9 @@ body .ditem.on span{background:var(--grad) !important;color:#fff !important}
 .tsteps{margin:10px 0 0;padding-left:20px;line-height:1.9}
 .thumbp a.btn{text-decoration:none}
 
-/* locked ratio / zoom / 720p / 30fps block: dimmed until the unlock switch is on */
+/* locked ratio / zoom / 720p / 30fps / blur / freeze block */
 .lockbox{transition:opacity .2s,filter .2s}
-.lockbox.locked{opacity:.38;filter:grayscale(.6);pointer-events:none;user-select:none}
+.lockbox.locked{display:none}                  /* folded away until 🔓, so step 1 stays short */
 
 /* ---------- premium ---------- */
 .pbadge{display:inline-block;padding:1px 9px;border-radius:99px;font-size:12px;font-weight:700;color:#3b2500;background:linear-gradient(135deg,#ffe08a,#f5b83d);vertical-align:middle}
@@ -257,6 +257,9 @@ body .prog .bar i::after{content:"";position:absolute;inset:0;background:linear-
 .tbhead{display:flex;gap:8px;margin:10px 0}
 .tbhead .btn{margin:0;flex:1;min-height:0;padding:10px 12px}
 .tbhead .btn.primary{flex:1.4}
+.tstyles{display:flex;gap:6px;margin:0 0 10px}
+.tstyles button{flex:1;margin:0;min-height:0;padding:8px 0;border-radius:10px;border:1px solid var(--stroke-2);background:var(--surface-2);color:var(--text);font-weight:700;font-size:14px;cursor:pointer}
+.tstyles button.on{border-color:var(--gold);background:rgba(245,196,81,.12);box-shadow:0 0 0 2px rgba(245,196,81,.3)}
 .tcards{display:grid;grid-template-columns:9fr 12fr 32fr;gap:8px;align-items:start}
 .tcards button{padding:0;margin:0;min-height:0;border:0;background:none;color:var(--text);cursor:pointer;text-align:center}
 .tcimg{position:relative;display:block;border-radius:10px;overflow:hidden;background:#000;border:3px solid transparent}
@@ -278,3 +281,9 @@ body .prog .bar i::after{content:"";position:absolute;inset:0;background:linear-
 .rtabs button.on::after{content:'';position:absolute;left:28%;right:28%;bottom:4px;height:3px;border-radius:3px;background:var(--gold);box-shadow:0 0 8px rgba(245,196,81,.7)}
 #view[data-rt="v"] #thumbBox,#view[data-rt="t"] .rvid,#view[data-rt="c"] .rvid,#view[data-rt="t"] .capp,#view[data-rt="c"] .thumbp{display:none}
 
+
+/* One-Click Auto: the three translation styles side by side, small icon on top */
+#aStyle{display:grid !important;grid-template-columns:repeat(3,1fr);gap:6px}
+#aStyle .chip{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;margin:0;padding:8px 4px;min-height:0;font-size:13px;line-height:1.35;text-align:center;border-radius:12px}
+#aStyle .chip i{font-style:normal;font-size:15px;line-height:1.2}
+#aStyle .chip small{font-size:11px;opacity:.75;color:inherit}
