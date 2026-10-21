@@ -287,3 +287,8 @@ body .prog .bar i::after{content:"";position:absolute;inset:0;background:linear-
 #aStyle .chip{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;margin:0;padding:8px 4px;min-height:0;font-size:13px;line-height:1.35;text-align:center;border-radius:12px}
 #aStyle .chip i{font-style:normal;font-size:15px;line-height:1.2}
 #aStyle .chip small{font-size:11px;opacity:.75;color:inherit}
+
+/* caption hashtags: chips that can be left out */
+.tagchips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.tagchips button{margin:0;min-height:0;padding:6px 12px;border-radius:99px;border:1px solid rgba(0,150,253,.45);background:var(--blue-soft);color:#9fdcff;font-weight:600;font-size:14px;cursor:pointer}
+.tagchips button.off{opacity:.45;text-decoration:line-through;background:none;border-style:dashed;color:var(--muted)}
