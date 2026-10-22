@@ -294,3 +294,7 @@ body .prog .bar i::after{content:"";position:absolute;inset:0;background:linear-
 .tagchips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
 .tagchips button{margin:0;min-height:0;padding:6px 12px;border-radius:99px;border:1px solid rgba(0,150,253,.45);background:var(--blue-soft);color:#9fdcff;font-weight:600;font-size:14px;cursor:pointer}
 .tagchips button.off{opacity:.45;text-decoration:line-through;background:none;border-style:dashed;color:var(--muted)}
+.tagchips button.chan{border-color:rgba(245,196,81,.6);background:rgba(245,196,81,.12);color:#ffe08a}
+.capcta{margin:6px 2px 0;font-size:14px;color:var(--muted)}
+.capcta[hidden]{display:none}
+.tagchips button[hidden]{display:none}

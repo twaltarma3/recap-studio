@@ -2149,6 +2149,14 @@ async function thumbPanel() {
     if (!done) { try { await navigator.clipboard.writeText(text); done = true; } catch {} }
     toast(done ? ok : 'ကူးမရပါ — ထပ်နှိပ်ကြည့်ပါ');
   };
+  // the user's own channel hashtag (first) and a Follow line at the end of the caption, kept on this phone
+  const CTA = 'Movie Recap တွေအတွက် Follow လုပ်ထားပါ။';
+  const chanOf = t => { const w = String(t || '').replace(/[#@\s]+/g, ''); return w ? '#' + w : ''; };
+  const capPrefs = () => {
+    let p = {}; try { p = JSON.parse(localStorage.getItem('capPrefs') || '{}') || {}; } catch {}
+    return { chan: p.chan ?? chanOf(state.wmText), ctaOn: p.ctaOn ?? true, cta: p.cta || CTA };
+  };
+  const saveCapPrefs = p => { try { localStorage.setItem('capPrefs', JSON.stringify(p)); } catch {} };
   const paintCap = () => {
     const box = $('#tbCap'); if (!box) return;
     if (!th.caption) {
@@ -2158,26 +2166,48 @@ async function thumbPanel() {
         const c = splitCap(th.caption);
         Object.assign(th, c, { tagOff: c.tags.map((_, i) => i).filter(i => i >= 5), capFor: th.caption });
       }
+      const pf = capPrefs();
       box.innerHTML = `<textarea id="capTxt" rows="5">${esc(th.text)}</textarea>
+        <p class="capcta" id="capCta" ${pf.ctaOn && pf.cta ? '' : 'hidden'}>+ ${esc(pf.cta)}</p>
         <div class="two"><button type="button" class="btn" id="capCopy">📋 Caption ကူး</button><button type="button" class="btn" id="capMk">🔄 အသစ်ရေးမည်</button></div>
         ${th.tags.length ? `<div class="row" style="margin-top:14px"><b># Hashtag</b><span class="muted small" id="tagN"></span></div>
-        <div class="tagchips">${th.tags.map((t, i) => `<button type="button" data-i="${i}">${esc(t)}</button>`).join('')}</div>
+        <div class="tagchips"><button type="button" class="chan" id="chanChip" ${pf.chan ? '' : 'hidden'}>${esc(pf.chan)}</button>${th.tags.map((t, i) => `<button type="button" data-i="${i}">${esc(t)}</button>`).join('')}</div>
         <p class="muted small" style="margin:6px 0 0">မလိုတာကို နှိပ်ရင် ဖယ်ပါမယ် (ပြန်နှိပ်ရင် ပြန်ထည့်)</p>
         <button type="button" class="btn block" id="tagCopy" style="margin-top:8px"># Hashtag ပဲ ကူးမည်</button>` : ''}
-        <button type="button" class="btn primary block" id="capAll">📋 Caption + Hashtag အကုန်ကူးမည်</button>`;
-      const tagsOn = () => th.tags.filter((_, i) => !th.tagOff.includes(i));
+        <button type="button" class="btn primary block" id="capAll">📋 Caption + Hashtag အကုန်ကူးမည်</button>
+        <details class="tgpt capset"><summary>📛 ကိုယ့် Channel hashtag · 📣 Follow စာ</summary>
+          <label class="small">Channel hashtag (Hashtag တွေရဲ့ ရှေ့ဆုံးမှာ ထည့်ပါမယ်)
+            <input id="chanIn" type="text" maxlength="40" placeholder="#ChannelName" value="${esc(pf.chan)}" /></label>
+          <label style="display:flex;align-items:center;gap:10px;font-weight:600;margin-top:12px">
+            <input id="ctaOn" type="checkbox" style="width:22px;height:22px;padding:0;margin:0" ${pf.ctaOn ? 'checked' : ''} /> 📣 Caption အဆုံးမှာ Follow စာ ထည့်မည်</label>
+          <input id="ctaIn" type="text" maxlength="80" value="${esc(pf.cta)}" style="margin-top:8px" />
+          <p class="muted small" style="margin:6px 0 0">ဒီဖုန်းမှာ မှတ်ထားပါမယ် — နောက် Video တွေမှာ ပြန်ရေးစရာ မလိုပါ</p>
+        </details>`;
+      const chanOn = () => { const c = capPrefs().chan; return c && !th.chanOff ? [c] : []; };
+      const tagsOn = () => [...chanOn(), ...th.tags.filter((_, i) => !th.tagOff.includes(i) && th.tags[i].toLowerCase() !== (capPrefs().chan || '').toLowerCase())];
+      const capFull = () => { const p = capPrefs(); return [th.text.trim(), p.ctaOn && p.cta ? p.cta : ''].filter(Boolean).join('\n'); };
       const paintTags = () => {
         box.querySelectorAll('.tagchips button').forEach(b => b.classList.toggle('off', th.tagOff.includes(+b.dataset.i)));
-        const n = $('#tagN'); if (n) n.textContent = `${tagsOn().length} / ${th.tags.length} ခု ရွေးထား`;
+        const cc = $('#chanChip'); if (cc) cc.classList.toggle('off', !!th.chanOff);
+        const n = $('#tagN'); if (n) n.textContent = `${tagsOn().length} / ${th.tags.length + (capPrefs().chan ? 1 : 0)} ခု ရွေးထား`;
       };
       box.querySelectorAll('.tagchips button').forEach(b => {
         b.onclick = () => { const i = +b.dataset.i; th.tagOff = th.tagOff.includes(i) ? th.tagOff.filter(x => x !== i) : [...th.tagOff, i]; paintTags(); };
       });
+      $('#chanChip')?.addEventListener('click', () => { th.chanOff = !th.chanOff; paintTags(); });
       paintTags();
+      const setPref = ch => { const p = { ...capPrefs(), ...ch }; saveCapPrefs(p); return p; };
+      $('#chanIn').oninput = e => {
+        const c = setPref({ chan: chanOf(e.target.value) }).chan, cc = $('#chanChip');
+        if (cc) { cc.textContent = c; cc.hidden = !c; } paintTags();
+      };
+      const paintCta = () => { const p = capPrefs(), el = $('#capCta'); el.hidden = !(p.ctaOn && p.cta); el.textContent = '+ ' + p.cta; };
+      $('#ctaOn').onchange = e => { setPref({ ctaOn: e.target.checked }); paintCta(); };
+      $('#ctaIn').oninput = e => { setPref({ cta: e.target.value.trim() }); paintCta(); };
       $('#capTxt').oninput = e => { th.text = e.target.value; };
-      $('#capCopy').onclick = () => copyText(th.text.trim(), '✅ Caption ကူးပြီးပါပြီ');
+      $('#capCopy').onclick = () => copyText(capFull(), '✅ Caption ကူးပြီးပါပြီ');
       $('#tagCopy')?.addEventListener('click', () => copyText(tagsOn().join(' '), '✅ Hashtag ကူးပြီးပါပြီ'));
-      $('#capAll').onclick = () => copyText([th.text.trim(), tagsOn().join(' ')].filter(Boolean).join('\n\n'), '✅ Caption + Hashtag ကူးပြီးပါပြီ');
+      $('#capAll').onclick = () => copyText([capFull(), tagsOn().join(' ')].filter(Boolean).join('\n\n'), '✅ Caption + Hashtag ကူးပြီးပါပြီ');
     }
     $('#capMk').onclick = async () => {
       const b = $('#capMk'); b.disabled = true; b.textContent = '📝 ရေးနေပါတယ်…';
