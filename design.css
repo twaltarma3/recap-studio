@@ -259,8 +259,8 @@ body .prog .bar i::after{content:"";position:absolute;inset:0;background:linear-
 .tbhead{display:flex;gap:8px;margin:10px 0}
 .tbhead .btn{margin:0;flex:1;min-height:0;padding:10px 12px}
 .tbhead .btn.primary{flex:1.4}
-.tstyles{display:flex;gap:6px;margin:0 0 10px}
-.tstyles button{flex:1;margin:0;min-height:0;padding:8px 0;border-radius:10px;border:1px solid var(--stroke-2);background:var(--surface-2);color:var(--text);font-weight:700;font-size:14px;cursor:pointer}
+.tstyles{display:grid;grid-template-columns:repeat(auto-fit,minmax(58px,1fr));gap:6px;margin:0 0 10px}
+.tstyles button{margin:0;min-height:0;padding:8px 2px;white-space:nowrap;border-radius:10px;border:1px solid var(--stroke-2);background:var(--surface-2);color:var(--text);font-weight:700;font-size:13px;cursor:pointer}
 .tstyles button.on{border-color:var(--gold);background:rgba(245,196,81,.12);box-shadow:0 0 0 2px rgba(245,196,81,.3)}
 .tcards{display:grid;grid-template-columns:9fr 12fr 32fr;gap:8px;align-items:start}
 .tcards button{padding:0;margin:0;min-height:0;border:0;background:none;color:var(--text);cursor:pointer;text-align:center}

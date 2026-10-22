@@ -127,15 +127,18 @@ export async function shotCanvas(src, shot) {
 // the looks the user can switch between: gold glow, red news band, plain white with a black outline
 export const THUMB_STYLES = {
   gold: { label: '🟡 ရွှေ', fill: ['#fff6b0', '#ffd21f', '#ff9f00'], hi: ['#ffffff', '#fff3c4', '#ffd86b'], stroke: '#120a00', strokeW: 0.2, glow: 'rgba(255,190,0,.55)', frame: '#e8b64a' },
+  // on a see-through dark panel with a thin red line between the lines: line 1 white, line 2 glowing blue / pink
+  cyan: { label: '🔵 အပြာ', fill: '#ffffff', hi: ['#7df9ff', '#00c8ff'], stroke: '#08101c', strokeW: 0.16, glow: 'rgba(0,200,255,.55)', panel: true, twoLines: true, frame: '#00c8ff' },
+  pink: { label: '🌸 ပန်း', fill: '#ffffff', hi: ['#ff9ac8', '#ff3d8b'], stroke: '#08101c', strokeW: 0.16, glow: 'rgba(255,61,139,.5)', panel: true, twoLines: true, frame: '#ff5fa2' },
   news: { label: '🔴 သတင်း', fill: '#ffffff', hi: '#ffe14d', stroke: '#5a0008', strokeW: 0.1, band: true, frame: '#ff3b47' },
   clean: { label: '⚪ စာဖြူ', fill: '#ffffff', hi: '#ffd21f', stroke: '#000000', strokeW: 0.24, glow: 'rgba(0,0,0,.6)', frame: '' }
 };
 export const THUMB_SIZES = { '9:16': [720, 1280], '3:4': [960, 1280], '16:9': [1280, 720] };
 // split a Burmese title into 1 or 2 lines that fit maxW: break between words (spaces, else the browser's Burmese
 // word list, else letters), at the point that makes the two lines most even
-function wrapTitle(ctx, text, maxW) {
+function wrapTitle(ctx, text, maxW, two = false) {
   const w = x => ctx.measureText(x.trim()).width;
-  if (w(text) <= maxW) return [text.trim()];
+  if (w(text) <= maxW && !two) return [text.trim()];
   const seg = g => typeof Intl !== 'undefined' && Intl.Segmenter ? [...new Intl.Segmenter('my', { granularity: g }).segment(text)].map(x => x.segment) : [...text];
   const tries = [text.includes(' ') ? text.split(/(?<= )/) : null, seg('word'), seg('grapheme')].filter(p => p && p.length > 1);
   for (const pieces of tries) {
@@ -216,11 +219,12 @@ export function composeThumb(frame, face, title, ratio, font, { subTop = 0, subH
   const S = THUMB_STYLES[style] || THUMB_STYLES.gold;
   const t = String(title || '').trim();
   if (t) {
-    const maxW = TW * (S.band ? 0.84 : 0.88);
+    const maxW = TW * (S.band || S.panel ? 0.84 : 0.88);
     let size = Math.round(Math.min(TW, TH) * (TW > TH ? 0.13 : 0.12)), lines;
     for (; size > 18; size -= 2) {
       ctx.font = `${size}px ${font}`;
-      lines = wrapTitle(ctx, t, maxW);
+      lines = wrapTitle(ctx, t, maxW, S.twoLines);
+      if (lines[1] === '' && ctx.measureText(t).width <= maxW) lines = [t];   // one word that can't be split: one line
       if (lines.length <= 2 && lines[1] !== '' && lines.every(l => ctx.measureText(l).width <= maxW)) break;
     }
     lines = lines.filter(Boolean).slice(0, 2);
@@ -229,7 +233,14 @@ export function composeThumb(frame, face, title, ratio, font, { subTop = 0, subH
       : lines[0].includes(' ') ? [[[lines[0].slice(0, lines[0].lastIndexOf(' ') + 1), false], [lines[0].slice(lines[0].lastIndexOf(' ') + 1), true]]]
       : [[[lines[0], false]]];
     ctx.font = `${size}px ${font}`; ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.lineJoin = 'round';
-    const lh = size * 1.55, y0 = TH * (S.band ? 0.06 : 0.045);
+    const lh = size * 1.55, y0 = TH * (S.band || S.panel ? 0.06 : 0.045);
+    if (S.panel) {                                 // cyan: a see-through dark panel, a thin red line between the lines
+      const pad = size * 0.3, bw = Math.min(TW * 0.94, Math.max(...lines.map(l => ctx.measureText(l).width)) + size * 1.2);
+      const bx = (TW - bw) / 2, by = y0 - pad, bh = lines.length * lh - size * 0.25 + pad * 2;
+      ctx.fillStyle = 'rgba(0,0,0,.58)';
+      ctx.beginPath(); ctx.roundRect ? ctx.roundRect(bx, by, bw, bh, size * 0.22) : ctx.rect(bx, by, bw, bh); ctx.fill();
+      if (lines.length > 1) { ctx.fillStyle = '#ff2d3d'; ctx.fillRect(TW / 2 - bw * 0.3, y0 + size * 1.36, bw * 0.6, Math.max(3, size * 0.05)); }
+    }
     if (S.band) {                                  // news: a red band behind the title, a yellow strip under it
       const pad = size * 0.28, bw = Math.min(TW * 0.94, Math.max(...lines.map(l => ctx.measureText(l).width)) + size * 1.2);
       const bx = (TW - bw) / 2, by = y0 - pad, bh = lines.length * lh - size * 0.25 + pad * 2;
