@@ -298,3 +298,14 @@ body .prog .bar i::after{content:"";position:absolute;inset:0;background:linear-
 .capcta{margin:6px 2px 0;font-size:14px;color:var(--muted)}
 .capcta[hidden]{display:none}
 .tagchips button[hidden]{display:none}
+
+/* Admin: Gemini spend per day */
+.costnow{display:flex;align-items:baseline;justify-content:space-between;margin-top:8px}
+.costnow b{font-size:28px;color:var(--gold)}
+.costrows{display:flex;flex-direction:column;gap:4px;margin-top:10px}
+.costrows div{display:grid;grid-template-columns:44px 1fr 58px;align-items:center;gap:8px;font-size:12.5px}
+.costrows i{height:8px;border-radius:4px;background:var(--surface-2);overflow:hidden}
+.costrows em{display:block;height:100%;background:var(--grad)}
+.costrows b{text-align:right;font-variant-numeric:tabular-nums}
+.costrows small{grid-column:2 / 4;margin-top:-4px;color:var(--muted)}
+.costrows small:empty{display:none}
