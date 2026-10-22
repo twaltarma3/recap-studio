@@ -620,7 +620,7 @@ SPOKEN BURMESE: Everyday colloquial Burmese (အပြောစကား), never
 
 WHO IS TALKING: Work out who is speaking to whom${segs.some(s => s.spk) ? ' (lines with the same Speaker letter are usually the same person)' : ''}. Choose pronouns and politeness that fit and keep them consistent. Use natural Burmese family and social titles: 爹/爸 → အဖေ, 妈 → အမေ, 阿姨 → အန်တီ, 叔叔 → ဦးလေး, 哥哥 → ကိုကို or အစ်ကို, 姐姐 → မမ, 二姐 → မမလတ်, 弟弟/妹妹 → ညီလေး/ညီမလေး. Questions stay questions, orders stay orders, surprise and shouting keep their feeling. Short sounds (嗯、哎、啊) become short Burmese sounds (အင်း၊ ဟူး၊ ဟာ).
 
-NAMES: Write Chinese names the way they sound in Burmese, short and the same every time (e.g. 许灵溪 → လင်းရှီ). Online nicknames: translate their meaning briefly.
+NAMES: Write Chinese names the way they sound in Burmese, short and spelt EXACTLY the same every time (e.g. 许灵溪 → လင်းရှီ). Online nicknames: translate their meaning briefly.
 
 SLANG AND THINGS: Replace Chinese slang, internet words and brand nicknames with what a Burmese viewer would understand (e.g. 大牛 → လမ်ဘော်ဂီနီ, 上门女婿 → သမက်ဝင်စား, 八百遍 → အခါတစ်ရာ).
 
@@ -629,6 +629,8 @@ TIMING (very important): Burmese is spoken at about 4 syllables per second. Each
 LINE SPLITS: Each line is spoken as a separate audio clip, so NEVER cut a Burmese word or phrase in half. Every line must start and end with a whole word and sound complete alone. If a sentence goes on to the next line, end this line at a natural pause and continue on the next line. Keep the same order and the same number of lines; never merge lines.
 
 PUNCTUATION: Do NOT use "...", "…", quotation marks or brackets. Use only ၊ and ။.
+
+${NUM_RULE}
 
 Return ONLY a JSON object that maps EVERY ID to its Burmese line, for example {"lines": {"0": "...", "1": "...", "2": "..."}}. Every ID from the inputs must appear exactly once, even very short ones.
 
@@ -700,6 +702,15 @@ export function pickVoices(segs, ai = [], f0 = [], main = 'M') {
 }
 
 /* ---------- Gemini prompt (same format as the original app) ---------- */
+// rules every translation prompt shares: numbers in words (the voice reads them out), the same name spelling
+// throughout, and the facts the story needs kept when a line is shortened
+const NUM_RULE = `NUMBERS: The text is read aloud by a voice engine, so write EVERY number in Burmese words, never as digits (no 0-9, no ၀-၉): ages, years, dates, times, money, distances, percentages and counts. Examples: 18 years old -> အသက်ဆယ့်ရှစ်နှစ်, 3 days -> သုံးရက်, 10 percent -> ဆယ်ရာခိုင်နှုန်း, 100 dollars -> ဒေါ်လာတစ်ရာ, 1500 -> တစ်ထောင့်ငါးရာ, 25000 -> နှစ်သောင်းငါးထောင်.`;
+const STORY_RULES = `${NUM_RULE}
+NAMES: Write character and place names the way they sound, in short easy-to-read Burmese, and spell each name EXACTLY the same every time it appears.
+CHARACTERS: First read ALL the lines and work out who the characters are (man or woman, adult or child, how they are related). Keep how each one talks the same from start to end: a woman says ကျွန်မ / ရှင်, never ကျွန်တော်; a man says ကျွန်တော် / ခင်ဗျား (or ကိုယ် / မင်း once they are close); a girl never calls herself သား. To strangers, guests and people who helped them, characters stay polite — ငါ / နင် / မင်း only in anger, from rough characters, or within close family. A child calls the same person by the same title every time (e.g. always မမ).
+MEASURES: Turn Chinese measures into ones Burmese viewers know (e.g. 亩 -> ဧက, 斤 -> ပိဿာ or ကီလို), with a sensible rounded amount.
+KEY FACTS: When you shorten a line to fit its time, drop filler words, never the facts the story depends on: money and debts (e.g. a bride price), who is related to whom, the reason someone does something, names, numbers and places.
+`;
 export function buildPrompt(segs, style = 'recap') {
   if (style === 'dub') return dubPrompt(segs);
   const lines = segs.map((s, i) => {
@@ -720,7 +731,7 @@ DIALOGUE: Do NOT write dialogue as direct quotes. Turn what characters say into 
 TTS: Keep every line short and punchy. Use commas ( , ) only for natural breathing pauses.
 SAFE WORDS (TikTok safety), replace restricted words automatically: alcohol/beer/liquor -> အထူးဖျော်ရည်; cigarettes/smoking -> မီးခိုးတံ; drugs/pills/injections -> ပစ္စည်း or အားဆေး; violence/kill/death/blood -> ရှင်းထုတ်လိုက်တယ် / အနားယူသွားတယ် / အနီရောင်အမှတ်တွေ; swear words -> safe intense expressions such as ဟာကွာ၊ တောက်.
 `;
-  return `${head}Translate each line so that it sounds natural in a movie recap narration. Do not translate word-for-word.
+  return `${head}${STORY_RULES}Translate each line so that it sounds natural in a movie recap narration. Do not translate word-for-word.
 Timing is critical: Burmese narration is spoken at about 4-5 syllables per second, so each line MUST be short enough to be spoken within its Duration (for example 2.0s allows roughly 8-10 syllables). Condense the meaning and drop minor details instead of translating everything. Being on time matters more than completeness.
 Source lines may be cut in the middle of a sentence. Still translate each line on its own so it sounds natural by itself, and keep the same order and the same number of lines.
 Return the result STRICTLY as a JSON object with a single key "translations" containing an array of strings in order, exactly one string per ID.
@@ -774,6 +785,8 @@ You are a professional "Movie Recap Scriptwriter" for a popular Burmese Facebook
 6. Standard Outro & No Moral Fluff: Do not add moral lessons. Smoothly end the story with an engaging cliffhanger (e.g., "နောက်ထပ် ဘာတွေဆက်ဖြစ်မလဲ [summarize the suspense]"). Finally, ALWAYS end the script with the exact phrase: "အကောင့်လေးကိုလဲ ဖေါလိုးလုပ်ပေးခဲ့ကြပါဗျာ။"
 7. Strict Output Format: Output ONLY the core script inside a single \`code block\`. STRICTLY DO NOT include any scene headers, scene numbers, or descriptions in brackets (e.g., [ဇာတ်ဝင်ခန်း - ၁]). DO NOT include any AI conversational filler before or after the code block.
 8. Video-Driven Accuracy (Strict Observation): You MUST first carefully watch and analyze the provided video. When rewriting and expanding the script, your descriptions must accurately reflect the EXACT movements, environments, and character expressions seen in the video. STRICTLY DO NOT invent, hallucinate, or add any actions, objects, or events that do not physically happen in the video footage. Your final output must meticulously combine the provided text with the exact visual actions from the video without fabricating extra details.
+
+9. ${NUM_RULE}
 
 ### INPUT STORY / VIDEO DETAILS:
 ${source}`;
