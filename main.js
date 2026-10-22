@@ -1836,6 +1836,10 @@ async function pageAdmin() {
       <p class="muted small" style="margin:8px 0 0" id="cpmEx"></p>
     </div>
     <div class="kbox" style="margin-top:14px">
+      <b>💵 Gemini ကုန်ကျစရိတ်</b>
+      <div id="costBox"><p class="muted small" style="margin:6px 0 0">…</p></div>
+    </div>
+    <div class="kbox" style="margin-top:14px">
       <b>🧪 AI ဘာသာပြန် စမ်းမည်</b>
       <p class="muted small" style="margin:6px 0 10px" id="aiStat">…</p>
       <p class="small" style="margin:0 0 6px">🔑 Gemini API Key <span class="muted" id="gkSrc"></span></p>
@@ -1894,6 +1898,21 @@ async function pageAdmin() {
     return x;
   };
   aiInfo();
+  // Gemini spend per day, counted by the Worker from the tokens each answer reports
+  (async () => {
+    const x = await L.adminCall({ action: 'cost' }).catch(() => ({})), box = $('#costBox'); if (!box) return;
+    if (!x.rows) { box.innerHTML = '<p class="muted small" style="margin:6px 0 0">⚠ Worker အသစ် မတင်ရသေးလို့ မပြနိုင်သေးပါ</p>'; return; }
+    const $u = n => '$' + (n || 0).toFixed(n >= 1 ? 2 : 3), mins = r => (r.secs || 0) / 60;
+    const perMin = r => mins(r) > 0.5 && r.appUsd ? $u(r.appUsd / mins(r)) : '—';
+    const t = x.rows[0], all = x.rows.reduce((a, r) => { for (const k of ['usd', 'appUsd', 'secs', 'videos']) a[k] = (a[k] || 0) + (r[k] || 0); return a; }, {});
+    const max = Math.max(...x.rows.map(r => r.usd || 0), 0.001);
+    box.innerHTML = `<div class="costnow"><span>ဒီနေ့</span><b>${$u(t.usd)}</b></div>
+      <p class="muted small" style="margin:4px 0 0">App ${$u(t.appUsd)} · Bot အမေးအဖြေ ${$u(t.botUsd)} · စမ်းသပ် ${$u(t.testUsd)} · Gemini ${t.calls || 0} ကြိမ်${t.backup ? ` · အရန် AI ${t.backup} ကြိမ် (အခမဲ့)` : ''}</p>
+      <p class="small" style="margin:6px 0 0">🎬 Premium Video ${t.videos || 0} ပုဒ် · ${mins(t).toFixed(1)} မိနစ် · <b>၁ မိနစ် ≈ ${perMin(t)}</b></p>
+      <div class="costrows">${x.rows.filter((r, i) => !i || r.usd || r.videos).map(r => `<div><span>${r.day.slice(5)}</span><i><em style="width:${Math.round((r.usd || 0) / max * 100)}%"></em></i><b>${r.usd ? $u(r.usd) : '—'}</b><small>${r.videos ? `${r.videos} ပုဒ် · ${mins(r).toFixed(0)}′` : ''}</small></div>`).join('')}</div>
+      <p class="small" style="margin:8px 0 0">၁၄ ရက် စုစုပေါင်း <b>${$u(all.usd)}</b> · Video ${all.videos || 0} ပုဒ် · ${(all.secs / 60 || 0).toFixed(0)} မိနစ် · ၁ မိနစ် ≈ ${perMin(all)}</p>
+      <p class="muted small" style="margin:6px 0 0">Gemini ပြန်ပေးတဲ့ token အရေအတွက်နဲ့ Worker က တွက်ထားတာပါ (gemini-2.5-flash ဈေး၊ အခွန် မပါ)။ Google Billing နဲ့ နည်းနည်း ကွာနိုင်ပြီး ပြနေတာက နေ့လိုက် (၂–၃ နာရီ နောက်ကျ) ဖြစ်နိုင်ပါတယ်။ Worker အသစ် တင်တဲ့နေ့ကစပြီး မှတ်ပါတယ်။</p>`;
+  })();
   const saveKey = async key => {
     const x = await L.adminCall({ action: 'geminiKey', key }).catch(e => ({ error: e.message }));
     toast(x.ok ? (key ? '✅ Gemini key သိမ်းပြီးပါပြီ' : '🗑 App ထဲက key ဖျက်ပြီးပါပြီ') : x.error === 'bad_key' ? 'Key ပုံစံ မမှန်ပါ — Google AI Studio က key ကို Copy ခလုတ်နဲ့ အကုန် ကူးထည့်ပါ' : 'မရပါ: ' + (x.error || x.status));
