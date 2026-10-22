@@ -127,8 +127,9 @@ export async function shotCanvas(src, shot) {
 // the looks the user can switch between: gold glow, red news band, plain white with a black outline
 export const THUMB_STYLES = {
   gold: { label: '🟡 ရွှေ', fill: ['#fff6b0', '#ffd21f', '#ff9f00'], hi: ['#ffffff', '#fff3c4', '#ffd86b'], stroke: '#120a00', strokeW: 0.2, glow: 'rgba(255,190,0,.55)', frame: '#e8b64a' },
-  // cyan: line 1 yellow with a cyan outline, line 2 cyan with a yellow outline, on a dark panel with a red divider
-  cyan: { label: '🔵 Cyan', fill: '#ffe500', hi: '#00e5ff', stroke: '#00e5ff', hiStroke: '#ffe500', strokeW: 0.11, glow: 'rgba(0,0,0,.7)', panel: true, twoLines: true, frame: '#00e5ff' },
+  // on a see-through dark panel with a thin red line between the lines: line 1 white, line 2 glowing blue / pink
+  cyan: { label: '🔵 အပြာ', fill: '#ffffff', hi: ['#7df9ff', '#00c8ff'], stroke: '#08101c', strokeW: 0.16, glow: 'rgba(0,200,255,.55)', panel: true, twoLines: true, frame: '#00c8ff' },
+  pink: { label: '🌸 ပန်း', fill: '#ffffff', hi: ['#ff9ac8', '#ff3d8b'], stroke: '#08101c', strokeW: 0.16, glow: 'rgba(255,61,139,.5)', panel: true, twoLines: true, frame: '#ff5fa2' },
   news: { label: '🔴 သတင်း', fill: '#ffffff', hi: '#ffe14d', stroke: '#5a0008', strokeW: 0.1, band: true, frame: '#ff3b47' },
   clean: { label: '⚪ စာဖြူ', fill: '#ffffff', hi: '#ffd21f', stroke: '#000000', strokeW: 0.24, glow: 'rgba(0,0,0,.6)', frame: '' }
 };
@@ -253,7 +254,7 @@ export function composeThumb(frame, face, title, ratio, font, { subTop = 0, subH
       let x = TW / 2 - ws.reduce((a, b) => a + b, 0) / 2;
       line.forEach(([txt, hi], k) => {
         if (S.glow) { ctx.shadowColor = S.glow; ctx.shadowBlur = size * 0.35; }
-        if (S.stroke) { ctx.lineWidth = size * S.strokeW; ctx.strokeStyle = hi && S.hiStroke ? S.hiStroke : S.stroke; ctx.strokeText(txt, x, y); }
+        if (S.stroke) { ctx.lineWidth = size * S.strokeW; ctx.strokeStyle = S.stroke; ctx.strokeText(txt, x, y); }
         ctx.shadowBlur = 0;
         const fill = hi ? S.hi : S.fill;
         if (Array.isArray(fill)) {
