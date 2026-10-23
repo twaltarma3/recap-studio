@@ -952,6 +952,48 @@ export async function cutVideo(file, start, end, onProgress) {
   }
 }
 
+// keep several parts of one video and join them, still without re-encoding (each part starts on a keyframe)
+export async function cutJoin(file, parts, onProgress) {
+  if (parts.length === 1) return cutVideo(file, parts[0][0], parts[0][1], onProgress);
+  const f = await getFFmpeg();
+  const ext = ((file.name || '').match(/\.([a-z0-9]{2,4})$/i) || [, 'mp4'])[1].toLowerCase();
+  const inName = 'cut_in.' + ext;
+  const made = [];
+  const rm = async n => { try { await f.deleteFile(n); } catch {} };
+  try {
+    await f.writeFile(inName, await fetchFile(file));
+    const tries = [['mp4', ['-movflags', '+faststart']], [ext === 'mp4' ? 'mkv' : ext, []]];
+    for (const [oext, extra] of tries) {
+      let ok = true;
+      for (let i = 0; i < parts.length && ok; i++) {
+        const [a, b] = parts[i], out = `cut_p${i}.${oext}`;
+        setFFProgress(p => onProgress && onProgress((i + Math.min(1, p)) / (parts.length + 1)));
+        const code = await ffRun(f, [...(a > 0 ? ['-ss', a.toFixed(2)] : []), '-i', inName, '-t', Math.max(0.5, b - a).toFixed(2),
+          '-map', '0:v:0?', '-map', '0:a:0?', '-c', 'copy', '-avoid_negative_ts', 'make_zero', out]);
+        made.push(out); ok = code === 0;
+      }
+      if (ok) {
+        await f.writeFile('cut_list.txt', new TextEncoder().encode(made.map(n => `file '${n}'`).join('\n')));
+        setFFProgress(p => onProgress && onProgress((parts.length + Math.min(1, p)) / (parts.length + 1)));
+        const out = 'cut_out.' + oext;
+        const code = await ffRun(f, ['-f', 'concat', '-safe', '0', '-i', 'cut_list.txt', '-c', 'copy', ...extra, out]);
+        if (code === 0) {
+          const d = await f.readFile(out);
+          await rm(out);
+          return { blob: new Blob([d.slice().buffer], { type: oext === 'mp4' ? 'video/mp4' : 'video/x-matroska' }), ext: oext };
+        }
+        await rm(out);
+      }
+      for (const n of made.splice(0)) await rm(n);
+    }
+    throw new Error('Video ဖြတ်လို့ မရပါ (ဒီဖိုင်အမျိုးအစားကို မဖြတ်နိုင်ပါ)');
+  } finally {
+    setFFProgress(null);
+    for (const n of made) await rm(n);
+    await rm('cut_list.txt'); await rm(inName);
+  }
+}
+
 /* ---------- TTS ---------- */
 // Microsoft often returns *no audio* to datacenter addresses (like the Worker's Cloudflare IP).
 // So the phone first talks to Edge TTS itself, using a signed address the Worker hands out
