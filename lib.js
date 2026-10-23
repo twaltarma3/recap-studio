@@ -447,7 +447,16 @@ const FREE_ERR = {
   free_off: 'ဒီ Code မှာ Key မလို ခွင့် ပိတ်ထားပါတယ် — API Key Settings မှာ ကိုယ်ပိုင် key ထည့်ပါ',
   bad_audio: 'Video ထဲက အသံကို ဖတ်မရပါ — Video ကို ပြန်ရွေးပြီး ပြန်စမ်းပါ'
 };
+// a dropped connection (iPhone Safari says "Type error" / "Load failed") is tried again twice before giving up;
+// the Worker charges a video once per job, so a repeated request costs nothing extra
+export const isNetErr = e => !!e && e.name === 'TypeError';
 async function aai(path, opts = {}) {
+  for (let k = 0; ; k++) {
+    try { return await aaiOnce(path, opts); }
+    catch (e) { if (!isNetErr(e) || k >= 2) throw e; await sleep(k ? 5000 : 2000); }
+  }
+}
+async function aaiOnce(path, opts = {}) {
   // Premium: the Worker uses the owner's AssemblyAI key, so the user needs none
   if (premium.on) {
     // the Worker charges by length, which it measures from the audio itself (x-secs is only a hint for old Workers)
