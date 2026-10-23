@@ -240,8 +240,8 @@ function render() {
 }
 
 /* ---------------- menu (hamburger + drawer) ---------------- */
-function openDrawer() { $('#drawer').classList.add('open'); $('#scrim').classList.add('open'); }
-function closeDrawer() { $('#drawer').classList.remove('open'); $('#scrim').classList.remove('open'); }
+function openDrawer() { $('#drawer').classList.add('open'); $('#scrim').classList.add('open'); document.documentElement.classList.add('dlock'); }
+function closeDrawer() { $('#drawer').classList.remove('open'); $('#scrim').classList.remove('open'); document.documentElement.classList.remove('dlock'); }
 function syncMenu() {
   document.querySelectorAll('.ditem').forEach(b => b.classList.toggle('on', b.dataset.p === page));
   const dc = $('#dCode'), da = $('#dAdmin');
