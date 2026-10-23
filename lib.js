@@ -732,7 +732,8 @@ const NUM_RULE = `NUMBERS: The text is read aloud by a voice engine, so write EV
 const SAFE_RULE = `SAFE WORDS (TikTok takes down videos with graphic words): never write words for killing, dying, death, suicide, blood or gore (such as သတ်၊ အသေသတ်၊ သေ၊ သေချင်၊ သွေး). Say it the way Burmese movie-recap narrators do, with words that fit the scene and sound natural — for example kill -> အပြတ်ရှင်းလိုက်တယ် / ချေမှုန်းလိုက်တယ် / ကိစ္စတုံးလိုက်တယ် / လွင့်စင်သွားအောင် လုပ်လိုက်တယ်; died -> ကိစ္စချောသွားတယ် / ပြန်မနိုးတော့ဘူး; "I want to die" -> မနေချင်တော့ဘူး; blood -> အနီရောင်တွေ. They don't have to be these exact words; choose what fits the meaning. Alcohol -> အထူးဖျော်ရည်; drugs / pills / injections -> ပစ္စည်း or အားဆေး; swear words -> ဟာကွာ / တောက် and the like. Smoking is fine as it is (ဆေးလိပ်သောက်တယ်).`;
 const NAME_RULE = `FAMOUS CHARACTERS: In well-known stories (e.g. Journey to the West / 西游记) use the names Burmese viewers already know: 孙悟空 -> ဆွန်ဝူခုန်း (or မျောက်မင်း), 猪八戒 -> ကျူပါကျဲ, 唐僧 -> ထန်စန်ဆရာ, 观音 -> ကွမ်ယင်မယ်တော်, 玉帝 -> နတ်မင်းကြီး; titles like 大王 -> ဘုရင်.
 NAMED THINGS: Names of people, monsters, spells, weapons and fighting moves must read clearly as names, never as a word-for-word phrase that sounds like part of the sentence (e.g. 银角大王 -> ငွေချိုဘုရင်, not ငွေချို). If a name can't be said well, use a short title (e.g. နတ်ဆိုးဘုရင်).
-LAUGHTER: write a laugh as at most ဟားဟားဟား (or ဟဲဟဲ / ဟီးဟီး).`;
+LAUGHTER: write a laugh as at most ဟားဟားဟား (or ဟဲဟဲ / ဟီးဟီး).
+PAUSES: never write "..." or "…" (the voice stops too long); use ၊ for a short pause.`;
 const STORY_RULES = `${NUM_RULE}
 ${SAFE_RULE}
 ${NAME_RULE}
@@ -857,7 +858,10 @@ export function parseTranslations(raw) {
   if (a < 0 || b < 0) throw new Error('JSON မတွေ့ပါ — Gemini ရလဒ်ကို အကုန် paste လုပ်ပါ');
   let obj;
   try { obj = JSON.parse(s.slice(a, b + 1)); } catch { throw new Error('JSON ပုံစံ မမှန်ပါ'); }
-  const clean = x => String(x ?? '').replace(/\s*\n\s*/g, ' ').trim();
+  // "…" / "..." makes the voice stop for a long moment: none at either end, a ၊ (short pause) in the middle
+  const ell = '(?:\\.{2,}|…+)';
+  const clean = x => String(x ?? '').replace(/\s*\n\s*/g, ' ')
+    .replace(new RegExp(`^\\s*${ell}\\s*|\\s*${ell}\\s*$`, 'gu'), '').replace(new RegExp(`\\s*${ell}\\s*`, 'gu'), '၊ ').trim();
   if (obj.lines && typeof obj.lines === 'object' && !Array.isArray(obj.lines)) {
     const ids = Object.keys(obj.lines).map(Number).filter(n => Number.isInteger(n) && n >= 0);
     const out = Array.from({ length: ids.length ? Math.max(...ids) + 1 : 0 }, (_, i) => clean(obj.lines[i]));
