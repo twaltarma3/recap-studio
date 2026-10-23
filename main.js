@@ -1234,9 +1234,11 @@ async function transcribeFlow(auto = false) {
   state.step = 2; state.busy = true; renderStepper();
   view.innerHTML = bar();
   const stopClock = startClock();
+  let stage = 'engine';                                    // where it failed, for the error message
   try {
     setProg(0.02, 'Engine ပြင်ဆင်နေသည်');
     await L.getFFmpeg();
+    stage = 'audio';
     state.videoDur = await L.videoDuration(state.file).catch(() => 0);   // browser can't decode some codecs; ffmpeg still can
     setProg(0.05, 'အသံ ဆွဲထုတ်နေသည်');
     const wav = await L.extractAudio(state.file, p => setProg(0.05 + p * 0.2, 'အသံ ဆွဲထုတ်နေသည်'));
@@ -1244,6 +1246,7 @@ async function transcribeFlow(auto = false) {
     const names = { uploading: `Server သို့ ပို့နေပါသည် (${(wav.size / 1048576).toFixed(1)} MB)`, queued: 'တန်းစီစောင့်နေသည်', processing: 'စာသားထုတ်ယူနေပါသည်' };
     let tick = 0.3;
     state.origSegs = null;
+    stage = 'send';
     state.segs = await L.transcribe(wav, state.lang, st => { tick = Math.min(tick + 0.04, 0.95); setProg(tick, names[st] || st); },
       { speakers: state.pStyle === 'dub' && premPlan() });
     state.audioBlob = wav; state.genders = null;
@@ -1254,10 +1257,16 @@ async function transcribeFlow(auto = false) {
     go(2);
   } catch (e) {
     stopClock();
-    view.innerHTML = `<h2>အမှားရှိနေပါသည်</h2>`; showErr(e);
-    errTip('⚠ <b>VPN ချိတ်ထားရင် ဖြုတ်ပြီး</b> ပြန်ကြိုးစားပါ။ Wi-Fi / Internet ကောင်းမကောင်းလည်း စစ်ပါ။ (AssemblyAI Key မှန်လားဆိုတာ API Key Settings → 🔎 စစ်ဆေးမည် နဲ့ စစ်နိုင်ပါတယ်)');
-    state.busy = false; state.autoRun = false; renderStepper();
-    view.insertAdjacentHTML('beforeend', `<button class="btn primary" id="back">ဗီဒီယိုတင် အဆင့်သို့ ပြန်သွားမည်</button>`);
+    view.innerHTML = `<h2>အမှားရှိနေပါသည်</h2>`;
+    // a dropped connection: say where, in plain words (the raw "Type error" alone tells the user nothing)
+    const where = { engine: 'Engine ဒေါင်းနေတုန်း', audio: 'Video ထဲက အသံ ထုတ်နေတုန်း', send: 'Server ကို ပို့နေတုန်း / စာသားထုတ်နေတုန်း' }[stage];
+    showErr(L.isNetErr(e) ? new Error(`📶 ${where} အင်တာနက် ချိတ်ဆက်မှု ပြတ်သွားပါတယ် (${e.message})`) : e);
+    errTip(L.isNetErr(e)
+      ? '⚠ အင်တာနက် ပြန်ကောင်းလာရင် အောက်က <b>🔄 ထပ်ကြိုးစားမည်</b> ကို နှိပ်ပါ။ iPhone မှာ ပို့နေတုန်း <b>တခြား App ကို မပြောင်းပါနဲ့၊ Screen မပိတ်ပါနဲ့</b> (ပြောင်းရင် ချိတ်ဆက်မှု ပြတ်တတ်ပါတယ်)။ VPN ဖွင့်/ပိတ် ပြောင်းစမ်းကြည့်ပါ။'
+      : '⚠ <b>VPN ချိတ်ထားရင် ဖြုတ်ပြီး</b> ပြန်ကြိုးစားပါ။ Wi-Fi / Internet ကောင်းမကောင်းလည်း စစ်ပါ။ (AssemblyAI Key မှန်လားဆိုတာ API Key Settings → 🔎 စစ်ဆေးမည် နဲ့ စစ်နိုင်ပါတယ်)');
+    state.busy = false; const wasAuto = state.autoRun; state.autoRun = false; renderStepper();
+    view.insertAdjacentHTML('beforeend', `<button class="btn primary" id="again">🔄 ထပ်ကြိုးစားမည်</button><button class="btn block" id="back">ဗီဒီယိုတင် အဆင့်သို့ ပြန်သွားမည်</button>`);
+    $('#again').onclick = () => { state.autoRun = wasAuto; if (wasAuto) prun = null; transcribeFlow(wasAuto); };
     $('#back').onclick = () => go(1);
   }
 }
