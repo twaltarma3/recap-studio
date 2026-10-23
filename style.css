@@ -59,6 +59,9 @@ input[type=range]:disabled{opacity:.55}
 #scrim.open{opacity:1;pointer-events:auto}
 #drawer{position:fixed;top:0;left:0;bottom:0;width:min(84vw,320px);background:#fff;z-index:31;transform:translateX(-102%);transition:transform .22s;padding:16px;display:flex;flex-direction:column;gap:8px;box-shadow:6px 0 24px rgba(10,10,30,.15)}
 #drawer.open{transform:none}
+#drawer{overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding-bottom:calc(16px + env(safe-area-inset-bottom))}
+#drawer>*{flex:none}
+html.dlock,html.dlock body{overflow:hidden}
 .dhead{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
 .dhead b{font-size:18px}
 .ditem{display:grid;grid-template-columns:34px 1fr;column-gap:12px;align-items:center;text-align:left;font:inherit;width:100%;padding:12px;border:1px solid var(--line);border-radius:16px;background:#fff;color:var(--ink);cursor:pointer}
