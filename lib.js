@@ -508,7 +508,18 @@ function segmentWords(words) {
     if (ENDP.test(w.text.trim()) && (cur.end - cur.start) / 1000 >= SEG.minPunct) flush();
   }
   flush();
-  return joinScraps(segs);
+  return dropStray(joinScraps(segs));
+}
+// a lone "嗯 / 啊 / hmm" with nothing said for seconds around it (music, a breath, a sound effect at the very
+// start or end) becomes a stray "အင်း" in the dub: leave it out. Inside a conversation it stays (it can mean "yes").
+const FILLER = /^(?:[嗯啊哦呃唔哼嘿喂哎诶欸噢呀哈嘛]|uh+|um+|hm+|mm+|oh|ah|うん|ああ|えっ?|음|어|아)+$/iu;
+function dropStray(segs) {
+  return segs.filter((s, i) => {
+    const t = s.text.replace(/[\s\p{P}]/gu, '');
+    if (!FILLER.test(t)) return true;
+    const gapBefore = i ? s.start - segs[i - 1].end : Infinity, gapAfter = i + 1 < segs.length ? segs[i + 1].start - s.end : Infinity;
+    return gapBefore < 3 || gapAfter < 3;
+  });
 }
 // a line of one or two characters/words without an end mark, right before the next line, is a scrap of a cut
 // sentence or name: put it in front of the next line (keeping the speaker of the longer part)
