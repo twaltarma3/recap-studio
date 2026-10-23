@@ -764,14 +764,7 @@ TTS: Keep every line short and punchy. Use commas ( , ) only for natural breathi
   return `${head}${STORY_RULES}Translate each line so that it sounds natural in a movie recap narration. Do not translate word-for-word.
 Timing is critical: Burmese narration is spoken at about 4-5 syllables per second, so each line MUST be short enough to be spoken within its Duration (for example 2.0s allows roughly 8-10 syllables). Condense the meaning and drop minor details instead of translating everything. Being on time matters more than completeness.
 Source lines may be cut in the middle of a sentence. Still translate each line on its own so it sounds natural by itself, and keep the same order and the same number of lines.
-Return the result STRICTLY as a JSON object with a single key "translations" containing an array of strings in order, exactly one string per ID.
-Example:
-{
-"translations": [
-"မြန်မာစာသား ၁",
-"မြန်မာစာသား ၂"
-]
-}
+Return the result STRICTLY as a JSON object that maps EVERY ID to its own Burmese line: {"lines": {"0": "...", "1": "...", "2": "..."}}. Each line goes under the ID of the source line it translates — never move words to a neighbouring ID, never merge or split IDs, and every ID from the inputs must appear exactly once, even very short ones.
 Inputs:
 ${lines}`;
 }
