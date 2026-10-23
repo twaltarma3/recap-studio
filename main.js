@@ -156,7 +156,7 @@ function startClock() {
     paintChecklist();
     // a new tip every 6 s; near the end, a "nearly there" line instead
     const tip = $('#ptip'), pc = parseInt(($('#pnum') || {}).textContent, 10) || 0;
-    const k = pc >= 92 ? 'end' : String((tipStart + Math.floor(sec / 6)) % TIPS.length);
+    const k = pc >= 97 ? 'end' : String((tipStart + Math.floor(sec / 6)) % TIPS.length);
     if (tip && tip.dataset.k !== k) {
       tip.dataset.k = k; tip.classList.remove('in'); void tip.offsetWidth;
       tip.textContent = k === 'end' ? '🎉 ပြီးခါနီးပါပြီ — ခဏလေးပဲ ကျန်ပါတော့တယ်…' : TIPS[+k]; tip.classList.add('in');
@@ -2304,7 +2304,7 @@ function showShot(blob) {
 
 /* ---------------- Cut a finished video (start / end), no re-encoding ---------------- */
 // CapCut-style: a strip of frames with two handles to drag; the bright box is what is kept
-const cutState = { file: null, url: null, dur: 0, s: 0, e: 0, thumbs: [] };
+const cutState = { file: null, url: null, dur: 0, s: 0, e: 0, thumbs: [], splits: [], off: new Set(), sel: null };
 const fmtCut = x => { x = Math.max(0, x); const m = Math.floor(x / 60), r = x - m * 60; return `${m}:${r.toFixed(1).padStart(4, '0')}`; };
 async function cutThumbs(url, dur, n) {
   const v = document.createElement('video');
@@ -2337,11 +2337,17 @@ function pageCut() {
     <div class="cutbar"><span id="cutNow">0:00.0</span><button class="cutplay" id="cutPlay" aria-label="Play">▶</button><span class="muted">${fmtCut(c.dur)}</span></div>
     <div class="cuttl" id="cutTl">
       <div class="cutstrip">${Array.from({ length: N }, (_, i) => `<i style="${c.thumbs[i] ? `background-image:url(${c.thumbs[i]})` : ''}"></i>`).join('')}</div>
-      <div class="cutdim" id="cutDimL"></div><div class="cutdim r" id="cutDimR"></div>
+      <div id="cutSegs"></div><div class="cutdim" id="cutDimL"></div><div class="cutdim r" id="cutDimR"></div>
       <div class="cutbox" id="cutBox"><b class="cuth l" id="cutHL"></b><b class="cuth r" id="cutHR"></b><span id="cutLenTag"></span></div>
       <div class="cutph" id="cutPh"></div>
     </div>
     <p class="muted small" style="margin:8px 0 0;text-align:center">👆 ဘေးက ဘောင်အဖြူ ၂ ခုကို ဆွဲပြီး ထားချင်တဲ့ အပိုင်းကို ရွေးပါ</p>
+    <div class="cuttools">
+      <button class="ghost" id="cutSplit">✂ Split</button>
+      <button class="ghost" id="cutDel" disabled>🗑 ဖျက်မည်</button>
+      <button class="ghost" id="cutReset" disabled>↺ ပြန်စ</button>
+    </div>
+    <p class="muted small" style="margin:6px 0 0;text-align:center">အလယ်က အပိုင်းကို ဖြတ်ချင်ရင် — မျဉ်းအဖြူကို ထားပြီး <b>Split</b> ၂ ခါ နှိပ် → အလယ်အပိုင်းကို နှိပ် → <b>ဖျက်မည်</b></p>
     <div class="kbox" style="margin-top:10px">
       <div class="row"><b>⏮ အစ</b><span style="display:flex;align-items:center;gap:8px">${pmBtn('cutSM', '−')}<b id="cutSV" style="min-width:58px;text-align:center"></b>${pmBtn('cutSP', '+')}</span></div>
       <div class="row" style="margin-top:10px"><b>⏭ အဆုံး</b><span style="display:flex;align-items:center;gap:8px">${pmBtn('cutEM', '−')}<b id="cutEV" style="min-width:58px;text-align:center"></b>${pmBtn('cutEP', '+')}</span></div>
@@ -2354,7 +2360,7 @@ function pageCut() {
   $('#cutF').onchange = async e => {
     const f = e.target.files[0]; if (!f) return;
     if (c.url) URL.revokeObjectURL(c.url);
-    Object.assign(c, { file: f, url: URL.createObjectURL(f), s: 0, e: 0, dur: 0, thumbs: [] });
+    Object.assign(c, { file: f, url: URL.createObjectURL(f), s: 0, e: 0, dur: 0, thumbs: [], splits: [], off: new Set(), sel: null });
     c.dur = await L.videoDuration(f).catch(() => 0);
     if (!c.dur) toast('Video အရှည် ဖတ်မရပါ — ဒီဖုန်းက ဒီဖိုင်ကို မဖွင့်နိုင်ပါ');
     pageCut();
@@ -2371,16 +2377,35 @@ function pageCut() {
   const MIN = 1;                                                    // keep at least 1 s
   const end = () => c.dur - c.e;
   const pct = t => (c.dur ? t / c.dur * 100 : 0) + '%';
+  // pieces between the handles and the split points; a piece can be marked as removed
+  const segs = () => {
+    const b = [c.s, ...c.splits.filter(x => x > c.s + 0.05 && x < end() - 0.05), end()];
+    return b.slice(0, -1).map((a, i) => ({ a, b: b[i + 1], key: i ? a.toFixed(1) : 'S' })).map(g => ({ ...g, off: c.off.has(g.key) }));
+  };
+  const kept = () => segs().filter(g => !g.off).reduce((m, g) => {           // neighbouring kept pieces join into one part
+    const last = m[m.length - 1];
+    if (last && Math.abs(last[1] - g.a) < 0.01) last[1] = g.b; else m.push([g.a, g.b]);
+    return m;
+  }, []);
+  const segAt = t => segs().find(g => t >= g.a && t < g.b) || segs().slice(-1)[0];
   const show = () => {
+    const gs = segs();
+    if (c.sel && !gs.some(g => g.key === c.sel)) c.sel = null;
+    $('#cutSegs').innerHTML = gs.map(g => `<div class="cutseg${g.off ? ' off' : ''}${g.key === c.sel ? ' sel' : ''}" style="left:${pct(g.a)};width:${pct(g.b - g.a)}"></div>`).join('')
+      + gs.slice(1).map(g => `<div class="cutsplit" style="left:${pct(g.a)}"></div>`).join('');
+    const sg = gs.find(g => g.key === c.sel);
+    $('#cutDel').disabled = !sg;
+    $('#cutDel').textContent = sg && sg.off ? '↩ ပြန်ထားမည်' : '🗑 ဖျက်မည်';
+    $('#cutReset').disabled = !c.splits.length && !c.off.size;
     $('#cutDimL').style.width = pct(c.s);
     $('#cutDimR').style.width = pct(c.e);
     $('#cutBox').style.left = pct(c.s); $('#cutBox').style.right = pct(c.e);
     $('#cutSV').textContent = fmtCut(c.s);
     $('#cutEV').textContent = fmtCut(end());
-    const len = Math.max(0, end() - c.s);
+    const len = kept().reduce((t, [a, b]) => t + b - a, 0);
     $('#cutLen').textContent = fmtDur(len);
     $('#cutLenTag').textContent = len.toFixed(1) + 's';
-    $('#cutGo').disabled = !(c.s || c.e) || len < MIN;
+    $('#cutGo').disabled = !(c.s || c.e || c.off.size) || len < MIN;
   };
   const paintPh = () => { $('#cutPh').style.left = pct(v.currentTime || 0); $('#cutNow').textContent = fmtCut(v.currentTime || 0); };
   const seek = t => { v.pause(); v.currentTime = Math.max(0, Math.min(c.dur, t)); paintPh(); };
@@ -2393,7 +2418,7 @@ function pageCut() {
   tl.addEventListener('pointerdown', ev => {
     drag = ev.target.id === 'cutHL' ? 'l' : ev.target.id === 'cutHR' ? 'r' : 'p';
     tl.setPointerCapture(ev.pointerId); ev.preventDefault();
-    if (drag === 'p') seek(Math.max(c.s, Math.min(end(), tAt(ev))));
+    if (drag === 'p') { const t = Math.max(c.s, Math.min(end(), tAt(ev))); c.sel = segAt(t).key; show(); seek(t); }
   });
   tl.addEventListener('pointermove', ev => {
     if (!drag) return;
@@ -2403,13 +2428,28 @@ function pageCut() {
   const stop = () => { drag = null; };
   tl.addEventListener('pointerup', stop); tl.addEventListener('pointercancel', stop);
 
+  $('#cutSplit').onclick = () => {
+    const t = Math.round((v.currentTime || 0) * 10) / 10;
+    if (t < c.s + 0.3 || t > end() - 0.3 || c.splits.some(x => Math.abs(x - t) < 0.3)) { toast('မျဉ်းအဖြူကို အပိုင်းရဲ့ အလယ်လောက်မှာ ထားပြီးမှ Split နှိပ်ပါ'); return; }
+    const was = segAt(t);
+    c.splits = [...c.splits, t].sort((a, b) => a - b);
+    if (was.off) c.off.add(t.toFixed(1));                                 // both halves of a removed piece stay removed
+    c.sel = segAt(t).key; show();
+  };
+  $('#cutDel').onclick = () => {
+    if (!c.sel) return;
+    if (c.off.has(c.sel)) c.off.delete(c.sel); else c.off.add(c.sel);
+    if (!kept().length) { c.off.delete(c.sel); toast('အပိုင်းအားလုံး ဖျက်လို့ မရပါ'); }
+    show();
+  };
+  $('#cutReset').onclick = () => { c.splits = []; c.off = new Set(); c.sel = null; show(); };
   $('#cutSM').onclick = () => setS(c.s - 0.1); $('#cutSP').onclick = () => setS(c.s + 0.1);
   $('#cutEM').onclick = () => setE(end() - 0.1); $('#cutEP').onclick = () => setE(end() + 0.1);
 
   const play = $('#cutPlay');
   play.onclick = () => {
     if (!v.paused) { v.pause(); return; }
-    if (v.currentTime < c.s || v.currentTime >= end() - 0.05) v.currentTime = c.s;   // play only the kept part
+    if (v.currentTime < c.s || v.currentTime >= end() - 0.05) v.currentTime = kept()[0][0];   // play only the kept parts
     v.play().catch(() => {});
   };
   v.onclick = () => play.onclick();
@@ -2417,6 +2457,7 @@ function pageCut() {
   v.addEventListener('pause', () => { play.textContent = '▶'; });
   v.addEventListener('timeupdate', () => {
     if (!v.paused && v.currentTime >= end()) { v.pause(); v.currentTime = end(); }
+    else if (!v.paused) { const g = segAt(v.currentTime); if (g.off) { if (g.b >= end() - 0.01) v.pause(); else v.currentTime = g.b; } }   // jump over removed pieces
     paintPh();
   });
   show(); paintPh();
@@ -2425,7 +2466,7 @@ function pageCut() {
     const btn = $('#cutGo'); btn.disabled = true; state.busy = true; v.pause();
     $('#cutProg').hidden = false; setProg(0, 'ဖြတ်နေပါတယ်…');
     try {
-      const r = await L.cutVideo(c.file, c.s, end(), p => setProg(Math.min(0.99, p), 'ဖြတ်နေပါတယ်…'));
+      const r = await L.cutJoin(c.file, kept(), p => setProg(Math.min(0.99, p), 'ဖြတ်နေပါတယ်…'));
       setProg(1, 'ပြီးပါပြီ');
       download(r.blob, c.file.name.replace(/\.[^.]+$/, '') + '_cut.' + r.ext);
       toast('✅ ဖြတ်ပြီးပါပြီ — Download လုပ်ထားပါတယ်');
