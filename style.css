@@ -84,3 +84,20 @@ html.dlock,html.dlock body{overflow:hidden}
 .btn.danger{color:var(--err);border-color:#f0c4c4}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}
 .two .btn{margin:0;width:100%}
+
+/* ---------- video cut timeline (CapCut-style) ---------- */
+.cutbar{display:flex;align-items:center;justify-content:space-between;font-variant-numeric:tabular-nums;font-size:14px;margin:4px 2px 10px}
+.cutplay{width:44px;height:44px;border-radius:50%;border:0;background:var(--acc);color:#fff;font-size:16px;cursor:pointer}
+.cuttl{position:relative;height:64px;margin:0 14px;touch-action:none;user-select:none;-webkit-user-select:none}
+.cutstrip{position:absolute;inset:4px 0;display:flex;border-radius:6px;overflow:hidden;background:#111}
+.cutstrip i{flex:1;background:#222 center/cover no-repeat;border-right:1px solid rgba(0,0,0,.35)}
+.cutdim{position:absolute;top:4px;bottom:4px;left:0;background:rgba(0,0,0,.62);pointer-events:none;border-radius:6px 0 0 6px}
+.cutdim.r{left:auto;right:0;border-radius:0 6px 6px 0}
+.cutbox{position:absolute;top:0;bottom:0;border-top:4px solid #fff;border-bottom:4px solid #fff;pointer-events:none}
+.cutbox span{position:absolute;left:50%;top:6px;transform:translateX(-50%);background:rgba(0,0,0,.7);color:#fff;font-size:11px;padding:1px 6px;border-radius:6px;white-space:nowrap}
+.cuth{position:absolute;top:-4px;bottom:-4px;width:18px;background:#fff;pointer-events:auto;cursor:ew-resize}
+.cuth.l{left:-18px;border-radius:8px 0 0 8px}
+.cuth.r{right:-18px;border-radius:0 8px 8px 0}
+.cuth::after{content:"";position:absolute;left:7px;top:50%;width:4px;height:18px;margin-top:-9px;border-radius:2px;background:#888}
+.cuth::before{content:"";position:absolute;inset:-6px -10px}
+.cutph{position:absolute;top:-6px;bottom:-6px;width:3px;margin-left:-1.5px;background:#fff;border-radius:2px;box-shadow:0 0 4px rgba(0,0,0,.6);pointer-events:none}

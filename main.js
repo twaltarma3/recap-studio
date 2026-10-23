@@ -2303,10 +2303,27 @@ function showShot(blob) {
 }
 
 /* ---------------- Cut a finished video (start / end), no re-encoding ---------------- */
-const cutState = { file: null, url: null, dur: 0, s: 0, e: 0 };
+// CapCut-style: a strip of frames with two handles to drag; the bright box is what is kept
+const cutState = { file: null, url: null, dur: 0, s: 0, e: 0, thumbs: [] };
+const fmtCut = x => { x = Math.max(0, x); const m = Math.floor(x / 60), r = x - m * 60; return `${m}:${r.toFixed(1).padStart(4, '0')}`; };
+async function cutThumbs(url, dur, n) {
+  const v = document.createElement('video');
+  v.muted = true; v.playsInline = true; v.preload = 'auto'; v.src = url;
+  await new Promise((ok, no) => { v.onloadeddata = ok; v.onerror = no; setTimeout(ok, 8000); });
+  const cv = document.createElement('canvas'), h = 90;
+  cv.height = h; cv.width = Math.round(h * (v.videoWidth || 16) / (v.videoHeight || 9));
+  const ctx = cv.getContext('2d'), out = [];
+  for (let i = 0; i < n; i++) {
+    const t = Math.min(dur - 0.05, (i + 0.5) * dur / n);
+    await new Promise(ok => { const done = () => { v.removeEventListener('seeked', done); ok(); }; v.addEventListener('seeked', done); v.currentTime = t; setTimeout(done, 3000); });
+    try { ctx.drawImage(v, 0, 0, cv.width, cv.height); out.push(cv.toDataURL('image/jpeg', 0.6)); } catch { out.push(''); }
+  }
+  v.removeAttribute('src'); v.load();
+  return out;
+}
 function pageCut() {
   const c = cutState;
-  const maxCut = () => Math.max(0.5, Math.floor((c.dur || 0) * 0.9 * 2) / 2);
+  const N = 10;
   view.innerHTML = `
     <h2>✂ Video ဖြတ်မည်</h2>
     <p class="muted small">ထုတ်ပြီးသား Video (ဒါမှမဟုတ် ဖုန်းထဲက ဘယ် Video မဆို) ရဲ့ အစ / အဆုံး ကို ပြန်မပေါင်းဘဲ စက္ကန့်ပိုင်းအတွင်း ဖြတ်ပေးပါတယ်။ အရည်အသွေး မကျပါ။</p>
@@ -2316,12 +2333,18 @@ function pageCut() {
       <span class="muted small">${c.file ? (c.file.size / 1048576).toFixed(1) + ' MB · ' + fmtDur(c.dur) : 'MP4, MOV, WEBM, MKV'}</span>
     </label>
     ${c.file ? `
-    <video id="cutV" src="${c.url}" controls playsinline preload="metadata" style="width:100%;border-radius:16px;margin:10px 0;background:#000"></video>
-    <div class="kbox">
-      <div class="row"><b>⏮ အစကနေ ဖြတ်မည်</b><span id="cutSV"></span></div>
-      ${pmRow('cutS', 0, maxCut(), 0.5, c.s)}
-      <div class="row" style="margin-top:14px"><b>⏭ အဆုံးကနေ ဖြတ်မည်</b><span id="cutEV"></span></div>
-      ${pmRow('cutE', 0, maxCut(), 0.5, c.e)}
+    <video id="cutV" src="${c.url}" playsinline preload="metadata" style="width:100%;border-radius:16px;margin:10px 0 6px;background:#000"></video>
+    <div class="cutbar"><span id="cutNow">0:00.0</span><button class="cutplay" id="cutPlay" aria-label="Play">▶</button><span class="muted">${fmtCut(c.dur)}</span></div>
+    <div class="cuttl" id="cutTl">
+      <div class="cutstrip">${Array.from({ length: N }, (_, i) => `<i style="${c.thumbs[i] ? `background-image:url(${c.thumbs[i]})` : ''}"></i>`).join('')}</div>
+      <div class="cutdim" id="cutDimL"></div><div class="cutdim r" id="cutDimR"></div>
+      <div class="cutbox" id="cutBox"><b class="cuth l" id="cutHL"></b><b class="cuth r" id="cutHR"></b><span id="cutLenTag"></span></div>
+      <div class="cutph" id="cutPh"></div>
+    </div>
+    <p class="muted small" style="margin:8px 0 0;text-align:center">👆 ဘေးက ဘောင်အဖြူ ၂ ခုကို ဆွဲပြီး ထားချင်တဲ့ အပိုင်းကို ရွေးပါ</p>
+    <div class="kbox" style="margin-top:10px">
+      <div class="row"><b>⏮ အစ</b><span style="display:flex;align-items:center;gap:8px">${pmBtn('cutSM', '−')}<b id="cutSV" style="min-width:58px;text-align:center"></b>${pmBtn('cutSP', '+')}</span></div>
+      <div class="row" style="margin-top:10px"><b>⏭ အဆုံး</b><span style="display:flex;align-items:center;gap:8px">${pmBtn('cutEM', '−')}<b id="cutEV" style="min-width:58px;text-align:center"></b>${pmBtn('cutEP', '+')}</span></div>
       <p class="small" style="margin:12px 0 0">⏱ ကြာချိန်: <b>${fmtDur(c.dur)}</b> → <b id="cutLen"></b></p>
       <p class="muted small" style="margin:6px 0 0">💡 အဆုံးကို အတိအကျ ဖြတ်ပါတယ်။ အစကို ဖြတ်ရင် ၁–၂ စက္ကန့် စောနိုင်ပါတယ် (Video ရဲ့ keyframe ကြောင့်)။</p>
     </div>
@@ -2331,42 +2354,78 @@ function pageCut() {
   $('#cutF').onchange = async e => {
     const f = e.target.files[0]; if (!f) return;
     if (c.url) URL.revokeObjectURL(c.url);
-    Object.assign(c, { file: f, url: URL.createObjectURL(f), s: 0, e: 0, dur: 0 });
+    Object.assign(c, { file: f, url: URL.createObjectURL(f), s: 0, e: 0, dur: 0, thumbs: [] });
     c.dur = await L.videoDuration(f).catch(() => 0);
     if (!c.dur) toast('Video အရှည် ဖတ်မရပါ — ဒီဖုန်းက ဒီဖိုင်ကို မဖွင့်နိုင်ပါ');
     pageCut();
+    if (c.dur) {
+      const url = c.url, th = await cutThumbs(url, c.dur, N).catch(() => []);
+      if (c.url !== url) return;                                   // another file was picked meanwhile
+      c.thumbs = th;
+      document.querySelectorAll('.cutstrip i').forEach((el, i) => { if (th[i]) el.style.backgroundImage = `url(${th[i]})`; });
+    }
   };
   if (!c.file) return;
 
-  const v = $('#cutV');
-  const show = which => {
-    const len = Math.max(0, c.dur - c.s - c.e);
-    $('#cutSV').textContent = c.s ? `${c.s} စက္ကန့်` : 'မဖြတ်ပါ';
-    $('#cutEV').textContent = c.e ? `${c.e} စက္ကန့်` : 'မဖြတ်ပါ';
+  const v = $('#cutV'), tl = $('#cutTl');
+  const MIN = 1;                                                    // keep at least 1 s
+  const end = () => c.dur - c.e;
+  const pct = t => (c.dur ? t / c.dur * 100 : 0) + '%';
+  const show = () => {
+    $('#cutDimL').style.width = pct(c.s);
+    $('#cutDimR').style.width = pct(c.e);
+    $('#cutBox').style.left = pct(c.s); $('#cutBox').style.right = pct(c.e);
+    $('#cutSV').textContent = fmtCut(c.s);
+    $('#cutEV').textContent = fmtCut(end());
+    const len = Math.max(0, end() - c.s);
     $('#cutLen').textContent = fmtDur(len);
-    $('#cutGo').disabled = !(c.s || c.e) || len < 1;
-    if (which && v.duration) { v.pause(); v.currentTime = which === 's' ? c.s : Math.max(0, v.duration - c.e); }
+    $('#cutLenTag').textContent = len.toFixed(1) + 's';
+    $('#cutGo').disabled = !(c.s || c.e) || len < MIN;
   };
-  const bind = (id, key) => {
-    const set = x => {
-      const other = key === 's' ? c.e : c.s;
-      c[key] = Math.max(0, Math.min(maxCut(), Math.max(0, c.dur - other - 1), Math.round(x * 2) / 2));
-      $('#' + id).value = c[key]; show(key);
-    };
-    $('#' + id).oninput = e => set(+e.target.value);
-    $('#' + id + 'M').onclick = () => set(c[key] - 0.5);
-    $('#' + id + 'P').onclick = () => set(c[key] + 0.5);
-  };
-  bind('cutS', 's'); bind('cutE', 'e'); show();
-  v.addEventListener('timeupdate', () => {                      // playing stops where the cut video will end
-    if (c.e > 0 && v.duration && !v.paused && v.currentTime >= v.duration - c.e) v.pause();
+  const paintPh = () => { $('#cutPh').style.left = pct(v.currentTime || 0); $('#cutNow').textContent = fmtCut(v.currentTime || 0); };
+  const seek = t => { v.pause(); v.currentTime = Math.max(0, Math.min(c.dur, t)); paintPh(); };
+  const setS = x => { c.s = Math.max(0, Math.min(end() - MIN, Math.round(x * 10) / 10)); show(); seek(c.s); };
+  const setE = x => { c.e = Math.max(0, Math.min(c.dur - c.s - MIN, Math.round((c.dur - x) * 10) / 10)); show(); seek(end()); };
+  const tAt = ev => { const r = tl.getBoundingClientRect(); return Math.max(0, Math.min(1, (ev.clientX - r.left) / r.width)) * c.dur; };
+
+  // drag a handle, or touch the strip to move the white play line
+  let drag = null;
+  tl.addEventListener('pointerdown', ev => {
+    drag = ev.target.id === 'cutHL' ? 'l' : ev.target.id === 'cutHR' ? 'r' : 'p';
+    tl.setPointerCapture(ev.pointerId); ev.preventDefault();
+    if (drag === 'p') seek(Math.max(c.s, Math.min(end(), tAt(ev))));
   });
+  tl.addEventListener('pointermove', ev => {
+    if (!drag) return;
+    const t = tAt(ev);
+    if (drag === 'l') setS(t); else if (drag === 'r') setE(t); else seek(Math.max(c.s, Math.min(end(), t)));
+  });
+  const stop = () => { drag = null; };
+  tl.addEventListener('pointerup', stop); tl.addEventListener('pointercancel', stop);
+
+  $('#cutSM').onclick = () => setS(c.s - 0.1); $('#cutSP').onclick = () => setS(c.s + 0.1);
+  $('#cutEM').onclick = () => setE(end() - 0.1); $('#cutEP').onclick = () => setE(end() + 0.1);
+
+  const play = $('#cutPlay');
+  play.onclick = () => {
+    if (!v.paused) { v.pause(); return; }
+    if (v.currentTime < c.s || v.currentTime >= end() - 0.05) v.currentTime = c.s;   // play only the kept part
+    v.play().catch(() => {});
+  };
+  v.onclick = () => play.onclick();
+  v.addEventListener('play', () => { play.textContent = '❚❚'; });
+  v.addEventListener('pause', () => { play.textContent = '▶'; });
+  v.addEventListener('timeupdate', () => {
+    if (!v.paused && v.currentTime >= end()) { v.pause(); v.currentTime = end(); }
+    paintPh();
+  });
+  show(); paintPh();
 
   $('#cutGo').onclick = async () => {
-    const btn = $('#cutGo'); btn.disabled = true; state.busy = true;
+    const btn = $('#cutGo'); btn.disabled = true; state.busy = true; v.pause();
     $('#cutProg').hidden = false; setProg(0, 'ဖြတ်နေပါတယ်…');
     try {
-      const r = await L.cutVideo(c.file, c.s, c.dur - c.e, p => setProg(Math.min(0.99, p), 'ဖြတ်နေပါတယ်…'));
+      const r = await L.cutVideo(c.file, c.s, end(), p => setProg(Math.min(0.99, p), 'ဖြတ်နေပါတယ်…'));
       setProg(1, 'ပြီးပါပြီ');
       download(r.blob, c.file.name.replace(/\.[^.]+$/, '') + '_cut.' + r.ext);
       toast('✅ ဖြတ်ပြီးပါပြီ — Download လုပ်ထားပါတယ်');
