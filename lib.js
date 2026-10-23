@@ -508,7 +508,18 @@ function segmentWords(words) {
     if (ENDP.test(w.text.trim()) && (cur.end - cur.start) / 1000 >= SEG.minPunct) flush();
   }
   flush();
-  return joinScraps(segs);
+  return dropStray(joinScraps(segs));
+}
+// a lone "嗯 / 啊 / hmm" with nothing said for seconds around it (music, a breath, a sound effect at the very
+// start or end) becomes a stray "အင်း" in the dub: leave it out. Inside a conversation it stays (it can mean "yes").
+const FILLER = /^(?:[嗯啊哦呃唔哼嘿喂哎诶欸噢呀哈嘛]|uh+|um+|hm+|mm+|oh|ah|うん|ああ|えっ?|음|어|아)+$/iu;
+function dropStray(segs) {
+  return segs.filter((s, i) => {
+    const t = s.text.replace(/[\s\p{P}]/gu, '');
+    if (!FILLER.test(t)) return true;
+    const gapBefore = i ? s.start - segs[i - 1].end : Infinity, gapAfter = i + 1 < segs.length ? segs[i + 1].start - s.end : Infinity;
+    return gapBefore < 3 || gapAfter < 3;
+  });
 }
 // a line of one or two characters/words without an end mark, right before the next line, is a scrap of a cut
 // sentence or name: put it in front of the next line (keeping the speaker of the longer part)
@@ -632,6 +643,8 @@ PUNCTUATION: Do NOT use "...", "…", quotation marks or brackets. Use only ၊ 
 
 ${NUM_RULE}
 
+${SAFE_RULE}
+
 Return ONLY a JSON object that maps EVERY ID to its Burmese line, for example {"lines": {"0": "...", "1": "...", "2": "..."}}. Every ID from the inputs must appear exactly once, even very short ones.
 
 Inputs:
@@ -705,7 +718,9 @@ export function pickVoices(segs, ai = [], f0 = [], main = 'M') {
 // rules every translation prompt shares: numbers in words (the voice reads them out), the same name spelling
 // throughout, and the facts the story needs kept when a line is shortened
 const NUM_RULE = `NUMBERS: The text is read aloud by a voice engine, so write EVERY number in Burmese words, never as digits (no 0-9, no ၀-၉): ages, years, dates, times, money, distances, percentages and counts. Examples: 18 years old -> အသက်ဆယ့်ရှစ်နှစ်, 3 days -> သုံးရက်, 10 percent -> ဆယ်ရာခိုင်နှုန်း, 100 dollars -> ဒေါ်လာတစ်ရာ, 1500 -> တစ်ထောင့်ငါးရာ, 25000 -> နှစ်သောင်းငါးထောင်.`;
+const SAFE_RULE = `SAFE WORDS (TikTok takes down videos with graphic words): never write words for killing, dying, death, suicide, blood or gore (such as သတ်၊ အသေသတ်၊ သေ၊ သေချင်၊ သွေး). Say it the way Burmese movie-recap narrators do, with words that fit the scene and sound natural — for example kill -> အပြတ်ရှင်းလိုက်တယ် / ချေမှုန်းလိုက်တယ် / ကိစ္စတုံးလိုက်တယ် / လွင့်စင်သွားအောင် လုပ်လိုက်တယ်; died -> ကိစ္စချောသွားတယ် / ပြန်မနိုးတော့ဘူး; "I want to die" -> မနေချင်တော့ဘူး; blood -> အနီရောင်တွေ. They don't have to be these exact words; choose what fits the meaning. Alcohol -> အထူးဖျော်ရည်; drugs / pills / injections -> ပစ္စည်း or အားဆေး; swear words -> ဟာကွာ / တောက် and the like. Smoking is fine as it is (ဆေးလိပ်သောက်တယ်).`;
 const STORY_RULES = `${NUM_RULE}
+${SAFE_RULE}
 NAMES: Write character and place names the way they sound, in short easy-to-read Burmese, and spell each name EXACTLY the same every time it appears.
 CHARACTERS: First read ALL the lines and work out who the characters are (man or woman, adult or child, how they are related). Keep how each one talks the same from start to end: a woman says ကျွန်မ / ရှင်, never ကျွန်တော်; a man says ကျွန်တော် / ခင်ဗျား (or ကိုယ် / မင်း once they are close); a girl never calls herself သား. To strangers, guests and people who helped them, characters stay polite — ငါ / နင် / မင်း only in anger, from rough characters, or within close family. A child calls the same person by the same title every time (e.g. always မမ).
 MEASURES: Turn Chinese measures into ones Burmese viewers know (e.g. 亩 -> ဧက, 斤 -> ပိဿာ or ကီလို), with a sensible rounded amount.
@@ -729,7 +744,6 @@ Examples (written -> spoken):
 ထိုအခါ သူမသည် ငိုကြွေးခဲ့၏။ -> အဲဒီအခါ သူမ ငိုချလိုက်တယ်။
 DIALOGUE: Do NOT write dialogue as direct quotes. Turn what characters say into indirect speech inside the narration (for example: သူက စိတ်ဆိုးပြီး သူ့ကို လုပ်မယ်လို့ ပြောလိုက်တယ်). Do not use quotation marks inside the translations.
 TTS: Keep every line short and punchy. Use commas ( , ) only for natural breathing pauses.
-SAFE WORDS (TikTok safety), replace restricted words automatically: alcohol/beer/liquor -> အထူးဖျော်ရည်; cigarettes/smoking -> မီးခိုးတံ; drugs/pills/injections -> ပစ္စည်း or အားဆေး; violence/kill/death/blood -> ရှင်းထုတ်လိုက်တယ် / အနားယူသွားတယ် / အနီရောင်အမှတ်တွေ; swear words -> safe intense expressions such as ဟာကွာ၊ တောက်.
 `;
   return `${head}${STORY_RULES}Translate each line so that it sounds natural in a movie recap narration. Do not translate word-for-word.
 Timing is critical: Burmese narration is spoken at about 4-5 syllables per second, so each line MUST be short enough to be spoken within its Duration (for example 2.0s allows roughly 8-10 syllables). Condense the meaning and drop minor details instead of translating everything. Being on time matters more than completeness.
@@ -787,6 +801,7 @@ You are a professional "Movie Recap Scriptwriter" for a popular Burmese Facebook
 8. Video-Driven Accuracy (Strict Observation): You MUST first carefully watch and analyze the provided video. When rewriting and expanding the script, your descriptions must accurately reflect the EXACT movements, environments, and character expressions seen in the video. STRICTLY DO NOT invent, hallucinate, or add any actions, objects, or events that do not physically happen in the video footage. Your final output must meticulously combine the provided text with the exact visual actions from the video without fabricating extra details.
 
 9. ${NUM_RULE}
+10. ${SAFE_RULE}
 
 ### INPUT STORY / VIDEO DETAILS:
 ${source}`;
