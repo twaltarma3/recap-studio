@@ -1286,7 +1286,7 @@ function step2() {
       <p class="muted small">Prompt ကို Copy ကူးပြီး Gemini တွင် Paste လုပ်ပါ။ ရလာသော JSON ကို အောက်တွင် ထည့်ပါ။</p>
       <a class="link" href="https://gemini.google.com/app" target="_blank" rel="noopener">Gemini App ဖွင့်မည် ↗</a>
       <label>Gemini မှ ရလာသော JSON
-        <textarea id="json" class="short" placeholder='{"lines": {"0": "မြန်မာစာ ၁", "1": "မြန်မာစာ ၂", ...}}'></textarea>
+        <textarea id="json" class="short" placeholder='{"translations": ["မြန်မာစာ ၁", "မြန်မာစာ ၂", ...]}'></textarea>
       </label>
       <button id="next" class="btn primary">ဘာသာပြန်အတည်ပြုမည် (Next)</button>
     </div>`;

@@ -654,8 +654,6 @@ ${NUM_RULE}
 
 ${SAFE_RULE}
 
-${NAME_RULE}
-
 Return ONLY a JSON object that maps EVERY ID to its Burmese line, for example {"lines": {"0": "...", "1": "...", "2": "..."}}. Every ID from the inputs must appear exactly once, even very short ones.
 
 Inputs:
@@ -730,13 +728,8 @@ export function pickVoices(segs, ai = [], f0 = [], main = 'M') {
 // throughout, and the facts the story needs kept when a line is shortened
 const NUM_RULE = `NUMBERS: The text is read aloud by a voice engine, so write EVERY number in Burmese words, never as digits (no 0-9, no ၀-၉): ages, years, dates, times, money, distances, percentages and counts. Examples: 18 years old -> အသက်ဆယ့်ရှစ်နှစ်, 3 days -> သုံးရက်, 10 percent -> ဆယ်ရာခိုင်နှုန်း, 100 dollars -> ဒေါ်လာတစ်ရာ, 1500 -> တစ်ထောင့်ငါးရာ, 25000 -> နှစ်သောင်းငါးထောင်.`;
 const SAFE_RULE = `SAFE WORDS (TikTok takes down videos with graphic words): never write words for killing, dying, death, suicide, blood or gore (such as သတ်၊ အသေသတ်၊ သေ၊ သေချင်၊ သွေး). Say it the way Burmese movie-recap narrators do, with words that fit the scene and sound natural — for example kill -> အပြတ်ရှင်းလိုက်တယ် / ချေမှုန်းလိုက်တယ် / ကိစ္စတုံးလိုက်တယ် / လွင့်စင်သွားအောင် လုပ်လိုက်တယ်; died -> ကိစ္စချောသွားတယ် / ပြန်မနိုးတော့ဘူး; "I want to die" -> မနေချင်တော့ဘူး; blood -> အနီရောင်တွေ. They don't have to be these exact words; choose what fits the meaning. Alcohol -> အထူးဖျော်ရည်; drugs / pills / injections -> ပစ္စည်း or အားဆေး; swear words -> ဟာကွာ / တောက် and the like. Smoking is fine as it is (ဆေးလိပ်သောက်တယ်).`;
-const NAME_RULE = `FAMOUS CHARACTERS: In well-known stories (e.g. Journey to the West / 西游记) use the names Burmese viewers already know: 孙悟空 -> ဆွန်ဝူခုန်း (or မျောက်မင်း), 猪八戒 -> ကျူပါကျဲ, 唐僧 -> ထန်စန်ဆရာ, 观音 -> ကွမ်ယင်မယ်တော်, 玉帝 -> နတ်မင်းကြီး; titles like 大王 -> ဘုရင်.
-NAMED THINGS: Names of people, monsters, spells, weapons and fighting moves must read clearly as names, never as a word-for-word phrase that sounds like part of the sentence (e.g. 银角大王 -> ငွေချိုဘုရင်, not ငွေချို). If a name can't be said well, use a short title (e.g. နတ်ဆိုးဘုရင်).
-LAUGHTER: write a laugh as at most ဟားဟားဟား (or ဟဲဟဲ / ဟီးဟီး).
-PAUSES: never write "..." or "…" (the voice stops too long); use ၊ for a short pause.`;
 const STORY_RULES = `${NUM_RULE}
 ${SAFE_RULE}
-${NAME_RULE}
 NAMES: Write character and place names the way they sound, in short easy-to-read Burmese, and spell each name EXACTLY the same every time it appears.
 CHARACTERS: First read ALL the lines and work out who the characters are (man or woman, adult or child, how they are related). Keep how each one talks the same from start to end: a woman says ကျွန်မ / ရှင်, never ကျွန်တော်; a man says ကျွန်တော် / ခင်ဗျား (or ကိုယ် / မင်း once they are close); a girl never calls herself သား. To strangers, guests and people who helped them, characters stay polite — ငါ / နင် / မင်း only in anger, from rough characters, or within close family. A child calls the same person by the same title every time (e.g. always မမ).
 MEASURES: Turn Chinese measures into ones Burmese viewers know (e.g. 亩 -> ဧက, 斤 -> ပိဿာ or ကီလို), with a sensible rounded amount.
@@ -764,7 +757,14 @@ TTS: Keep every line short and punchy. Use commas ( , ) only for natural breathi
   return `${head}${STORY_RULES}Translate each line so that it sounds natural in a movie recap narration. Do not translate word-for-word.
 Timing is critical: Burmese narration is spoken at about 4-5 syllables per second, so each line MUST be short enough to be spoken within its Duration (for example 2.0s allows roughly 8-10 syllables). Condense the meaning and drop minor details instead of translating everything. Being on time matters more than completeness.
 Source lines may be cut in the middle of a sentence. Still translate each line on its own so it sounds natural by itself, and keep the same order and the same number of lines.
-Return the result STRICTLY as a JSON object that maps EVERY ID to its own Burmese line: {"lines": {"0": "...", "1": "...", "2": "..."}}. Each line goes under the ID of the source line it translates — never move words to a neighbouring ID, never merge or split IDs, and every ID from the inputs must appear exactly once, even very short ones.
+Return the result STRICTLY as a JSON object with a single key "translations" containing an array of strings in order, exactly one string per ID.
+Example:
+{
+"translations": [
+"မြန်မာစာသား ၁",
+"မြန်မာစာသား ၂"
+]
+}
 Inputs:
 ${lines}`;
 }
@@ -811,7 +811,6 @@ You are a professional "Movie Recap Scriptwriter" for a popular Burmese Facebook
 
 9. ${NUM_RULE}
 10. ${SAFE_RULE}
-11. ${NAME_RULE}
 
 ### INPUT STORY / VIDEO DETAILS:
 ${source}`;
@@ -851,10 +850,7 @@ export function parseTranslations(raw) {
   if (a < 0 || b < 0) throw new Error('JSON မတွေ့ပါ — Gemini ရလဒ်ကို အကုန် paste လုပ်ပါ');
   let obj;
   try { obj = JSON.parse(s.slice(a, b + 1)); } catch { throw new Error('JSON ပုံစံ မမှန်ပါ'); }
-  // "…" / "..." makes the voice stop for a long moment: none at either end, a ၊ (short pause) in the middle
-  const ell = '(?:\\.{2,}|…+)';
-  const clean = x => String(x ?? '').replace(/\s*\n\s*/g, ' ')
-    .replace(new RegExp(`^\\s*${ell}\\s*|\\s*${ell}\\s*$`, 'gu'), '').replace(new RegExp(`\\s*${ell}\\s*`, 'gu'), '၊ ').trim();
+  const clean = x => String(x ?? '').replace(/\s*\n\s*/g, ' ').trim();
   if (obj.lines && typeof obj.lines === 'object' && !Array.isArray(obj.lines)) {
     const ids = Object.keys(obj.lines).map(Number).filter(n => Number.isInteger(n) && n >= 0);
     const out = Array.from({ length: ids.length ? Math.max(...ids) + 1 : 0 }, (_, i) => clean(obj.lines[i]));
