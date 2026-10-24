@@ -1858,7 +1858,7 @@ async function pageAdmin() {
         <button type="button" class="btn" id="gkDel" title="ဖျက်မည်">🗑</button>
       </div>
       <textarea id="aiSrc" rows="5">${esc(AI_SAMPLE)}</textarea>
-      <button class="btn block" id="aiGo" style="margin-top:8px">▶ Model အားလုံး စမ်းမည်</button>
+      <button class="btn block" id="aiGo" style="margin-top:8px">▶ Gemini နဲ့ စမ်းမည်</button>
       <div id="aiOut"></div>
     </div>
 
@@ -1935,7 +1935,8 @@ async function pageAdmin() {
     if (!lines.length) return;
     const prompt = L.buildPrompt(lines.map((text, i) => ({ start: i * 3, end: i * 3 + 2.8, text })), 'recap');
     const out = $('#aiOut'), b = $('#aiGo'); b.disabled = true; out.innerHTML = '';
-    for (const model of (info.models || []).filter(m => m === 'gemini' ? info.gemini : info.ai)) {
+    if (!info.gemini) out.innerHTML = '<p class="err small">Gemini key မထည့်ရသေးပါ — အပေါ်မှာ ထည့်ပါ</p>';
+    for (const model of (info.models || []).filter(m => m === 'gemini' && info.gemini)) {   // Gemini only: the backup models write poor Burmese
       const name = model ? model.split('/').pop() : 'Gemini';
       const box = document.createElement('div'); box.className = 'aires';
       box.innerHTML = `<b>${esc(name)}</b> <span class="muted small">ဘာသာပြန်နေပါတယ်…</span>`;
